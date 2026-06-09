@@ -50,7 +50,7 @@ npm run dev     # local dev server
 ## What is NOT done (next session priorities)
 
 1. **Wire real infrastructure** — Supabase Auth/Postgres (RLS migration exists but app uses in-memory store), R2/S3 blob store, Inngest/Trigger.dev, real Stripe webhooks, real Anthropic/fal.ai adapters.
-2. **HITL blockers** (called out in `CONTEXT/HANDOFF.md` and issues 02/05/08/14):
+2. **HITL blockers** (called out in `CONTEXT/handoffs/HANDOFF.md` and issues 02/05/08/14):
    - Consent notice counsel review
    - CSAM hash vendor + NCMEC workflow
    - Multi-persona composition quality spike
@@ -76,4 +76,4 @@ See `CONTEXT/docs/adr/` (0001–0015) and `CONTEXT/planning/prd-v1.md` Testing D
 - Stack: `CONTEXT/planning/stack.md`
 - PRD + testing seams: `CONTEXT/planning/prd-v1.md`
 - Issue specs: `CONTEXT/issues/01-walking-skeleton.md` through `14-multi-jurisdiction-expansion.md`
-- Prior handoff pointer map: `CONTEXT/HANDOFF.md`
+- Prior handoff pointer map: `CONTEXT/handoffs/HANDOFF.md`

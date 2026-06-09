@@ -18,6 +18,12 @@ own baby and family via photo-conditioned per-persona LoRAs. Greenfield.
 - **PRD:** `CONTEXT/planning/prd-v1.md`. **Stack:** `CONTEXT/planning/stack.md`.
 - **Work items:** `CONTEXT/issues/` — dependency-ordered tracer-bullet slices.
   Start at `01-walking-skeleton.md`, follow `Blocked by`.
+- **Handoffs & Session Logs:** `CONTEXT/handoffs/` — historical session logs and
+  handoffs.
+
+### Documentation and Context Organization
+- Every document in the `CONTEXT/` directory must be organized into a specific category folder (e.g. `docs/adr/`, `planning/`, `issues/`, `handoffs/`).
+- Do not create free-floating files in the root of the `CONTEXT/` directory. If a file fits a category, it must be placed into that category's folder to maintain cleanliness.
 
 ## Non-negotiables (from the ADRs)
 

@@ -1,72 +1,44 @@
-# Kaizen Domain Coach — Lullabook
+# Kaizen Domain Coach — COACH.md
 
-A continuous-improvement review playbook. The coach reads the project's domain
-docs, reviews the code against them, reports **misses** (drift from the
-documented decisions), and — when asked — fixes them. "One habit: small,
-continuous corrections that keep code aligned with CONTEXT + ADRs."
+Welcome to the **Kaizen Domain Coach** guidelines. This document describes the checks performed by the coach script (`tools/kaizen-coach/coach.sh`) and provides guidance on how to interpret and resolve issues identified during audits.
 
-> Run `tools/kaizen-coach/coach.sh` to generate `KAIZEN-REVIEW-BRIEF.md`, then
-> tell your agent (Antigravity / Claude / Cursor): **"Act as the Kaizen Domain
-> Coach. Follow tools/kaizen-coach/COACH.md against KAIZEN-REVIEW-BRIEF.md."**
+## Purpose
 
-## Inputs (source of truth)
+The Kaizen Domain Coach is a specialized quality gate for the **Lullabook** project. It helps developers and AI agents (such as Antigravity and Cursor) ensure that:
+1. The codebase adheres strictly to the project's canonical glossary (`CONTEXT/CONTEXT.md`).
+2. Architectural non-negotiables defined in the ADRs (like row-level security, adapter interfaces, and child safety gates) are respected.
+3. No secrets are accidentally committed.
+4. Code organization guidelines (such as placing context documents in folders) are enforced.
 
-- `CONTEXT/CONTEXT.md` — the glossary (canonical vocabulary).
-- `CONTEXT/docs/adr/*.md` — the load-bearing decisions (0001–0015).
-- `CONTEXT/planning/*.md` — stack, PRD, onboarding, story format, monetization.
-- `CONTEXT/issues/*.md` — the tracer-bullet slices.
-- The code (everything else tracked in git).
+## Auditing and Remediation
 
-## Review rubric (score each 0–10, list misses)
+When you run `bash tools/kaizen-coach/coach.sh`, it generates a `KAIZEN-REVIEW-BRIEF.md` file in the project root containing a summary of violations. Use the following guide to resolve them:
 
-1. **Vocabulary alignment.** Code identifiers + UI copy use glossary terms.
-   Flag drift: "idea"→**Brief**, "owner/admin"→**Guardian**, "Parent
-   Persona"→**Adult Persona**, "user"→**Member**, "soft delete/archive"→**Hard-delete**,
-   "prompt" used for the parent input (it's the **Brief**; *Prompt* is the
-   engineered model input).
-2. **ADR compliance.** For each ADR, confirm the code honors it. High-signal checks:
-   - 0006/0011: **RLS** enforces per-Family isolation (not just app-layer checks).
-   - 0008/0014: Baby Persona gated by Guardian + payment-VPC + consent receipt; Adult Persona gated by liveness match.
-   - 0015: child-age threshold + consent + residency are **config**, never a hardcoded `13`/`18`.
-   - 0007: `hardDelete` propagates across DB **and** blob store (and CDN/backups).
-   - 0004: per-Page candidates + re-roll budget + `generating→draft→finalized`.
-   - 0012: per-Page image prompt = Style Bible + Scene + LoRA.
-   - 0010: input (photo/Brief/style) + output (image) moderation both present.
-   - 0011: Anthropic/fal.ai/moderation/liveness behind **adapter interfaces**.
-3. **Seam & test discipline.** Tests assert external behavior at the
-   service/use-case seam with providers faked; RLS-isolation + hard-delete
-   propagation have integration tests. Flag tests of Inngest/Stripe internals or
-   React render details.
-4. **Safety gates wired.** No minor's photo reaches storage/training before the
-   moderation + consent gates. Output images moderated before display.
-5. **Secrets hygiene.** No API keys / `.env` committed; `.gitignore` covers them.
-6. **Slice fidelity.** Code matches the tracer-bullet slice it claims (`CONTEXT/issues/`):
-   thin vertical path through all layers, demoable.
-7. **Doc freshness.** New domain concepts added to `CONTEXT.md`; new
-   hard-to-reverse decisions captured as ADRs; stale docs flagged.
+### 1. Glossary Compliance
+- **Incorrect Term:** "Parent Persona"
+  - **Why:** The glossary defines only two types of personas: `Baby Persona` (starring child) and `Adult Persona` (co-starring adult member). A grandparent or aunt is an adult but not a parent.
+  - **Fix:** Rename to `Adult Persona` or `Adult` in both code and UI text.
+- **Incorrect Term:** "soft-delete", "soft delete", "archive" (when referring to family data removal)
+  - **Why:** Immediate, total erasure is a critical legal and PRD requirement ("right to be forgotten"). Retaining data under soft-deletes or archives violates COPPA and GDPR.
+  - **Fix:** Change implementation and terminology to `hard-delete`.
+- **Incorrect Term:** "country" (in settings or residency detection)
+  - **Why:** Jurisdiction is the legal-regime unit, not strictly geographic. Different states or regions may have distinct legal thresholds regardless of the country.
+  - **Fix:** Use the term `jurisdiction`.
+- **Incorrect Term:** "User" (in domain logic)
+  - **Why:** Too generic. We use `Family` as the container account and `Member` (or `Guardian` for parent accounts) as the human login.
+  - **Fix:** Use `Member` or `Family` in domain models and interfaces.
 
-## Output format
+### 2. Architecture Guidelines (ADRs)
+- **RLS Isolation:** Every database access model must respect Postgres Row-Level Security (RLS) policies.
+  - **Fix:** Check that database queries use RLS constraints or that schema migrations include `ALTER TABLE ... ENABLE ROW LEVEL SECURITY;`.
+- **Mocked Adapters:** External API calls (fal.ai, Anthropic, moderation, liveness) must live behind adapters and be faked in unit/integration tests.
+  - **Fix:** Check that tests use in-memory stubs or fakes instead of making live network requests.
+- **Child Safety Gate:** Photos of minors must not be sent to training or storage before moderation and consent gates.
+  - **Fix:** Ensure a Baby Persona registration invokes `ConsentEngine` and `ModerationService`.
 
-```
-## Kaizen Coach Report — <date>
-Overall: <avg>/10
+### 3. Secret Protection
+- **Secrets:** API keys, passwords, and `.env` files must never be committed to Git.
+  - **Fix:** Add any config files with secrets to `.gitignore` and use environment variables.
 
-### Scores
-1. Vocabulary alignment — X/10
-... (each dimension)
-
-### Misses (prioritized)
-- [P1] <file/area>: <what drifted from which ADR/term> → <fix>
-- [P2] ...
-
-### Suggested fixes
-<concrete, ADR-cited changes — apply only the ones the user accepts>
-```
-
-## Rules
-
-- **Cite the ADR/term** for every miss — no vibes-based nits.
-- Prefer the **highest-altitude** fix; don't churn cosmetics.
-- Never weaken a safety/consent/deletion gate to make a test pass.
-- If a "miss" is actually a deliberate undocumented decision, the fix is to
-  **write the ADR/glossary entry**, not to change the code.
+---
+*Last Updated: June 2026*
