@@ -1,0 +1,45 @@
+# AGENTS.md — Lullabook
+
+Project rules for any coding agent (Antigravity, Cursor, Claude Code, etc.).
+
+## What this is
+
+A web app where a parent generates illustrated AI **Storybooks** starring their
+own baby and family via photo-conditioned per-persona LoRAs. Greenfield.
+
+## Read before coding (source of truth)
+
+- **Glossary:** `CONTEXT/CONTEXT.md` — use this vocabulary in code + UI. Notably:
+  **Brief** (parent input) vs **Prompt** (engineered model input); **Guardian**
+  (accountable adult) vs **Member**; **Adult Persona** (not "Parent Persona");
+  **Hard-delete** (not soft-delete/archive).
+- **Decisions:** `CONTEXT/docs/adr/0001–0015` — respect these; don't silently
+  contradict them.
+- **PRD:** `CONTEXT/planning/prd-v1.md`. **Stack:** `CONTEXT/planning/stack.md`.
+- **Work items:** `CONTEXT/issues/` — dependency-ordered tracer-bullet slices.
+  Start at `01-walking-skeleton.md`, follow `Blocked by`.
+
+## Non-negotiables (from the ADRs)
+
+- Per-Family data isolation via **row-level security**, not just app checks.
+- No minor's photo reaches storage/training before the **consent gate** + **moderation**.
+- Child-age / consent / residency are **per-jurisdiction config**, never hardcoded.
+- **Hard-delete** must propagate across DB *and* blob storage.
+- External providers (Anthropic, fal.ai, moderation, liveness) live behind
+  **adapter interfaces** so tests can fake them.
+- Never commit secrets; `.env` is gitignored.
+
+## How to work
+
+- **TDD**: test external behavior at the service/use-case seam with providers
+  faked; integration-test RLS isolation + hard-delete. Don't test framework
+  internals or React render details.
+- After meaningful changes, run the **Kaizen Domain Coach**:
+  `bash tools/kaizen-coach/coach.sh` → then act on `KAIZEN-REVIEW-BRIEF.md`
+  per `tools/kaizen-coach/COACH.md`.
+
+## Agent fleet
+
+- **Antigravity** → review/coach + parallel implementation.
+- **Cursor** → primary TDD implementation.
+- **Hermes** → role TBD.

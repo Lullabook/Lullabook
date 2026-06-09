@@ -12,6 +12,9 @@ dist/
 build/
 coverage/
 
+# Kaizen coach generated brief (regenerate via tools/kaizen-coach/coach.sh)
+KAIZEN-REVIEW-BRIEF.md
+
 # OS / editor
 .DS_Store
 *.log

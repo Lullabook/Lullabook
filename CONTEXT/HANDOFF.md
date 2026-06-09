@@ -56,8 +56,11 @@ exists yet**; only design/context docs.
 ## Agent fleet (per user)
 
 - **Cursor** → TDD implementation (this handoff's target).
-- **Codex** → parallel, well-scoped independent slices.
-- **Hermes** → role TBD (user to confirm; not yet recorded in memory).
+- **Antigravity** → review/coach + parallel slices (run the Kaizen Domain Coach:
+  `bash tools/kaizen-coach/coach.sh` → follow `tools/kaizen-coach/COACH.md`).
+- **Hermes** → role TBD (user to confirm).
+
+See `AGENTS.md` (repo root) for project rules every agent should load.
 
 ## Suggested skills for the next session
 
