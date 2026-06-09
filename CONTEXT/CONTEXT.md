@@ -1,0 +1,153 @@
+# CONTEXT — Glossary
+
+The canonical language for this project. This file is a glossary, not a spec.
+No implementation details live here. Terms are defined as they are resolved
+during grilling/planning sessions.
+
+> Working name: **Lullabook** — an app where a parent generates AI stories
+> starring their own baby and family as characters. (Name is provisional.)
+
+---
+
+## Story
+The core artifact. A generated narrative that stars the family's personas as
+characters. The story **text** is the single source of truth that every other
+medium (illustration, audio, video) is derived from.
+
+## Storybook
+The **v1** deliverable: a Story rendered as a sequence of **Pages**, each pairing
+a passage of text with an AI-generated illustration featuring the relevant
+personas. The shareable/keepsake unit. A Storybook is a **curated draft**, not a
+one-shot output (see [ADR-0004](docs/adr/0004-curated-versioned-storybook.md)):
+it has a lifecycle **`generating → draft → finalized`**, and only a *finalized*
+Storybook is shareable. **Visibility:** drafts are private to the creating
+Member; finalized Storybooks are visible to all Family Members and shareable
+outside the Family only via a revocable [Share link](#share-link). See
+[ADR-0013](docs/adr/0013-storybook-sharing-privacy.md).
+
+## Share link
+A revocable, non-indexed URL granting outside-the-Family view access to one
+finalized Storybook (optional expiry/passcode). The only way a child's likeness
+leaves the Family, and always revocable. See
+[ADR-0013](docs/adr/0013-storybook-sharing-privacy.md).
+
+## Page
+One unit of a Storybook: a passage of Story text paired with one illustration of
+its Scene. A Page holds **candidates** — each regeneration produces a new
+candidate; the parent picks which one the Page shows. Text and illustration are
+regenerated **independently**.
+
+## Hard-delete
+Immediate, total erasure of a Family's data across **every** store — photos,
+LoRA weights, Prompts, Persona metadata, and generated Storybooks. A
+Guardian-triggered, always-available action (the "right to be forgotten"), and
+the end-state of the cancellation purge. See
+[ADR-0007](docs/adr/0007-data-lifecycle-and-deletion.md).
+_Avoid_: "soft delete", "archive" (those retain data; hard-delete does not).
+
+## Export
+Producing a durable, downloadable copy of a finalized Storybook (PDF) that lives
+on the parent's device. The mechanism by which the keepsake promise survives
+cancellation/deletion without us hosting a child's likeness indefinitely.
+
+## Regeneration / re-roll
+Producing a fresh candidate for a single Page's text or illustration. Bounded by
+a per-Storybook **re-roll budget** (free re-rolls, then credit-metered) so a
+single book can't blow up unit economics.
+
+## Medium roadmap
+The forms a Story can take, built in dependency order because each consumes the
+one before it:
+1. **Text** — the script / source of truth.
+2. **Illustration** — images anchored to the text (v1 ships text + illustration as the Storybook).
+3. **Audio** — narration of the text (v2).
+4. **Video** — text + illustration + audio in motion (v3).
+
+## Persona
+A reusable character profile set up once and reused across many Stories.
+**Anchored on uploaded reference photos of a real person** (see
+[ADR-0001](docs/adr/0001-photo-conditioned-likeness.md)) plus descriptive
+traits. Belongs to a [Family](#family) and is usable by every Member of it. Two
+kinds:
+- **Baby Persona** — the starring child. Built from photos of a minor, which
+  carries biometric/consent/COPPA/GDPR obligations. Only a
+  [Guardian](#guardian) may create one.
+- **Adult Persona** — a co-starring adult family member (parent, grandparent,
+  aunt…). Must be the **creator themselves**, gated by a selfie/liveness match
+  ([ADR-0014](docs/adr/0014-adult-persona-self-consent.md)). _Avoid_: "Parent
+  Persona" (a grandparent isn't a parent).
+
+Each Persona is realized as a **per-persona LoRA** fine-tuned on the uploaded
+photos (see [ADR-0002](docs/adr/0002-per-persona-lora.md)). A Persona therefore
+has a lifecycle: **`training` → `ready` / `failed`**, because creating one is an
+async, paid background job.
+
+## Jurisdiction
+The legal regime governing a given user, detected/declared at signup. Drives the
+**child-age threshold**, **consent method**, **data-residency region**, and
+notice/retention rules — all **configurable per market**, never hardcoded. v1
+launches across Asia + US, each market gated by its own legal review. See
+[ADR-0015](docs/adr/0015-multi-jurisdiction-launch.md).
+_Avoid_: "country" (jurisdiction is the legal-regime unit, not strictly geographic).
+
+## Consent receipt
+The stored proof that a Guardian gave verifiable parental consent — who
+consented, when, and to which version of the consent notice — captured before a
+Baby Persona is created. See
+[ADR-0008](docs/adr/0008-verifiable-parental-consent.md).
+
+## Family
+The shared container that owns the Persona roster and is the unit of data
+ownership and the **COPPA consent boundary**. Has one or more
+[Members](#member). Every Member can use every Persona in the Family.
+See [ADR-0006](docs/adr/0006-family-member-guardian-model.md).
+
+## Member
+A human login belonging to a Family (mom, dad, grandparent…). Each Member may be
+linked to a **Self Persona** — their own Adult Persona — so their account is
+personalized (e.g. grandma's stories default to grandma + the baby). All Members
+share use of every Persona; a Story is owned by the Member who created it.
+_Avoid_: "User" (too generic), "Account" (the Family is the account-like unit).
+
+## Guardian
+A privileged [Member] role: the legal guardian of the child. **Only a Guardian
+may create a Baby Persona** (the act that captures COPPA consent), invite/remove
+Members, and hard-delete the child's data. Pins COPPA accountability to one
+identifiable adult. Any Member (not just a Guardian) may create their own Adult
+Persona, since that is consent to one's *own* likeness.
+
+## Scene
+A single page's illustration request: one or more Personas (their LoRAs) placed
+into a described setting/action derived from the Story text. Multi-Persona scenes
+(baby + parent together) compose multiple LoRAs — see
+[ADR-0005](docs/adr/0005-multi-persona-scenes-in-v1.md).
+
+## Style Bible
+The per-Storybook set of visual constants that hold every Page together: each
+Persona's wardrobe/appearance, recurring settings, palette, time-of-day, and the
+chosen art style. Generated once with the Story and injected into every page's
+image Prompt so the book reads as one coherent work rather than 12 unrelated
+images. See [ADR-0012](docs/adr/0012-illustration-pipeline-style-bible.md).
+_Avoid_: "theme" (that's a Brief input), "style" alone (ambiguous).
+
+## Likeness confirmation
+The post-training step where the parent reviews sample generations of a freshly
+trained Persona and either accepts it or re-trains — *before* investing in a full
+Storybook. See [onboarding](planning/onboarding-and-personas.md).
+
+## Brief
+The parent-facing seed for a Story. A **hybrid** input: a selection of starring
+Personas, a curated **theme/lesson**, an optional curated **setting/occasion**,
+and one short optional free-text note ("anything special to include?"). The Brief
+is what the parent fills in; it is *not* the raw model input.
+_Avoid_: "Idea", "the prompt" (see Prompt below).
+
+## Prompt
+The **engineered model input** derived from a Brief — the structured instruction
+sent to Claude to generate Story text. Internal; the parent never writes it
+directly. Distinct from the Brief to keep parent-intent separate from
+machine-facing wording.
+
+---
+
+_Last updated during grill-with-docs session, 2026-06-09._

@@ -1,0 +1,19 @@
+# Secrets — never commit
+.env
+.env.*
+*.pem
+*.key
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/
+.idea/
