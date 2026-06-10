@@ -19,8 +19,12 @@ The **v1** deliverable: a Story rendered as a sequence of **Pages**, each pairin
 a passage of text with an AI-generated illustration featuring the relevant
 personas. The shareable/keepsake unit. A Storybook is a **curated draft**, not a
 one-shot output (see [ADR-0004](docs/adr/0004-curated-versioned-storybook.md)):
-it has a lifecycle **`generating → draft → finalized`**, and only a *finalized*
-Storybook is shareable. **Visibility:** drafts are private to the creating
+it has a lifecycle **`generating → (draft | failed)`**, then **`draft →
+finalized`**. A book becomes **`draft`** once every Page reaches a terminal state
+(a failed/quarantined Page surfaces as a re-rollable hole, not a blocker); it
+becomes **`failed`** only when the generation pass produced no Story at all, or
+too few Pages came back ready to be worth presenting (a configurable
+ready-Page floor). Only a *finalized* Storybook is shareable. **Visibility:** drafts are private to the creating
 Member; finalized Storybooks are visible to all Family Members and shareable
 outside the Family only via a revocable [Share link](#share-link). See
 [ADR-0013](docs/adr/0013-storybook-sharing-privacy.md).
@@ -62,6 +66,28 @@ one before it:
 2. **Illustration** — images anchored to the text (v1 ships text + illustration as the Storybook).
 3. **Audio** — narration of the text (v2).
 4. **Video** — text + illustration + audio in motion (v3).
+
+## Character
+A lightweight, **photo-free** cast member built from a **[Trait
+Questionnaire](#trait-questionnaire)** — a name, nickname, relationships, and
+traits/catchphrases ("what papa generally says") — with **no uploaded photos, no
+LoRA, no biometric data**. Characters power the **free, text-only** story tier:
+because no likeness is generated, they skip the heavy biometric/consent gate that
+[Personas](#persona) require. A Character may be fully fictional or modeled on a
+real family member; the app never asks for photographic proof. A Character is the
+**upgrade seed** for a Persona — a parent who later wants illustrations attaches
+photos to promote a Character into a Persona.
+_Avoid_: "Persona" (that term is reserved for the photo-anchored, LoRA-backed
+kind), "profile" (ambiguous).
+
+## Trait Questionnaire
+The guided Q&A a parent fills in to build a [Character](#character): name,
+nickname, full name, family relationships (papa/mama/grandparent names), favorite
+animals/toys (and their names), songs, and topics the child likes (dinosaurs,
+superheroes…). It is the free-tier analogue of uploading photos — it captures
+*who the character is* in words rather than likeness. Feeds the [Prompt](#prompt)
+for text-only Story generation.
+_Avoid_: "onboarding" (broader), "the form".
 
 ## Persona
 A reusable character profile set up once and reused across many Stories.
@@ -137,10 +163,35 @@ Storybook. See [onboarding](planning/onboarding-and-personas.md).
 
 ## Brief
 The parent-facing seed for a Story. A **hybrid** input: a selection of starring
-Personas, a curated **theme/lesson**, an optional curated **setting/occasion**,
-and one short optional free-text note ("anything special to include?"). The Brief
-is what the parent fills in; it is *not* the raw model input.
+Personas, a chosen **[Story Type](#story-type)**, a curated **theme/lesson**, an
+optional curated **setting/occasion**, and one short optional free-text note
+("anything special to include?"). The Brief is what the parent fills in; it is
+*not* the raw model input.
 _Avoid_: "Idea", "the prompt" (see Prompt below).
+
+## Story Type
+The kind of Story being generated, chosen per Story in the [Brief](#brief). It
+shapes the generation pass's instructions and narrative arc — it is **not** just
+a theme. v1 types:
+- **Bedtime** — a calming wind-down arc with a soft landing (no cliffhanger),
+  engineered to ease the child toward sleep.
+- **Learning** — carries an explicit lesson, message, or early-numeracy/counting
+  thread woven into the narrative, with gentle repetition.
+
+Story Type is distinct from the **theme/lesson** field of a Brief: theme is *what
+the story is about*; Story Type is *what shape the story takes*.
+_Avoid_: "mode", "genre" (overloaded).
+
+## Personalized Classic
+A Story whose origin is an **existing public-domain tale** recast with the
+family's [Personas](#persona) as its characters (e.g. *Alice in Wonderland*
+starring grandma), rather than an original narrative invented from a
+[Brief](#brief). Same downstream pipeline as any Story (Scenes, Style Bible,
+Pages), but a different generation contract: adapt-and-recast, not invent. v1
+scope, but its **own** build slice after the core generate path. Restricted to a
+**curated public-domain catalog** — no arbitrary "famous stories" — to avoid
+copyright exposure stacked on the minor-likeness obligations.
+_Avoid_: "remix", "fan-fiction" (legally loaded).
 
 ## Prompt
 The **engineered model input** derived from a Brief — the structured instruction
