@@ -69,6 +69,7 @@ export class FamilyService {
       : chosenPersonaIds;
     return {
       starringPersonaIds: starring,
+      storyType: "bedtime",
       theme: "adventure",
     };
   }

@@ -44,8 +44,22 @@ own baby and family via photo-conditioned per-persona LoRAs. Greenfield.
   `bash tools/kaizen-coach/coach.sh` → then act on `KAIZEN-REVIEW-BRIEF.md`
   per `tools/kaizen-coach/COACH.md`.
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `VrajGupta/Lullabook` (via `gh` CLI); local tracer bullets in `CONTEXT/issues/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout under `CONTEXT/` (`CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.
+
 ## Agent fleet
 
-- **Antigravity** → review/coach + parallel implementation.
-- **Cursor** → primary TDD implementation.
-- **Hermes** → role TBD.
+- **Antigravity** → Production Coach. Responsible for the 'Kaizen Production' gate (security, infra wiring, observability, runbooks, deletion proof, ADR compliance).
+- **Cursor** → Primary TDD implementation.
+- **Hermes** → Integration/E2E agent. Wires infrastructure (e.g. Supabase locally), runs Playwright against flows (e.g., sign-up → Baby Persona consent gate), and proves the happy path in a browser.

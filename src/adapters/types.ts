@@ -1,10 +1,36 @@
-import type { GeneratedStory } from "@/domain/types";
+import type { GeneratedStory, StoryType, TraitQuestionnaire } from "@/domain/types";
+
+export interface ClassicSourceTale {
+  id: string;
+  title: string;
+  plotBeats: string[];
+}
+
+export interface ClassicCatalog {
+  getById(id: string): ClassicSourceTale | null;
+}
+
+export interface TextStoryGenerationInput {
+  theme: string;
+  note?: string;
+  storyType: StoryType;
+  characters: { displayName: string; questionnaire: TraitQuestionnaire }[];
+}
 
 export interface AnthropicAdapter {
   generateStory(input: {
     brief: string;
     personaNames: string[];
     pageCount: number;
+    storyType: StoryType;
+  }): Promise<GeneratedStory>;
+  generateTextStory(input: TextStoryGenerationInput): Promise<{ text: string }>;
+  adaptStory(input: {
+    sourceTale: ClassicSourceTale;
+    personaNames: string[];
+    pageCount: number;
+    storyType: StoryType;
+    twist?: string;
   }): Promise<GeneratedStory>;
 }
 
@@ -22,11 +48,20 @@ export interface FalTrainWebhook {
 
 export interface FalImageResult {
   imageUrl: string;
+  bytes?: Buffer;
+}
+
+export interface FalGenerateImageOptions {
+  idempotencyKey?: string;
 }
 
 export interface FalAdapter {
   startTraining(photos: Buffer[]): Promise<FalTrainResult>;
-  generateImage(prompt: string, loraKey: string): Promise<FalImageResult>;
+  generateImage(
+    prompt: string,
+    loraKey: string,
+    options?: FalGenerateImageOptions
+  ): Promise<FalImageResult>;
   inpaintFaces(
     baseImageUrl: string,
     faces: { region: string; loraKey: string }[]
@@ -77,10 +112,12 @@ export interface StripeAdapter {
 
 export interface WorkflowStep {
   name: string;
+  idempotencyKey?: string;
   run: () => Promise<void>;
 }
 
 export interface WorkflowAdapter {
+  enqueue(name: string, work: () => Promise<void>): void;
   run(steps: WorkflowStep[]): Promise<void>;
   waitForEvent<T>(eventName: string, matchId: string): Promise<T>;
   emitEvent<T>(eventName: string, data: T): Promise<void>;

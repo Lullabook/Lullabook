@@ -1,11 +1,22 @@
 import { v4 as uuid } from "uuid";
-import type { AnthropicAdapter, FalAdapter } from "@/adapters/types";
+import type {
+  AnthropicAdapter,
+  BlobStore,
+  ClassicCatalog,
+  FalAdapter,
+  WorkflowAdapter,
+  WorkflowStep,
+} from "@/adapters/types";
 import type { DataStore } from "@/db/store";
-import type { Brief, Storybook } from "@/domain/types";
+import type { Brief, GeneratedStory, PageGenerationStatus, Storybook } from "@/domain/types";
 import { ChildSafetyService } from "@/services/child-safety";
+import type { SubscriptionService } from "@/services/subscription";
 
 const FREE_REROLL_BUDGET = 5;
 const PAGE_COUNT = 12;
+const DEFAULT_READY_PAGE_FLOOR = 10;
+
+type PersonaRecord = NonNullable<ReturnType<DataStore["getPersona"]>>;
 
 export class StorybookService {
   constructor(
@@ -13,12 +24,21 @@ export class StorybookService {
     private readonly anthropic: AnthropicAdapter,
     private readonly fal: FalAdapter,
     private readonly childSafety: ChildSafetyService,
-    private readonly useReferenceModelForMulti = false
+    private readonly blobs: BlobStore,
+    private readonly workflow: WorkflowAdapter,
+    private readonly subscriptions: SubscriptionService,
+    private readonly classicCatalog: ClassicCatalog,
+    private readonly useReferenceModelForMulti = false,
+    private readonly readyPageFloor = DEFAULT_READY_PAGE_FLOOR
   ) {}
 
   async generate(memberId: string, brief: Brief): Promise<Storybook> {
     const member = this.store.members.get(memberId);
     if (!member) throw new Error("Member not found");
+
+    if (!this.subscriptions.isActive(member.familyId)) {
+      throw new Error("Active subscription required for Storybook generation");
+    }
 
     const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
     if (note) await this.childSafety.checkText(note, `brief-${memberId}`);
@@ -43,73 +63,342 @@ export class StorybookService {
     };
     this.store.saveStorybook(storybook);
 
-    const generated = await this.anthropic.generateStory({
-      brief: `${brief.theme} ${brief.setting ?? ""} ${note}`,
-      personaNames: personas.map((p) => p.displayName),
-      pageCount: PAGE_COUNT,
+    this.workflow.enqueue(`storybook-${storybook.id}`, async () => {
+      const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
+      await this.runGeneration(memberId, storybook.id, brief, personas, async () =>
+        this.anthropic.generateStory({
+          brief: `${brief.theme} ${brief.setting ?? ""} ${note}`,
+          personaNames: personas.map((p) => p.displayName),
+          pageCount: PAGE_COUNT,
+          storyType: brief.storyType,
+        })
+      );
     });
 
-    storybook.styleBible = generated.styleBible;
-    const scenes = generated.scenes.map((s) => ({
+    return storybook;
+  }
+
+  async generateFromClassic(
+    memberId: string,
+    classicId: string,
+    brief: Brief
+  ): Promise<Storybook> {
+    const member = this.store.members.get(memberId);
+    if (!member) throw new Error("Member not found");
+
+    if (!this.subscriptions.isActive(member.familyId)) {
+      throw new Error("Active subscription required for Storybook generation");
+    }
+
+    const sourceTale = this.classicCatalog.getById(classicId);
+    if (!sourceTale) {
+      throw new Error("Classic not found in catalog");
+    }
+
+    const twist = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
+    if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`);
+
+    const personas = brief.starringPersonaIds.map((id) => {
+      const p = this.store.getPersona(id, memberId);
+      if (!p || p.status !== "ready") throw new Error(`Persona ${id} not ready`);
+      return p;
+    });
+
+    const classicBrief: Brief = {
+      ...brief,
+      theme: sourceTale.title,
+    };
+
+    const storybook: Storybook = {
+      id: uuid(),
+      familyId: member.familyId,
+      createdByMemberId: memberId,
+      status: "generating",
+      brief: classicBrief,
+      styleBible: null,
+      rerollBudgetRemaining: FREE_REROLL_BUDGET,
+      rerollCredits: 0,
+      createdAt: new Date(),
+      finalizedAt: null,
+    };
+    this.store.saveStorybook(storybook);
+
+    this.workflow.enqueue(`storybook-${storybook.id}`, async () => {
+      await this.runGeneration(memberId, storybook.id, classicBrief, personas, async () =>
+        this.anthropic.adaptStory({
+          sourceTale,
+          personaNames: personas.map((p) => p.displayName),
+          pageCount: PAGE_COUNT,
+          storyType: brief.storyType,
+          twist: twist || undefined,
+        })
+      );
+    });
+
+    return storybook;
+  }
+
+  recoverPage(memberId: string, pageId: string): void {
+    const page = this.store.pages.get(pageId);
+    if (!page) throw new Error("Page not found");
+    const book = this.store.getStorybook(page.storybookId, memberId);
+    if (!book) throw new Error("Storybook not found");
+    if (page.generationStatus !== "failed" && page.generationStatus !== "quarantined") {
+      throw new Error("Page is not recoverable");
+    }
+
+    const persisted = this.store.getPersistedGeneration(book.id);
+    if (!persisted) throw new Error("Persisted generation not found");
+
+    const pageData = persisted.story.pages.find((p) => p.index === page.index);
+    if (!pageData) throw new Error("Page data not found");
+
+    const scenes = persisted.story.scenes.map((s) => ({
+      ...s,
+      personaIds: book.brief.starringPersonaIds,
+    }));
+    const scene = scenes.find((s) => s.pageIndex === page.index);
+    if (!scene) throw new Error("Scene not found");
+
+    const personas = book.brief.starringPersonaIds.map((id) => {
+      const p = this.store.getPersona(id, memberId);
+      if (!p) throw new Error(`Persona ${id} not found`);
+      return p;
+    });
+
+    const recoverAttempt = this.countRecoveryAttempts(pageId) + 1;
+
+    this.workflow.enqueue(`recover-${pageId}`, async () => {
+      await this.runPagePipeline(
+        book,
+        pageData,
+        scene,
+        personas,
+        persisted.story,
+        recoverAttempt
+      );
+      await this.finalizeStorybookStatus(book.id);
+    });
+  }
+
+  private async runGeneration(
+    memberId: string,
+    storybookId: string,
+    brief: Brief,
+    personas: PersonaRecord[],
+    generateStory: () => Promise<GeneratedStory>
+  ): Promise<void> {
+    const storybook = this.store.storybooks.get(storybookId);
+    if (!storybook) return;
+
+    let generated: GeneratedStory | null = null;
+
+    await this.workflow.run([
+      {
+        name: "claude-pass",
+        idempotencyKey: `${storybookId}/story`,
+        run: async () => {
+          generated = await generateStory();
+
+          this.store.savePersistedGeneration({
+            storybookId,
+            story: generated,
+            persistedAt: new Date(),
+          });
+
+          storybook.styleBible = generated.styleBible;
+          this.store.saveStorybook(storybook);
+        },
+      },
+    ]);
+
+    if (!generated?.pages?.length || !generated.scenes?.length) {
+      storybook.status = "failed";
+      this.store.saveStorybook(storybook);
+      return;
+    }
+
+    const persisted = this.store.getPersistedGeneration(storybookId)!;
+    const scenes = persisted.story.scenes.map((s) => ({
       ...s,
       personaIds: brief.starringPersonaIds,
     }));
 
-    for (const pageData of generated.pages) {
+    for (const pageData of persisted.story.pages) {
       const scene = scenes.find((s) => s.pageIndex === pageData.index)!;
-      const personaCount = scene.personaIds.length;
-      let illustrationUrl: string | null = null;
-      let generationStatus: "ready" | "quarantined" | "failed" = "ready";
-
-      try {
-        let imageUrl: string;
-        if (personaCount > 1 && this.useReferenceModelForMulti) {
-          const result = await this.fal.generateWithReferenceModel(
-            `${generated.styleBible.artStyle}: ${scene.description}`,
-            scene.personaIds.map((id) => `https://example.com/ref/${id}.png`)
-          );
-          imageUrl = result.imageUrl;
-        } else if (personaCount > 1) {
-          const base = await this.fal.generateImage(scene.description, "base");
-          const inpaint = await this.fal.inpaintFaces(
-            base.imageUrl,
-            scene.personaIds.map((id, i) => ({
-              region: `face-${i}`,
-              loraKey: this.store.personas.get(id)?.loraWeightKey ?? "lora/default",
-            }))
-          );
-          imageUrl = inpaint.imageUrl;
-        } else {
-          const loraKey = personas[0].loraWeightKey ?? "lora/default";
-          const prompt = `${generated.styleBible.artStyle} | ${generated.styleBible.palette} | ${scene.description}`;
-          const result = await this.fal.generateImage(prompt, loraKey);
-          imageUrl = result.imageUrl;
-        }
-
-        const mod = await this.childSafety.checkGeneratedImage(imageUrl);
-        if (mod === "quarantined") {
-          generationStatus = "quarantined";
-        } else {
-          illustrationUrl = imageUrl;
-        }
-      } catch {
-        generationStatus = "failed";
-      }
-
-      this.store.savePage({
-        id: uuid(),
-        storybookId: storybook.id,
-        index: pageData.index,
-        text: pageData.text,
-        illustrationUrl,
-        generationStatus,
-        personaCount,
-      });
+      await this.runPagePipeline(storybook, pageData, scene, personas, persisted.story, 0);
     }
 
-    storybook.status = "draft";
+    await this.finalizeStorybookStatus(storybookId);
+  }
+
+  private async runPagePipeline(
+    storybook: Storybook,
+    pageData: { index: number; text: string },
+    scene: { pageIndex: number; description: string; personaIds: string[] },
+    personas: PersonaRecord[],
+    story: GeneratedStory,
+    attempt: number
+  ): Promise<void> {
+    await this.workflow.run(
+      this.buildPageWorkflowSteps(storybook, pageData, scene, personas, story, attempt)
+    );
+  }
+
+  private buildPageWorkflowSteps(
+    storybook: Storybook,
+    pageData: { index: number; text: string },
+    scene: { pageIndex: number; description: string; personaIds: string[] },
+    personas: PersonaRecord[],
+    story: GeneratedStory,
+    attempt: number
+  ): WorkflowStep[] {
+    const pageIndex = pageData.index;
+    const pageId = `${storybook.id}-page-${pageIndex}`;
+    const blobKey = `books/${storybook.familyId}/${storybook.id}/page-${pageIndex}.png`;
+    const rawKey = `${blobKey}.attempt-${attempt}.raw`;
+    const prefix = `${storybook.id}/${pageIndex}/${attempt}`;
+    const moderationKey = `${blobKey}.attempt-${attempt}.moderation`;
+    const personaCount = scene.personaIds.length;
+    const falIdempotencyKey = `${prefix}/fal-generate`;
+
+    return [
+      {
+        name: `fal-gen-${pageIndex}`,
+        idempotencyKey: `${prefix}/generate`,
+        run: async () => {
+          try {
+            const existing = await this.blobs.get(rawKey);
+            if (existing) return;
+
+            let imageResult: { imageUrl: string; bytes?: Buffer };
+            if (personaCount > 1 && this.useReferenceModelForMulti) {
+              imageResult = await this.fal.generateWithReferenceModel(
+                `${story.styleBible.artStyle}: ${scene.description}`,
+                scene.personaIds.map((id) => `https://example.com/ref/${id}.png`)
+              );
+            } else if (personaCount > 1) {
+              const base = await this.fal.generateImage(scene.description, "base", {
+                idempotencyKey: `${prefix}/fal-base`,
+              });
+              imageResult = await this.fal.inpaintFaces(
+                base.imageUrl,
+                scene.personaIds.map((id, i) => ({
+                  region: `face-${i}`,
+                  loraKey: this.store.personas.get(id)?.loraWeightKey ?? "lora/default",
+                }))
+              );
+            } else {
+              const loraKey = personas[0]!.loraWeightKey ?? "lora/default";
+              const prompt = `${story.styleBible.artStyle} | ${story.styleBible.palette} | ${scene.description}`;
+              imageResult = await this.fal.generateImage(prompt, loraKey, {
+                idempotencyKey: falIdempotencyKey,
+              });
+            }
+
+            const bytes =
+              imageResult.bytes ?? Buffer.from(`fetched:${imageResult.imageUrl}`);
+            await this.blobs.put(rawKey, bytes);
+          } catch {
+            await this.blobs.put(moderationKey, Buffer.from("failed"));
+          }
+        },
+      },
+      {
+        name: `moderate-${pageIndex}`,
+        idempotencyKey: `${prefix}/moderate`,
+        run: async () => {
+          const prior = await this.blobs.get(moderationKey);
+          if (prior) return;
+
+          const bytes = await this.blobs.get(rawKey);
+          if (!bytes) {
+            await this.blobs.put(moderationKey, Buffer.from("failed"));
+            return;
+          }
+
+          try {
+            const mod = await this.childSafety.checkGeneratedImageBytes(
+              bytes,
+              `${storybook.id}/page-${pageIndex}`
+            );
+            await this.blobs.put(
+              moderationKey,
+              Buffer.from(mod === "quarantined" ? "quarantined" : "allowed")
+            );
+          } catch {
+            await this.blobs.put(moderationKey, Buffer.from("failed"));
+          }
+        },
+      },
+      {
+        name: `store-${pageIndex}`,
+        idempotencyKey: `${prefix}/store`,
+        run: async () => {
+          const modOutcome = (await this.blobs.get(moderationKey))?.toString();
+          if (modOutcome !== "allowed") return;
+
+          const bytes = await this.blobs.get(rawKey);
+          if (!bytes) return;
+
+          await this.blobs.put(blobKey, bytes);
+        },
+      },
+      {
+        name: `persist-${pageIndex}`,
+        idempotencyKey: `${prefix}/persist`,
+        run: async () => {
+          const modOutcome = (await this.blobs.get(moderationKey))?.toString() ?? "failed";
+          let generationStatus: PageGenerationStatus = "failed";
+          let illustrationBlobKey: string | null = null;
+
+          if (modOutcome === "allowed" && (await this.blobs.get(blobKey))) {
+            generationStatus = "ready";
+            illustrationBlobKey = blobKey;
+          } else if (modOutcome === "quarantined") {
+            generationStatus = "quarantined";
+          }
+
+          this.store.savePage({
+            id: pageId,
+            storybookId: storybook.id,
+            index: pageIndex,
+            text: pageData.text,
+            illustrationUrl: null,
+            illustrationBlobKey,
+            generationStatus,
+            personaCount,
+          });
+        },
+      },
+    ];
+  }
+
+  private async finalizeStorybookStatus(storybookId: string): Promise<void> {
+    const storybook = this.store.storybooks.get(storybookId);
+    if (!storybook || storybook.status !== "generating") return;
+
+    const pages = this.store.getPagesForStorybook(storybookId);
+    const readyCount = pages.filter((p) => p.generationStatus === "ready").length;
+
+    if (readyCount < this.readyPageFloor) {
+      storybook.status = "failed";
+    } else {
+      storybook.status = "draft";
+    }
     this.store.saveStorybook(storybook);
-    return storybook;
+  }
+
+  private countRecoveryAttempts(pageId: string): number {
+    return [...this.store.pageCandidates.values()].filter(
+      (c) => c.pageId === pageId && c.kind === "image" && c.id.includes("-recover-")
+    ).length;
+  }
+
+  private countRerollAttempts(pageId: string): number {
+    return [...this.store.pageCandidates.values()].filter(
+      (c) => c.pageId === pageId && c.kind === "image" && c.id.includes("-reroll-")
+    ).length;
   }
 
   rerollImage(memberId: string, pageId: string): void {
@@ -120,11 +409,12 @@ export class StorybookService {
 
     this.decrementRerollBudget(book);
 
+    const attempt = this.countRerollAttempts(pageId) + 1;
     const candidate: import("@/domain/types").PageCandidate = {
-      id: uuid(),
+      id: `${pageId}-reroll-${attempt}`,
       pageId,
       kind: "image",
-      content: `https://example.com/reroll/${pageId}/${Date.now()}.png`,
+      content: `https://example.com/reroll/${pageId}/${attempt}.png`,
       selected: false,
       createdAt: new Date(),
     };
@@ -139,8 +429,9 @@ export class StorybookService {
 
     this.decrementRerollBudget(book);
 
+    const attempt = this.countRerollAttempts(pageId) + 1;
     const candidate = {
-      id: uuid(),
+      id: `${pageId}-reroll-text-${attempt}`,
       pageId,
       kind: "text" as const,
       content: newText,

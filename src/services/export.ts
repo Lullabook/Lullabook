@@ -19,7 +19,7 @@ export class ExportService {
       title: book.brief.theme,
       pages: pages.map((p) => ({
         text: p.text,
-        illustrationUrl: p.illustrationUrl ?? "",
+        illustrationUrl: p.illustrationBlobKey ?? p.illustrationUrl ?? "",
       })),
     });
   }

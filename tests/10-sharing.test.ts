@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createTestContext, goodPhoto } from "@/test/fixtures";
+import { createTestContext, generateAndWait, goodPhoto, withActiveSubscription } from "@/test/fixtures";
 
 describe("10 — sharing", () => {
   async function finalizedBook(ctx: ReturnType<typeof createTestContext>) {
     const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-share", "share@example.com");
+    withActiveSubscription(ctx, guardian);
     const invite = ctx.family.inviteMember(guardian.id, "fam@example.com");
     const other = ctx.family.acceptInvite(invite.inviteId, "auth-fam");
     const persona = await ctx.personas.createAdult({
@@ -12,8 +13,9 @@ describe("10 — sharing", () => {
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
       selfie: Buffer.from("selfie"),
     });
-    const book = await ctx.storybooks.generate(guardian.id, {
+    const book = await generateAndWait(ctx, guardian.id, {
       starringPersonaIds: [persona.id],
+      storyType: "bedtime",
       theme: "birthday",
     });
     ctx.storybooks.finalize(guardian.id, book.id);

@@ -1,24 +1,30 @@
 import { v4 as uuid } from "uuid";
 import type {
+  Character,
   ConsentReceipt,
   Family,
+  LightConsentReceipt,
   Member,
   ModerationAuditEntry,
   Page,
   PageCandidate,
   PendingBrief,
+  PersistedGeneration,
   Persona,
   ShareLink,
   Storybook,
   Subscription,
+  TextStory,
 } from "@/domain/types";
 
 export class DataStore {
   families = new Map<string, Family>();
   members = new Map<string, Member>();
   personas = new Map<string, Persona>();
+  characters = new Map<string, Character>();
   subscriptions = new Map<string, Subscription>();
   consentReceipts = new Map<string, ConsentReceipt>();
+  lightConsentReceipts = new Map<string, LightConsentReceipt>();
   storybooks = new Map<string, Storybook>();
   pages = new Map<string, Page>();
   pageCandidates = new Map<string, PageCandidate>();
@@ -28,6 +34,8 @@ export class DataStore {
   invites = new Map<string, { id: string; familyId: string; email: string; invitedBy: string }>();
   bannedAccounts = new Set<string>();
   purgeScheduled = new Map<string, { familyId: string; purgeAt: Date }>();
+  persistedGenerations = new Map<string, PersistedGeneration>();
+  textStories = new Map<string, TextStory>();
 
   createFamily(): Family {
     const family: Family = { id: uuid(), createdAt: new Date() };
@@ -71,6 +79,50 @@ export class DataStore {
     this.personas.set(persona.id, persona);
   }
 
+  getCharactersByFamily(familyId: string, actorMemberId: string): Character[] {
+    const actor = this.members.get(actorMemberId);
+    if (!actor || actor.familyId !== familyId) {
+      throw new RlsViolationError("Cannot read characters for another family");
+    }
+    return [...this.characters.values()].filter((c) => c.familyId === familyId);
+  }
+
+  getCharacter(id: string, actorMemberId: string): Character | undefined {
+    const character = this.characters.get(id);
+    if (!character) return undefined;
+    const actor = this.members.get(actorMemberId);
+    if (!actor || actor.familyId !== character.familyId) {
+      throw new RlsViolationError("Cannot read character for another family");
+    }
+    return character;
+  }
+
+  saveCharacter(character: Character): void {
+    this.characters.set(character.id, character);
+  }
+
+  saveTextStory(story: TextStory): void {
+    this.textStories.set(story.id, story);
+  }
+
+  getTextStory(id: string, actorMemberId: string): TextStory | undefined {
+    const story = this.textStories.get(id);
+    if (!story) return undefined;
+    const actor = this.members.get(actorMemberId);
+    if (!actor || actor.familyId !== story.familyId) {
+      throw new RlsViolationError("Cannot read text story for another family");
+    }
+    return story;
+  }
+
+  saveLightConsentReceipt(receipt: LightConsentReceipt): void {
+    this.lightConsentReceipts.set(receipt.id, receipt);
+  }
+
+  getLightConsentReceiptForCharacter(characterId: string): LightConsentReceipt | undefined {
+    return [...this.lightConsentReceipts.values()].find((r) => r.characterId === characterId);
+  }
+
   getSubscription(familyId: string): Subscription | undefined {
     return this.subscriptions.get(familyId);
   }
@@ -89,6 +141,14 @@ export class DataStore {
 
   saveStorybook(book: Storybook): void {
     this.storybooks.set(book.id, book);
+  }
+
+  savePersistedGeneration(generation: PersistedGeneration): void {
+    this.persistedGenerations.set(generation.storybookId, generation);
+  }
+
+  getPersistedGeneration(storybookId: string): PersistedGeneration | undefined {
+    return this.persistedGenerations.get(storybookId);
   }
 
   getStorybook(id: string, actorMemberId: string): Storybook | undefined {
@@ -180,8 +240,17 @@ export class DataStore {
     for (const [id, p] of this.personas) {
       if (p.familyId === familyId) this.personas.delete(id);
     }
+    for (const [id, c] of this.characters) {
+      if (c.familyId === familyId) this.characters.delete(id);
+    }
+    for (const [id, r] of this.lightConsentReceipts) {
+      if (r.familyId === familyId) this.lightConsentReceipts.delete(id);
+    }
     for (const [id, b] of this.storybooks) {
-      if (b.familyId === familyId) this.storybooks.delete(id);
+      if (b.familyId === familyId) {
+        this.storybooks.delete(id);
+        this.persistedGenerations.delete(id);
+      }
     }
     for (const [id, r] of this.consentReceipts) {
       if (r.familyId === familyId) this.consentReceipts.delete(id);

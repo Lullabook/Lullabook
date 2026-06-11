@@ -4,7 +4,9 @@ export type PersonaKind = "baby" | "adult";
 
 export type PersonaStatus = "training" | "ready" | "failed";
 
-export type StorybookStatus = "generating" | "draft" | "finalized";
+export type StoryType = "bedtime" | "learning";
+
+export type StorybookStatus = "generating" | "draft" | "finalized" | "failed";
 
 export type SubscriptionStatus = "none" | "active" | "canceled" | "past_due";
 
@@ -34,6 +36,8 @@ export interface Persona {
   displayName: string;
   status: PersonaStatus;
   loraWeightKey: string | null;
+  promotedFromCharacterId?: string;
+  questionnaire?: TraitQuestionnaire;
   createdAt: Date;
 }
 
@@ -43,6 +47,38 @@ export interface ConsentReceipt {
   memberId: string;
   jurisdiction: string;
   noticeVersion: string;
+  consentedAt: Date;
+}
+
+export interface TraitQuestionnaire {
+  name: string;
+  nickname?: string;
+  relationships?: string[];
+  favoriteAnimals?: string[];
+  favoriteToys?: string[];
+  songs?: string[];
+  topics?: string[];
+  isFictional: boolean;
+}
+
+export interface Character {
+  id: string;
+  familyId: string;
+  createdByMemberId: string;
+  displayName: string;
+  questionnaire: TraitQuestionnaire;
+  promotedPersonaId?: string;
+  createdAt: Date;
+}
+
+export interface LightConsentReceipt {
+  id: string;
+  characterId: string;
+  familyId: string;
+  memberId: string;
+  jurisdiction: string;
+  noticeVersion: string;
+  attestation: string;
   consentedAt: Date;
 }
 
@@ -56,10 +92,27 @@ export interface Subscription {
 
 export interface Brief {
   starringPersonaIds: string[];
+  storyType: StoryType;
   theme: string;
   setting?: string;
   note?: string;
   customStyleNote?: string;
+}
+
+export interface TextStoryBrief {
+  starringCharacterIds: string[];
+  storyType: StoryType;
+  theme: string;
+  note?: string;
+}
+
+export interface TextStory {
+  id: string;
+  familyId: string;
+  createdByMemberId: string;
+  brief: TextStoryBrief;
+  text: string;
+  createdAt: Date;
 }
 
 export interface StyleBible {
@@ -83,8 +136,15 @@ export interface Page {
   index: number;
   text: string;
   illustrationUrl: string | null;
+  illustrationBlobKey: string | null;
   generationStatus: PageGenerationStatus;
   personaCount: number;
+}
+
+export interface PersistedGeneration {
+  storybookId: string;
+  story: GeneratedStory;
+  persistedAt: Date;
 }
 
 export interface Storybook {
@@ -126,10 +186,15 @@ export interface PendingBrief {
   submittedAt: Date;
 }
 
+export type ConsentMethod = "payment_vpc" | "signed_form" | "otp";
+
+export type CharacterConsentMethod = "light_attestation" | ConsentMethod;
+
 export interface JurisdictionConfig {
   code: string;
   childAgeThreshold: number;
-  consentMethod: "payment_vpc" | "signed_form" | "otp";
+  consentMethod: ConsentMethod;
+  characterConsentMethod: CharacterConsentMethod;
   noticeVersion: string;
   residencyRegion: string;
   enabled: boolean;

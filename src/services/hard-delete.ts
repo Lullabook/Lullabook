@@ -29,6 +29,12 @@ export class HardDeleteService {
     await this.blobs.deletePrefix(`photos/${familyId}`);
     await this.blobs.deletePrefix(`lora/${familyId}`);
     await this.blobs.deletePrefix(`books/${familyId}`);
+    const storybooks = [...this.store.storybooks.values()].filter(
+      (b) => b.familyId === familyId
+    );
+    for (const book of storybooks) {
+      await this.blobs.deletePrefix(`${book.id}/`);
+    }
     this.store.hardDeleteFamily(familyId);
   }
 

@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { createTestContext, goodPhoto } from "@/test/fixtures";
+import { createTestContext, generateAndWait, goodPhoto, withActiveSubscription } from "@/test/fixtures";
 
 describe("09 — export PDF", () => {
   it("exports a finalized storybook as PDF", async () => {
     const ctx = createTestContext();
     const member = ctx.onboarding.ensureFamilyForNewUser("auth-export", "export@example.com");
+    withActiveSubscription(ctx, member);
     const persona = await ctx.personas.createAdult({
       memberId: member.id,
       displayName: "Exporter",
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
       selfie: Buffer.from("selfie"),
     });
-    const book = await ctx.storybooks.generate(member.id, {
+    const book = await generateAndWait(ctx, member.id, {
       starringPersonaIds: [persona.id],
+      storyType: "bedtime",
       theme: "keepsake",
     });
     ctx.storybooks.finalize(member.id, book.id);
@@ -32,8 +34,9 @@ describe("09 — export PDF", () => {
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
       selfie: Buffer.from("selfie"),
     });
-    const book = await ctx.storybooks.generate(member.id, {
+    const book = await generateAndWait(ctx, member.id, {
       starringPersonaIds: [persona.id],
+      storyType: "learning",
       theme: "memory",
     });
     ctx.storybooks.finalize(member.id, book.id);

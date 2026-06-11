@@ -1,6 +1,10 @@
 import type { JurisdictionConfig, MemberRole } from "@/domain/types";
 
-export type ConsentAction = "create_baby_persona" | "create_adult_persona" | "signup";
+export type ConsentAction =
+  | "create_baby_persona"
+  | "create_adult_persona"
+  | "create_character"
+  | "signup";
 
 export interface ConsentCheckInput {
   jurisdiction: string;
@@ -8,6 +12,7 @@ export interface ConsentCheckInput {
   action: ConsentAction;
   hasActiveSubscription: boolean;
   hasConsentReceipt: boolean;
+  hasAttestation?: boolean;
 }
 
 export interface ConsentCheckResult {
@@ -21,6 +26,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     code: "US",
     childAgeThreshold: 13,
     consentMethod: "payment_vpc",
+    characterConsentMethod: "light_attestation",
     noticeVersion: "us-coppa-v1",
     residencyRegion: "us-east-1",
     enabled: true,
@@ -29,6 +35,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     code: "IN",
     childAgeThreshold: 18,
     consentMethod: "payment_vpc",
+    characterConsentMethod: "light_attestation",
     noticeVersion: "in-dpdp-v1",
     residencyRegion: "ap-south-1",
     enabled: true,
@@ -37,6 +44,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     code: "KR",
     childAgeThreshold: 14,
     consentMethod: "signed_form",
+    characterConsentMethod: "light_attestation",
     noticeVersion: "kr-pipa-v1",
     residencyRegion: "ap-northeast-2",
     enabled: false,
@@ -45,6 +53,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     code: "SG",
     childAgeThreshold: 13,
     consentMethod: "payment_vpc",
+    characterConsentMethod: "light_attestation",
     noticeVersion: "sg-pdpa-v1",
     residencyRegion: "ap-southeast-1",
     enabled: false,
@@ -53,9 +62,19 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     code: "JP",
     childAgeThreshold: 13,
     consentMethod: "payment_vpc",
+    characterConsentMethod: "light_attestation",
     noticeVersion: "jp-appi-v1",
     residencyRegion: "ap-northeast-1",
     enabled: false,
+  },
+  STRICT: {
+    code: "STRICT",
+    childAgeThreshold: 13,
+    consentMethod: "payment_vpc",
+    characterConsentMethod: "payment_vpc",
+    noticeVersion: "strict-v1",
+    residencyRegion: "us-east-1",
+    enabled: true,
   },
 };
 
@@ -100,6 +119,37 @@ export class ConsentEngine {
 
     if (input.action === "create_adult_persona") {
       return { allowed: true };
+    }
+
+    if (input.action === "create_character") {
+      if (input.actorRole !== "guardian") {
+        return { allowed: false, reason: "Only guardians may create characters for real children" };
+      }
+      if (config.characterConsentMethod === "light_attestation") {
+        if (!input.hasAttestation) {
+          return {
+            allowed: false,
+            requiredMethod: "light_attestation",
+            reason: "Guardian attestation required",
+          };
+        }
+        return { allowed: true, requiredMethod: "light_attestation" };
+      }
+      if (!input.hasActiveSubscription) {
+        return {
+          allowed: false,
+          requiredMethod: config.characterConsentMethod,
+          reason: "Active subscription required",
+        };
+      }
+      if (!input.hasConsentReceipt) {
+        return {
+          allowed: false,
+          requiredMethod: config.characterConsentMethod,
+          reason: "Consent receipt required",
+        };
+      }
+      return { allowed: true, requiredMethod: config.characterConsentMethod };
     }
 
     return { allowed: config.enabled };

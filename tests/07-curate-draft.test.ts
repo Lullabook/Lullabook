@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { RlsViolationError } from "@/db/store";
-import { createTestContext, goodPhoto } from "@/test/fixtures";
+import { createTestContext, generateAndWait, goodPhoto, withActiveSubscription } from "@/test/fixtures";
 
 describe("07 — curate draft", () => {
   async function draftBook(ctx: ReturnType<typeof createTestContext>) {
     const member = ctx.onboarding.ensureFamilyForNewUser("auth-curate", "curate@example.com");
+    withActiveSubscription(ctx, member);
     const persona = await ctx.personas.createAdult({
       memberId: member.id,
       displayName: "Hero",
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
       selfie: Buffer.from("selfie"),
     });
-    const book = await ctx.storybooks.generate(member.id, {
+    const book = await generateAndWait(ctx, member.id, {
       starringPersonaIds: [persona.id],
+      storyType: "bedtime",
       theme: "kindness",
     });
     const page = ctx.store.getPagesForStorybook(book.id)[0];
@@ -61,6 +63,7 @@ describe("07 — curate draft", () => {
   it("finalizes draft and hides draft from other family members", async () => {
     const ctx = createTestContext();
     const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-fin", "fin@example.com");
+    withActiveSubscription(ctx, guardian);
     const invite = ctx.family.inviteMember(guardian.id, "other@example.com");
     const other = ctx.family.acceptInvite(invite.inviteId, "auth-other");
 
@@ -70,8 +73,9 @@ describe("07 — curate draft", () => {
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
       selfie: Buffer.from("selfie"),
     });
-    const book = await ctx.storybooks.generate(guardian.id, {
+    const book = await generateAndWait(ctx, guardian.id, {
       starringPersonaIds: [persona.id],
+      storyType: "learning",
       theme: "sharing",
     });
 
