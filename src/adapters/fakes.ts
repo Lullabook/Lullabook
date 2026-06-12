@@ -343,19 +343,19 @@ export class FakePdf implements PdfAdapter {
 }
 
 export class StubAnthropic implements AnthropicAdapter {
-  async generateStory(): Promise<GeneratedStory> {
+  async generateStory(_input: Parameters<AnthropicAdapter["generateStory"]>[0]): Promise<GeneratedStory> {
     throw new Error("Anthropic adapter not configured");
   }
-  async generateTextStory(): Promise<{ text: string }> {
+  async generateTextStory(_input: Parameters<AnthropicAdapter["generateTextStory"]>[0]): Promise<{ text: string }> {
     throw new Error("Anthropic adapter not configured");
   }
-  async adaptStory(): Promise<GeneratedStory> {
+  async adaptStory(_input: Parameters<AnthropicAdapter["adaptStory"]>[0]): Promise<GeneratedStory> {
     throw new Error("Anthropic adapter not configured");
   }
 }
 
 export class StubFal implements FalAdapter {
-  async startTraining(): Promise<FalTrainResult> {
+  async startTraining(_photos: Buffer[]): Promise<FalTrainResult> {
     throw new Error("fal.ai adapter not configured");
   }
   async generateImage(
@@ -374,16 +374,16 @@ export class StubFal implements FalAdapter {
 }
 
 export class StubModeration implements ModerationAdapter {
-  async checkImage(): Promise<ModerationResult> {
+  async checkImage(_image: Buffer): Promise<ModerationResult> {
     throw new Error("Moderation adapter not configured");
   }
-  async checkText(): Promise<ModerationResult> {
+  async checkText(_text: string): Promise<ModerationResult> {
     throw new Error("Moderation adapter not configured");
   }
 }
 
 export class StubLiveness implements LivenessAdapter {
-  async verifySelfie(): Promise<{ matched: boolean; confidence: number }> {
+  async verifySelfie(_photos: Buffer[], _selfie: Buffer): Promise<{ matched: boolean; confidence: number }> {
     throw new Error("Liveness adapter not configured");
   }
 }

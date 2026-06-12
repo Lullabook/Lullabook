@@ -33,6 +33,12 @@ import type {
  * for v1's request shapes, and the workflow's per-Page steps each run their
  * own hydrate→run→sync cycle so replays stay upsert-idempotent.
  */
+// Supabase rows arrive untyped (no generated DB types in v1); every hydrate
+// loop maps snake_case columns into a domain shape immediately, so the loose
+// row type never escapes this file.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Row = Record<string, any>;
+
 export class SupabaseDataStore extends DataStore {
   /** (table, id) pairs that existed at hydration time, for delete detection. */
   private snapshot = new Map<string, Set<string>>();
@@ -108,7 +114,7 @@ export class SupabaseDataStore extends DataStore {
     if (this.hydratedFamilyIds.has(familyId)) return;
     this.hydratedFamilyIds.add(familyId);
 
-    const q = <T = Record<string, unknown>>(table: string, column = "family_id") =>
+    const q = <T = Row>(table: string, column = "family_id") =>
       this.client.from(table).select("*").eq(column, familyId) as unknown as Promise<{
         data: T[] | null;
         error: { message: string } | null;
@@ -151,7 +157,7 @@ export class SupabaseDataStore extends DataStore {
       if (res.error) throw new Error(`hydrateFamily failed: ${res.error.message}`);
     }
 
-    for (const r of families.data ?? []) {
+    for (const r of (families.data ?? []) as Row[]) {
       const family: Family = { id: r.id, createdAt: new Date(r.created_at) };
       this.families.set(family.id, family);
       this.snap("families", family.id);
@@ -257,7 +263,7 @@ export class SupabaseDataStore extends DataStore {
       });
       this.snap("invites", r.id);
     }
-    for (const r of pendingBriefsRes.data ?? []) {
+    for (const r of (pendingBriefsRes.data ?? []) as Row[]) {
       const pending: PendingBrief = {
         memberId: r.member_id,
         personaId: r.persona_id,
@@ -274,7 +280,7 @@ export class SupabaseDataStore extends DataStore {
       });
       this.snap("purge_schedule", r.family_id);
     }
-    for (const r of banned.data ?? []) {
+    for (const r of (banned.data ?? []) as Row[]) {
       this.bannedAccounts.add(r.account_id);
       this.snap("banned_accounts", r.account_id);
     }
@@ -309,7 +315,7 @@ export class SupabaseDataStore extends DataStore {
       }
 
       const pageIds: string[] = [];
-      for (const r of pagesRes.data ?? []) {
+      for (const r of (pagesRes.data ?? []) as Row[]) {
         const page: Page = {
           id: r.id,
           storybookId: r.storybook_id,
@@ -324,7 +330,7 @@ export class SupabaseDataStore extends DataStore {
         this.snap("pages", page.id);
         pageIds.push(page.id);
       }
-      for (const r of generationsRes.data ?? []) {
+      for (const r of (generationsRes.data ?? []) as Row[]) {
         const generation: PersistedGeneration = {
           storybookId: r.storybook_id,
           story: r.story,
@@ -333,7 +339,7 @@ export class SupabaseDataStore extends DataStore {
         this.persistedGenerations.set(generation.storybookId, generation);
         this.snap("persisted_generations", generation.storybookId);
       }
-      for (const r of linksRes.data ?? []) {
+      for (const r of (linksRes.data ?? []) as Row[]) {
         const link: ShareLink = {
           id: r.id,
           storybookId: r.storybook_id,
@@ -355,7 +361,7 @@ export class SupabaseDataStore extends DataStore {
         if (candidatesRes.error) {
           throw new Error(`hydrateFamily failed: ${candidatesRes.error.message}`);
         }
-        for (const r of candidatesRes.data ?? []) {
+        for (const r of (candidatesRes.data ?? []) as Row[]) {
           const candidate: PageCandidate = {
             id: r.id,
             pageId: r.page_id,

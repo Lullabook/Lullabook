@@ -13,7 +13,7 @@ describe("13 — cold-start UX", () => {
       storyType: "bedtime" as const,
       theme: "first book",
     };
-    const trainingPersona = {
+    const trainingPersona: import("@/domain/types").Persona = {
       id: "persona-training",
       familyId: guardian.familyId,
       createdByMemberId: guardian.id,
