@@ -255,6 +255,22 @@ export async function submitBriefWhileTrainingAction(
   }
 }
 
+/** System recovery of a failed/quarantined Page — free, never spends budget. */
+export async function recoverPageAction(
+  pageId: string,
+  storybookId: string
+): Promise<ActionResult> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    ctx.storybooks.recoverPage(member.id, pageId);
+    await ctx.persist();
+    revalidatePath(`/storybooks/${storybookId}`);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 export async function rerollImageAction(
   pageId: string,
   storybookId: string
@@ -446,6 +462,29 @@ export async function recordConsentAction(): Promise<ActionResult> {
   } catch (err) {
     return fail(err);
   }
+}
+
+// Void-returning wrappers for direct `<form action>` usage (React requires
+// form actions to return void; the result-returning variants above are for
+// client components that surface errors inline).
+
+export async function inviteMemberFormAction(formData: FormData): Promise<void> {
+  await inviteMemberAction(formData);
+}
+
+export async function removeMemberFormAction(
+  targetMemberId: string,
+  _formData: FormData
+): Promise<void> {
+  await removeMemberAction(targetMemberId);
+}
+
+export async function startCheckoutFormAction(): Promise<void> {
+  await startCheckoutAction();
+}
+
+export async function cancelSubscriptionFormAction(): Promise<void> {
+  await cancelSubscriptionAction();
 }
 
 // ---------------------------------------------------------------------------

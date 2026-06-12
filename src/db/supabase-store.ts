@@ -6,7 +6,6 @@ import type {
   Family,
   LightConsentReceipt,
   Member,
-  ModerationAuditEntry,
   Page,
   PageCandidate,
   PendingBrief,

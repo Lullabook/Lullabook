@@ -4,7 +4,7 @@ import { createTestContext, goodPhoto } from "@/test/fixtures";
 describe("05 — child safety pipeline", () => {
   it("blocks uploads that fail CSAM/safety checks", async () => {
     const ctx = createTestContext();
-    const member = ctx.onboarding.ensureFamilyForNewUser("auth-safe", "safe@example.com");
+    const _member = ctx.onboarding.ensureFamilyForNewUser("auth-safe", "safe@example.com");
     const blocked = goodPhoto();
     ctx.moderation.blockedImages.push(blocked.length);
 
