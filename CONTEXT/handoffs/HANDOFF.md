@@ -3,6 +3,22 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-11_2.md`** — read that first;
+> it supersedes the "no code exists yet" framing below. Code now exists: PRD v2
+> issues 01–22 are implemented (87 tests green) and the productionization one-shot
+> (`docs/FABLE-ONESHOT-PROMPT.md`) is mid-flight — real adapters + Supabase
+> migration done; composition root, Inngest functions, API routes, UI, and
+> `.env.example`/README remain.
+
+## Session handoffs (newest first)
+
+- `SESSION-HANDOFF-2026-06-11_2.md` — productionization one-shot: adapters/migrations done, glue + UI remaining
+- `SESSION-HANDOFF-2026-06-11.md`
+- `SESSION-HANDOFF-2026-06-10.md`
+- `SESSION-HANDOFF-2026-06-09_3.md`
+- `SESSION-HANDOFF-2026-06-09_2.md`
+- `SESSION-HANDOFF-2026-06-09.md`
+
 ## What this project is
 
 Lullabook (provisional name): a **web app** where a parent generates AI

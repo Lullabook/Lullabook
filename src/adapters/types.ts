@@ -116,8 +116,18 @@ export interface WorkflowStep {
   run: () => Promise<void>;
 }
 
+/**
+ * Serializable description of an enqueued job. The in-memory fake runs the
+ * closure directly; the real durable adapter cannot ship a closure across the
+ * queue boundary, so it sends this payload as an event and the workflow
+ * function re-invokes the matching service body from persisted state.
+ */
+export type WorkflowJobPayload =
+  | { type: "storybook-generate"; storybookId: string; memberId: string }
+  | { type: "page-recover"; pageId: string; memberId: string; attempt: number };
+
 export interface WorkflowAdapter {
-  enqueue(name: string, work: () => Promise<void>): void;
+  enqueue(name: string, work: () => Promise<void>, payload?: WorkflowJobPayload): void;
   run(steps: WorkflowStep[]): Promise<void>;
   waitForEvent<T>(eventName: string, matchId: string): Promise<T>;
   emitEvent<T>(eventName: string, data: T): Promise<void>;

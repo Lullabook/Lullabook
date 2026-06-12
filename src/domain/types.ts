@@ -153,6 +153,8 @@ export interface Storybook {
   createdByMemberId: string;
   status: StorybookStatus;
   brief: Brief;
+  /** Set when this book is a Personalized Classic: the catalog source-tale id. */
+  classicId?: string;
   styleBible: StyleBible | null;
   rerollBudgetRemaining: number;
   rerollCredits: number;

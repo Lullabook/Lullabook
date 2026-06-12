@@ -63,17 +63,14 @@ export class StorybookService {
     };
     this.store.saveStorybook(storybook);
 
-    this.workflow.enqueue(`storybook-${storybook.id}`, async () => {
-      const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
-      await this.runGeneration(memberId, storybook.id, brief, personas, async () =>
-        this.anthropic.generateStory({
-          brief: `${brief.theme} ${brief.setting ?? ""} ${note}`,
-          personaNames: personas.map((p) => p.displayName),
-          pageCount: PAGE_COUNT,
-          storyType: brief.storyType,
-        })
-      );
-    });
+    // Thin request, fat workflow (ADR-0011): the closure is what the
+    // in-memory fake drains; the durable adapter ignores it and re-enters
+    // runGenerationBody from the serialized payload instead.
+    this.workflow.enqueue(
+      `storybook-${storybook.id}`,
+      async () => this.runGenerationBody(memberId, storybook.id),
+      { type: "storybook-generate", storybookId: storybook.id, memberId }
+    );
 
     return storybook;
   }
@@ -115,6 +112,7 @@ export class StorybookService {
       createdByMemberId: memberId,
       status: "generating",
       brief: classicBrief,
+      classicId,
       styleBible: null,
       rerollBudgetRemaining: FREE_REROLL_BUDGET,
       rerollCredits: 0,
@@ -123,19 +121,53 @@ export class StorybookService {
     };
     this.store.saveStorybook(storybook);
 
-    this.workflow.enqueue(`storybook-${storybook.id}`, async () => {
-      await this.runGeneration(memberId, storybook.id, classicBrief, personas, async () =>
-        this.anthropic.adaptStory({
-          sourceTale,
-          personaNames: personas.map((p) => p.displayName),
-          pageCount: PAGE_COUNT,
-          storyType: brief.storyType,
-          twist: twist || undefined,
-        })
-      );
-    });
+    this.workflow.enqueue(
+      `storybook-${storybook.id}`,
+      async () => this.runGenerationBody(memberId, storybook.id),
+      { type: "storybook-generate", storybookId: storybook.id, memberId }
+    );
 
     return storybook;
+  }
+
+  /**
+   * The durable workflow body for the generate path. Reconstructs everything
+   * from persisted state (PRD v2: no in-process variables cross the queue
+   * boundary) and branches original-vs-classic on the Storybook's classicId.
+   */
+  async runGenerationBody(memberId: string, storybookId: string): Promise<void> {
+    const storybook = this.store.storybooks.get(storybookId);
+    if (!storybook) return;
+
+    const brief = storybook.brief;
+    const personas = brief.starringPersonaIds.map((id) => {
+      const p = this.store.getPersona(id, memberId);
+      if (!p) throw new Error(`Persona ${id} not found`);
+      return p;
+    });
+    const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
+
+    const generateStory = storybook.classicId
+      ? async () => {
+          const sourceTale = this.classicCatalog.getById(storybook.classicId!);
+          if (!sourceTale) throw new Error("Classic not found in catalog");
+          return this.anthropic.adaptStory({
+            sourceTale,
+            personaNames: personas.map((p) => p.displayName),
+            pageCount: PAGE_COUNT,
+            storyType: brief.storyType,
+            twist: note || undefined,
+          });
+        }
+      : async () =>
+          this.anthropic.generateStory({
+            brief: `${brief.theme} ${brief.setting ?? ""} ${note}`,
+            personaNames: personas.map((p) => p.displayName),
+            pageCount: PAGE_COUNT,
+            storyType: brief.storyType,
+          });
+
+    await this.runGeneration(memberId, storybookId, brief, personas, generateStory);
   }
 
   recoverPage(memberId: string, pageId: string): void {
@@ -146,6 +178,28 @@ export class StorybookService {
     if (page.generationStatus !== "failed" && page.generationStatus !== "quarantined") {
       throw new Error("Page is not recoverable");
     }
+    if (!this.store.getPersistedGeneration(book.id)) {
+      throw new Error("Persisted generation not found");
+    }
+
+    const recoverAttempt = this.countRecoveryAttempts(pageId) + 1;
+
+    this.workflow.enqueue(
+      `recover-${pageId}`,
+      async () => this.runRecoveryBody(memberId, pageId, recoverAttempt),
+      { type: "page-recover", pageId, memberId, attempt: recoverAttempt }
+    );
+  }
+
+  /**
+   * The durable workflow body for free recovery of a failed/quarantined Page
+   * (ADR-0004: system-caused recovery never spends the re-roll budget).
+   */
+  async runRecoveryBody(memberId: string, pageId: string, attempt: number): Promise<void> {
+    const page = this.store.pages.get(pageId);
+    if (!page) throw new Error("Page not found");
+    const book = this.store.getStorybook(page.storybookId, memberId);
+    if (!book) throw new Error("Storybook not found");
 
     const persisted = this.store.getPersistedGeneration(book.id);
     if (!persisted) throw new Error("Persisted generation not found");
@@ -153,11 +207,9 @@ export class StorybookService {
     const pageData = persisted.story.pages.find((p) => p.index === page.index);
     if (!pageData) throw new Error("Page data not found");
 
-    const scenes = persisted.story.scenes.map((s) => ({
-      ...s,
-      personaIds: book.brief.starringPersonaIds,
-    }));
-    const scene = scenes.find((s) => s.pageIndex === page.index);
+    const scene = persisted.story.scenes
+      .map((s) => ({ ...s, personaIds: book.brief.starringPersonaIds }))
+      .find((s) => s.pageIndex === page.index);
     if (!scene) throw new Error("Scene not found");
 
     const personas = book.brief.starringPersonaIds.map((id) => {
@@ -166,19 +218,8 @@ export class StorybookService {
       return p;
     });
 
-    const recoverAttempt = this.countRecoveryAttempts(pageId) + 1;
-
-    this.workflow.enqueue(`recover-${pageId}`, async () => {
-      await this.runPagePipeline(
-        book,
-        pageData,
-        scene,
-        personas,
-        persisted.story,
-        recoverAttempt
-      );
-      await this.finalizeStorybookStatus(book.id);
-    });
+    await this.runPagePipeline(book, pageData, scene, personas, persisted.story, attempt);
+    await this.finalizeStorybookStatus(book.id);
   }
 
   private async runGeneration(
@@ -191,14 +232,12 @@ export class StorybookService {
     const storybook = this.store.storybooks.get(storybookId);
     if (!storybook) return;
 
-    let generated: GeneratedStory | null = null;
-
     await this.workflow.run([
       {
         name: "claude-pass",
         idempotencyKey: `${storybookId}/story`,
         run: async () => {
-          generated = await generateStory();
+          const generated = await generateStory();
 
           this.store.savePersistedGeneration({
             storybookId,
@@ -212,13 +251,15 @@ export class StorybookService {
       },
     ]);
 
-    if (!generated?.pages?.length || !generated.scenes?.length) {
+    // Read back the persisted pass, never an in-process variable: on an
+    // at-least-once replay the memoized claude-pass step does not re-execute,
+    // and only persisted state survives the step boundary (PRD v2).
+    const persisted = this.store.getPersistedGeneration(storybookId);
+    if (!persisted?.story.pages?.length || !persisted.story.scenes?.length) {
       storybook.status = "failed";
       this.store.saveStorybook(storybook);
       return;
     }
-
-    const persisted = this.store.getPersistedGeneration(storybookId)!;
     const scenes = persisted.story.scenes.map((s) => ({
       ...s,
       personaIds: brief.starringPersonaIds,
