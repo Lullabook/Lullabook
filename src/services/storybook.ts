@@ -43,11 +43,10 @@ export class StorybookService {
     const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
     if (note) await this.childSafety.checkText(note, `brief-${memberId}`);
 
-    const personas = brief.starringPersonaIds.map((id) => {
+    for (const id of brief.starringPersonaIds) {
       const p = this.store.getPersona(id, memberId);
       if (!p || p.status !== "ready") throw new Error(`Persona ${id} not ready`);
-      return p;
-    });
+    }
 
     const storybook: Storybook = {
       id: uuid(),
@@ -95,11 +94,10 @@ export class StorybookService {
     const twist = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
     if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`);
 
-    const personas = brief.starringPersonaIds.map((id) => {
+    for (const id of brief.starringPersonaIds) {
       const p = this.store.getPersona(id, memberId);
       if (!p || p.status !== "ready") throw new Error(`Persona ${id} not ready`);
-      return p;
-    });
+    }
 
     const classicBrief: Brief = {
       ...brief,

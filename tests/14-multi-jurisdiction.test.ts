@@ -35,7 +35,7 @@ describe("14 — multi-jurisdiction expansion", () => {
   });
 
   it("ConsentEngine table tests cover US and India consent methods", () => {
-    const engine = new ConsentEngine();
+    const _engine = new ConsentEngine();
     const us = ConsentEngine.getJurisdiction("US")!;
     const india = ConsentEngine.getJurisdiction("IN")!;
 

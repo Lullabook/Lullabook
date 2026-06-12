@@ -161,7 +161,7 @@ describe("15 — durable generation spine", () => {
       selfie: Buffer.from("selfie"),
     });
 
-    const book = await ctx.storybooks.generate(member.id, {
+    const _book = await ctx.storybooks.generate(member.id, {
       starringPersonaIds: [persona.id],
       storyType: "bedtime",
       theme: "farewell",
