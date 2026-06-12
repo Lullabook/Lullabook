@@ -20,3 +20,4 @@ KAIZEN-REVIEW-BRIEF.md
 *.log
 .vscode/
 .idea/
+tsconfig.tsbuildinfo
