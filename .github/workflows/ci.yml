@@ -16,5 +16,6 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - run: bash tools/kaizen-coach/coach.sh
       - run: npm test
       - run: npm run build

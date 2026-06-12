@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTestContext, goodPhoto } from "@/test/fixtures";
+import { createTestContext, generateAndWait, goodPhoto } from "@/test/fixtures";
 
 describe("08 — multi-persona composition", () => {
   async function twoReadyPersonas(ctx: ReturnType<typeof createTestContext>) {
@@ -25,8 +25,9 @@ describe("08 — multi-persona composition", () => {
     const ctx = createTestContext();
     const { member, adult, baby } = await twoReadyPersonas(ctx);
 
-    const book = await ctx.storybooks.generate(member.id, {
+    const book = await generateAndWait(ctx, member.id, {
       starringPersonaIds: [baby.id, adult.id],
+      storyType: "bedtime",
       theme: "park day",
     });
 
@@ -39,13 +40,16 @@ describe("08 — multi-persona composition", () => {
     const ctx = createTestContext();
     const { member, adult, baby } = await twoReadyPersonas(ctx);
 
-    const book = await ctx.multiStorybooks.generate(member.id, {
+    const started = await ctx.multiStorybooks.generate(member.id, {
       starringPersonaIds: [baby.id, adult.id],
+      storyType: "learning",
       theme: "fallback path",
     });
+    await ctx.workflow.drain();
 
+    const book = ctx.store.getStorybook(started.id, member.id)!;
     expect(book.status).toBe("draft");
     const pages = ctx.store.getPagesForStorybook(book.id);
-    expect(pages[0].illustrationUrl).toContain("ref");
+    expect(pages[0].illustrationBlobKey).toMatch(/^books\//);
   });
 });

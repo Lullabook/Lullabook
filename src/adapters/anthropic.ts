@@ -1,0 +1,305 @@
+import Anthropic from "@anthropic-ai/sdk";
+import type {
+  AnthropicAdapter,
+  ClassicSourceTale,
+  TextStoryGenerationInput,
+} from "@/adapters/types";
+import type { GeneratedStory, StoryType } from "@/domain/types";
+import { requireEnv } from "@/adapters/env";
+
+// Story text generation model — locked by stack.md ("Claude Sonnet 4.6").
+const STORY_MODEL = "claude-sonnet-4-6";
+const MAX_TOKENS = 16000;
+
+/**
+ * JSON schema for the single structured pass (ADR-0012): Story text +
+ * per-Page Scenes + Style Bible, matching `GeneratedStory` exactly.
+ */
+const GENERATED_STORY_SCHEMA = {
+  type: "object" as const,
+  properties: {
+    text: {
+      type: "string",
+      description: "The full Story text, the source of truth for every Page.",
+    },
+    pages: {
+      type: "array",
+      description: "Exactly one entry per Page, in reading order.",
+      items: {
+        type: "object",
+        properties: {
+          index: { type: "integer", description: "0-based Page index." },
+          text: {
+            type: "string",
+            description: "1–3 short, simple read-aloud sentences for this Page.",
+          },
+        },
+        required: ["index", "text"],
+        additionalProperties: false,
+      },
+    },
+    scenes: {
+      type: "array",
+      description: "Exactly one Scene per Page, same order as pages.",
+      items: {
+        type: "object",
+        properties: {
+          pageIndex: { type: "integer" },
+          description: {
+            type: "string",
+            description:
+              "The illustration request: setting, action, mood. Wholesome, clothed, age-appropriate.",
+          },
+          personaIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Names of the cast members present in this Scene.",
+          },
+        },
+        required: ["pageIndex", "description", "personaIds"],
+        additionalProperties: false,
+      },
+    },
+    styleBible: {
+      type: "object",
+      description:
+        "Book-level visual constants every Page must respect (ADR-0012).",
+      properties: {
+        palette: { type: "string" },
+        // Structured outputs cannot express a free-form map, so wardrobe
+        // travels as entries and is folded into a Record after parsing.
+        wardrobe: {
+          type: "array",
+          description:
+            "One entry per cast member: their fixed wardrobe/appearance for the whole book.",
+          items: {
+            type: "object",
+            properties: {
+              castMember: { type: "string" },
+              outfit: { type: "string" },
+            },
+            required: ["castMember", "outfit"],
+            additionalProperties: false,
+          },
+        },
+        artStyle: { type: "string" },
+      },
+      required: ["palette", "wardrobe", "artStyle"],
+      additionalProperties: false,
+    },
+  },
+  required: ["text", "pages", "scenes", "styleBible"],
+  additionalProperties: false,
+};
+
+interface WireGeneratedStory {
+  text: string;
+  pages: { index: number; text: string }[];
+  scenes: { pageIndex: number; description: string; personaIds: string[] }[];
+  styleBible: {
+    palette: string;
+    wardrobe: { castMember: string; outfit: string }[];
+    artStyle: string;
+  };
+}
+
+/** Story Type shapes the narrative arc, not just the theme (CONTEXT.md). */
+function storyTypeInstructions(storyType: StoryType): string {
+  if (storyType === "bedtime") {
+    return [
+      "STORY TYPE: Bedtime.",
+      "Write a calming wind-down arc: gentle adventure early, settling rhythm in the middle,",
+      "and a soft landing at the end — the final pages ease the child toward sleep.",
+      "No cliffhangers, no peril, no exciting endings. End with rest, warmth, and safety.",
+    ].join(" ");
+  }
+  return [
+    "STORY TYPE: Learning.",
+    "Carry an explicit lesson, message, or early-numeracy/counting thread woven through the narrative.",
+    "Use gentle repetition so the concept lands. The lesson resolves clearly by the final page.",
+  ].join(" ");
+}
+
+const SAFETY_CONSTRAINTS = [
+  "SAFETY (non-negotiable): every Scene must be wholesome, fully clothed, and age-appropriate",
+  "for children aged 1–6. No violence, fear, weapons, injury, romance, or innuendo of any kind.",
+].join(" ");
+
+function buildClient(): Anthropic {
+  return new Anthropic({ apiKey: requireEnv("ANTHROPIC_API_KEY") });
+}
+
+function parseGeneratedStory(message: Anthropic.Message): GeneratedStory {
+  if (message.stop_reason === "refusal") {
+    throw new Error("Story generation was refused by the model's safety system");
+  }
+  const block = message.content.find((b) => b.type === "text");
+  if (!block || block.type !== "text") {
+    throw new Error("Story generation returned no text content");
+  }
+  const wire = JSON.parse(block.text) as WireGeneratedStory;
+  if (!Array.isArray(wire.pages) || !Array.isArray(wire.scenes) || !wire.styleBible) {
+    throw new Error("Story generation returned malformed structured output");
+  }
+  const wardrobe: Record<string, string> = {};
+  for (const entry of wire.styleBible.wardrobe ?? []) {
+    wardrobe[entry.castMember] = entry.outfit;
+  }
+  return {
+    text: wire.text,
+    pages: wire.pages,
+    scenes: wire.scenes,
+    styleBible: {
+      palette: wire.styleBible.palette,
+      wardrobe,
+      artStyle: wire.styleBible.artStyle,
+    },
+  };
+}
+
+/**
+ * Real Claude adapter for Story text (ADR-0012: one structured pass yields
+ * Story + per-Page Scenes + Style Bible). Mirrors FakeAnthropic's contract.
+ */
+export class RealAnthropicAdapter implements AnthropicAdapter {
+  async generateStory(input: {
+    brief: string;
+    personaNames: string[];
+    pageCount: number;
+    storyType: StoryType;
+  }): Promise<GeneratedStory> {
+    const client = buildClient();
+    const message = await client.messages.create({
+      model: STORY_MODEL,
+      max_tokens: MAX_TOKENS,
+      system: [
+        "You are Lullabook's storyteller: you write personalized picture-book Stories starring",
+        "a real family's cast, for a parent to read aloud to a child aged 1–6.",
+        SAFETY_CONSTRAINTS,
+        "In ONE pass produce: the Story text, exactly the requested number of Pages",
+        "(1–3 short simple sentences each), one Scene per Page, and a Style Bible that keeps",
+        "wardrobe, palette, and art style identical across every Page.",
+        "Scenes' personaIds must use the exact cast names provided.",
+      ].join(" "),
+      messages: [
+        {
+          role: "user",
+          content: [
+            storyTypeInstructions(input.storyType),
+            `CAST (use these exact names): ${input.personaNames.join(", ")}.`,
+            `PAGE COUNT: exactly ${input.pageCount} pages, indexes 0 through ${input.pageCount - 1}.`,
+            `BRIEF: ${input.brief}`,
+          ].join("\n\n"),
+        },
+      ],
+      output_config: {
+        format: {
+          type: "json_schema",
+          schema: GENERATED_STORY_SCHEMA,
+        },
+      },
+    });
+    return parseGeneratedStory(message);
+  }
+
+  async generateTextStory(input: TextStoryGenerationInput): Promise<{ text: string }> {
+    const client = buildClient();
+    const castLines = input.characters.map((c) => {
+      const q = c.questionnaire;
+      const traits = [
+        q.nickname ? `nickname "${q.nickname}"` : null,
+        q.relationships?.length ? `family: ${q.relationships.join(", ")}` : null,
+        q.favoriteAnimals?.length ? `favorite animals: ${q.favoriteAnimals.join(", ")}` : null,
+        q.favoriteToys?.length ? `favorite toys: ${q.favoriteToys.join(", ")}` : null,
+        q.songs?.length ? `favorite songs: ${q.songs.join(", ")}` : null,
+        q.topics?.length ? `loves: ${q.topics.join(", ")}` : null,
+      ]
+        .filter(Boolean)
+        .join("; ");
+      return `- ${c.displayName}${traits ? ` (${traits})` : ""}`;
+    });
+
+    const message = await client.messages.create({
+      model: STORY_MODEL,
+      max_tokens: MAX_TOKENS,
+      system: [
+        "You are Lullabook's storyteller: you write short personalized read-aloud Stories",
+        "starring the Characters described by their Trait Questionnaires, for children aged 1–6.",
+        SAFETY_CONSTRAINTS,
+        "Weave the Characters' traits, names, and favorites naturally into the narrative.",
+        "Write plain prose only — no headings, no markdown.",
+      ].join(" "),
+      messages: [
+        {
+          role: "user",
+          content: [
+            storyTypeInstructions(input.storyType),
+            `CAST:\n${castLines.join("\n")}`,
+            `THEME: ${input.theme}`,
+            input.note ? `SPECIAL NOTE: ${input.note}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+        },
+      ],
+    });
+
+    if (message.stop_reason === "refusal") {
+      throw new Error("Story generation was refused by the model's safety system");
+    }
+    const block = message.content.find((b) => b.type === "text");
+    if (!block || block.type !== "text") {
+      throw new Error("Text Story generation returned no content");
+    }
+    return { text: block.text };
+  }
+
+  async adaptStory(input: {
+    sourceTale: ClassicSourceTale;
+    personaNames: string[];
+    pageCount: number;
+    storyType: StoryType;
+    twist?: string;
+  }): Promise<GeneratedStory> {
+    const client = buildClient();
+    const message = await client.messages.create({
+      model: STORY_MODEL,
+      max_tokens: MAX_TOKENS,
+      system: [
+        "You are Lullabook's storyteller adapting a public-domain classic into a Personalized",
+        "Classic (ADR-0017): adapt-and-recast, do not invent a new plot.",
+        "Preserve the source tale's plot beats in order; recast its characters as the family's",
+        "cast members; re-style the telling to the requested Story Type.",
+        SAFETY_CONSTRAINTS,
+        "In ONE pass produce: the Story text, exactly the requested number of Pages",
+        "(1–3 short simple sentences each), one Scene per Page, and a Style Bible that keeps",
+        "wardrobe, palette, and art style identical across every Page.",
+        "Scenes' personaIds must use the exact cast names provided.",
+      ].join(" "),
+      messages: [
+        {
+          role: "user",
+          content: [
+            storyTypeInstructions(input.storyType),
+            `SOURCE TALE: "${input.sourceTale.title}".`,
+            `PLOT BEATS (preserve in order):\n${input.sourceTale.plotBeats
+              .map((b, i) => `${i + 1}. ${b}`)
+              .join("\n")}`,
+            `CAST (recast the tale's characters as these exact names): ${input.personaNames.join(", ")}.`,
+            `PAGE COUNT: exactly ${input.pageCount} pages, indexes 0 through ${input.pageCount - 1}.`,
+            input.twist ? `CUSTOM TWIST (already moderated): ${input.twist}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+        },
+      ],
+      output_config: {
+        format: {
+          type: "json_schema",
+          schema: GENERATED_STORY_SCHEMA,
+        },
+      },
+    });
+    return parseGeneratedStory(message);
+  }
+}

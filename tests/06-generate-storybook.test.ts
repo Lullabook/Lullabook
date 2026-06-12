@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createTestContext, goodPhoto } from "@/test/fixtures";
+import { createTestContext, generateAndWait, goodPhoto, withActiveSubscription } from "@/test/fixtures";
 
 describe("06 — generate storybook (single persona)", () => {
   async function readyPersona(ctx: ReturnType<typeof createTestContext>) {
     const member = ctx.onboarding.ensureFamilyForNewUser("auth-story", "story@example.com");
+    withActiveSubscription(ctx, member);
     const persona = await ctx.personas.createAdult({
       memberId: member.id,
       displayName: "Star",
@@ -17,8 +18,9 @@ describe("06 — generate storybook (single persona)", () => {
     const ctx = createTestContext();
     const { member, persona } = await readyPersona(ctx);
 
-    const book = await ctx.storybooks.generate(member.id, {
+    const book = await generateAndWait(ctx, member.id, {
       starringPersonaIds: [persona.id],
+      storyType: "bedtime",
       theme: "bedtime adventure",
       note: "loves ducks",
     });
@@ -37,8 +39,9 @@ describe("06 — generate storybook (single persona)", () => {
     ctx.fal.failImageOnPage = 3;
     ctx.fal.currentPage = 0;
 
-    const book = await ctx.storybooks.generate(member.id, {
+    const book = await generateAndWait(ctx, member.id, {
       starringPersonaIds: [persona.id],
+      storyType: "learning",
       theme: "resilience",
     });
 

@@ -8,7 +8,7 @@ import type {
   WorkflowAdapter,
 } from "@/adapters/types";
 import type { DataStore } from "@/db/store";
-import type { Persona, PersonaKind } from "@/domain/types";
+import type { Persona, PersonaKind, TraitQuestionnaire } from "@/domain/types";
 import { runPreflightChecks } from "@/services/preflight";
 import { SubscriptionService } from "@/services/subscription";
 import { ChildSafetyService } from "@/services/child-safety";
@@ -18,6 +18,8 @@ export interface CreatePersonaInput {
   displayName: string;
   photos: Buffer[];
   selfie?: Buffer;
+  promotedFromCharacterId?: string;
+  questionnaire?: TraitQuestionnaire;
 }
 
 export class PersonaService {
@@ -80,6 +82,8 @@ export class PersonaService {
       displayName: input.displayName,
       status: "training",
       loraWeightKey: null,
+      promotedFromCharacterId: input.promotedFromCharacterId,
+      questionnaire: input.questionnaire,
       createdAt: new Date(),
     };
     this.store.savePersona(persona);
@@ -108,6 +112,7 @@ export class PersonaService {
     await this.workflow.run([
       {
         name: "wait-for-training",
+        idempotencyKey: `wait-for-training:${jobId}`,
         run: async () => {
           const webhook = await this.workflow.waitForEvent<{ status: string; loraWeightKey?: string }>(
             "fal.training.complete",

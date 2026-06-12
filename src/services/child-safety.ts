@@ -61,6 +61,36 @@ export class ChildSafetyService {
     return result.allowed ? "allowed" : "quarantined";
   }
 
+  async checkGeneratedImageBytes(
+    image: Buffer,
+    resourceId: string
+  ): Promise<"allowed" | "quarantined"> {
+    const result = await this.moderation.checkImage(image);
+    this.store.saveModerationAudit({
+      id: uuid(),
+      resourceType: "generated_image",
+      resourceId,
+      outcome: result.allowed ? "allowed" : "quarantined",
+      reason: result.reason ?? null,
+      createdAt: new Date(),
+    });
+    if (!result.allowed) {
+      if (result.csamDetected) {
+        this.store.saveModerationAudit({
+          id: uuid(),
+          resourceType: "ncmec_report",
+          resourceId,
+          outcome: "blocked",
+          reason: "NCMEC reporting path triggered",
+          createdAt: new Date(),
+        });
+        throw new Error(result.reason ?? "Generated image blocked by moderation");
+      }
+      return "quarantined";
+    }
+    return "allowed";
+  }
+
   reportAbuse(reporterId: string, targetId: string, reason: string): void {
     this.store.saveModerationAudit({
       id: uuid(),

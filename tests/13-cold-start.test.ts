@@ -8,8 +8,12 @@ describe("13 — cold-start UX", () => {
     ctx.subscriptions.handleCheckoutCompleted(guardian.familyId, "cus_c", "sub_c");
     ctx.subscriptions.recordConsent(guardian.familyId, guardian.id, "US");
 
-    const brief = { starringPersonaIds: [] as string[], theme: "first book" };
-    const trainingPersona = {
+    const brief = {
+      starringPersonaIds: [] as string[],
+      storyType: "bedtime" as const,
+      theme: "first book",
+    };
+    const trainingPersona: import("@/domain/types").Persona = {
       id: "persona-training",
       familyId: guardian.familyId,
       createdByMemberId: guardian.id,
@@ -30,6 +34,7 @@ describe("13 — cold-start UX", () => {
     ctx.store.savePersona(trainingPersona);
 
     await ctx.coldStart.onPersonaReady(trainingPersona.id);
+    await ctx.workflow.drain();
 
     const books = ctx.store.listStorybooksForFamily(guardian.familyId, guardian.id);
     expect(books).toHaveLength(1);

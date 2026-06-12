@@ -2,6 +2,7 @@ export { OnboardingService } from "@/services/onboarding";
 export { PersonaRosterService } from "@/services/persona-roster";
 export { ConsentEngine } from "@/services/consent-engine";
 export { SubscriptionService } from "@/services/subscription";
+export { CharacterService } from "@/services/character";
 export { PersonaService } from "@/services/persona";
 export { ChildSafetyService } from "@/services/child-safety";
 export { StorybookService } from "@/services/storybook";
