@@ -48,6 +48,13 @@ const stepStorage = new AsyncLocalStorage<DurableStepTools>();
 export class InngestWorkflowAdapter implements WorkflowAdapter {
   private pendingSends: Promise<unknown>[] = [];
 
+  /**
+   * Set by the Inngest function to `store.sync()`: a memoized step's writes
+   * must be durable in Postgres before the run can advance, otherwise a crash
+   * between steps would replay into a store that never saw the step's output.
+   */
+  onStepCommitted?: () => Promise<void>;
+
   enqueue(name: string, _work: () => Promise<void>, payload?: WorkflowJobPayload): void {
     if (!payload) {
       throw new Error(
@@ -84,11 +91,13 @@ export class InngestWorkflowAdapter implements WorkflowAdapter {
         // comes from the inner step.waitForEvent; the post-wait mutations
         // are idempotent upserts and may re-run on replay.
         await s.run();
+        if (this.onStepCommitted) await this.onStepCommitted();
         continue;
       }
       await step.run(s.idempotencyKey ?? s.name, async () => {
         await s.run();
       });
+      if (this.onStepCommitted) await this.onStepCommitted();
     }
   }
 
