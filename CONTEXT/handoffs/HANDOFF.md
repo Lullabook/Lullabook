@@ -3,16 +3,18 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-12.md`** — read that first;
-> it supersedes the "no code exists yet" framing below. The productionization
-> one-shot (`docs/FABLE-ONESHOT-PROMPT.md`) is **complete**: real adapters,
-> Supabase Postgres+RLS, Inngest durable workflows, full API layer, full
-> bedtime UI, `.env.example` + README. 105 tests, tsc/lint/build green.
-> `README.md` (repo root) is now the orientation doc.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-12_2.md`** — native iOS
+> planning + web code review. The web productionization is complete (105 tests);
+> the next effort is a **native Expo/React Native iOS app** built by running
+> `docs/FABLE-NATIVE-IOS-ONESHOT-PROMPT.md`, authorized by **ADR-0018** (native
+> rebuild, Apple IAP via RevenueCat, Email-Plus VPC). After that build, **Opus**
+> walks the human through Apple/RevenueCat/App Store Connect via a generated
+> `INTEGRATION-FOR-OPUS.md`. `README.md` is the web orientation doc.
 
 ## Session handoffs (newest first)
 
-- `SESSION-HANDOFF-2026-06-12.md` — one-shot COMPLETE: composition root, Inngest functions, actions/routes/webhooks, full UI, glue + new tests
+- `SESSION-HANDOFF-2026-06-12_2.md` — native iOS planning, code review, ADR-0018, native one-shot prompt
+- `SESSION-HANDOFF-2026-06-12.md` — web one-shot COMPLETE: composition root, Inngest functions, actions/routes/webhooks, full UI, glue + new tests
 - `SESSION-HANDOFF-2026-06-11_2.md` — productionization one-shot: adapters/migrations done, glue + UI remaining
 - `SESSION-HANDOFF-2026-06-11.md`
 - `SESSION-HANDOFF-2026-06-10.md`
