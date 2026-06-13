@@ -3,16 +3,22 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-12_2.md`** — native iOS
-> planning + web code review. The web productionization is complete (105 tests);
-> the next effort is a **native Expo/React Native iOS app** built by running
-> `docs/FABLE-NATIVE-IOS-ONESHOT-PROMPT.md`, authorized by **ADR-0018** (native
-> rebuild, Apple IAP via RevenueCat, Email-Plus VPC). After that build, **Opus**
-> walks the human through Apple/RevenueCat/App Store Connect via a generated
-> `INTEGRATION-FOR-OPUS.md`. `README.md` is the web orientation doc.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-13.md`** — the native iOS
+> effort was switched from a Fable one-shot to the normal workflow (Fable
+> unavailable, US restriction). It is now **PRD v3**
+> (`planning/prd-v3-native-ios.md`) broken into dependency-ordered, money-first
+> **issues `23`–`31`**, to be built by **Cursor Composer 2.5** (TDD). The web
+> productionization stays (105 tests). Authorized by **ADR-0018** (native Expo
+> rebuild, Apple IAP via RevenueCat, Email-Plus VPC). Start at
+> **`issues/23-native-auth-bearer-backend.md`** and follow the `Blocked by` chain;
+> issue `31` is HITL and ends by producing `INTEGRATION-FOR-OPUS.md` for **Opus**
+> to walk the human through Apple/RevenueCat/App Store Connect.
+> `docs/FABLE-NATIVE-IOS-ONESHOT-PROMPT.md` remains the full screen-inventory +
+> credential-table reference; `README.md` is the web orientation doc.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-13.md` — native iOS one-shot → PRD v3 + issues 23–31 (Cursor), grill decisions, glossary updates
 - `SESSION-HANDOFF-2026-06-12_2.md` — native iOS planning, code review, ADR-0018, native one-shot prompt
 - `SESSION-HANDOFF-2026-06-12.md` — web one-shot COMPLETE: composition root, Inngest functions, actions/routes/webhooks, full UI, glue + new tests
 - `SESSION-HANDOFF-2026-06-11_2.md` — productionization one-shot: adapters/migrations done, glue + UI remaining
