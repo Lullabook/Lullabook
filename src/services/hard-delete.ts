@@ -22,6 +22,7 @@ export class HardDeleteService {
     );
     for (const persona of personas) {
       await this.blobs.deletePrefix(`photos/${persona.id}`);
+      await this.blobs.deletePrefix(`voice/${persona.id}`);
       if (persona.loraWeightKey) {
         await this.blobs.delete(persona.loraWeightKey);
       }
@@ -29,6 +30,7 @@ export class HardDeleteService {
     await this.blobs.deletePrefix(`photos/${familyId}`);
     await this.blobs.deletePrefix(`lora/${familyId}`);
     await this.blobs.deletePrefix(`books/${familyId}`);
+    await this.blobs.deletePrefix(`voice/`);
     const storybooks = [...this.store.storybooks.values()].filter(
       (b) => b.familyId === familyId
     );

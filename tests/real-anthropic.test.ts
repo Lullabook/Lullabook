@@ -76,7 +76,7 @@ describe("RealAnthropicAdapter", () => {
       storyType: "learning",
     });
 
-    expect(String(createMock.mock.calls[0][0].messages[0].content)).toContain("Learning");
+    expect(String(createMock.mock.calls[0][0].messages[0].content)).toContain("Gentle lesson");
   });
 
   it("surfaces a model refusal as an error", async () => {

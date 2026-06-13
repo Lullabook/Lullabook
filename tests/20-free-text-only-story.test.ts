@@ -11,7 +11,7 @@ function sampleQuestionnaire(overrides: Partial<TraitQuestionnaire> = {}): Trait
     favoriteToys: ["teddy"],
     songs: ["Twinkle Twinkle"],
     topics: ["dinosaurs"],
-    isFictional: false,
+    isFictional: true,
     ...overrides,
   };
 }

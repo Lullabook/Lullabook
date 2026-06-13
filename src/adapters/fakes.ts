@@ -14,6 +14,8 @@ import type {
   NotificationAdapter,
   PdfAdapter,
   StripeAdapter,
+  VideoAdapter,
+  VideoClipResult,
   WorkflowAdapter,
   WorkflowStep,
 } from "@/adapters/types";
@@ -64,11 +66,33 @@ export class FakeAnthropic implements AnthropicAdapter {
   async generateStory(input: {
     brief: string;
     personaNames: string[];
+    characterNames?: string[];
     pageCount: number;
     storyType: import("@/domain/types").StoryType;
+    lullabyPhrase?: string;
+    lullabyTranscript?: string;
   }): Promise<GeneratedStory> {
     this.calls.push(input);
-    return this.response;
+    if (this.response.pages.length === 0) {
+      return this.response;
+    }
+    const transcript = input.lullabyPhrase ?? input.lullabyTranscript;
+    const pages = Array.from({ length: input.pageCount }, (_, i) => ({
+      index: i,
+      text:
+        transcript && i === input.pageCount - 1
+          ? `…and softly: "${transcript}"`
+          : `Page ${i + 1} text`,
+    }));
+    return {
+      ...this.response,
+      pages,
+      scenes: Array.from({ length: input.pageCount }, (_, i) => ({
+        pageIndex: i,
+        description: `Scene ${i + 1}`,
+        personaIds: [],
+      })),
+    };
   }
 
   async generateTextStory(input: TextStoryGenerationInput): Promise<{ text: string }> {
@@ -245,6 +269,23 @@ export class InMemoryBlobStore implements BlobStore {
 
   size(): number {
     return this.store.size;
+  }
+
+  async signedUrl(key: string): Promise<string> {
+    return `memory://${key}`;
+  }
+}
+
+export class FakeVideo implements VideoAdapter {
+  public calls: unknown[] = [];
+
+  async generatePageClip(
+    illustrationBlobKey: string,
+    narrationText: string,
+    options?: { idempotencyKey?: string }
+  ): Promise<VideoClipResult> {
+    this.calls.push({ illustrationBlobKey, narrationText, options });
+    return { videoUrl: "memory://fake-video.mp4", bytes: Buffer.from("fake-video") };
   }
 }
 

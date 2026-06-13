@@ -27,7 +27,7 @@ describe("24 — native free character text tier", () => {
     global.fetch = originalFetch;
   });
 
-  it("creates fictional Character without consent and real-child with attestation", async () => {
+  it("creates fictional Character without consent; rejects real-child Characters", async () => {
     const ctx = createTestContext();
     const member = ctx.onboarding.ensureFamilyForNewUser("auth-char", "char@example.com");
 
@@ -45,15 +45,9 @@ describe("24 — native free character text tier", () => {
       ctx.characters.create({
         memberId: member.id,
         questionnaire: { name: "Maya", isFictional: false, topics: ["dinosaurs"] },
+        attestation: "I am the guardian",
       })
-    ).rejects.toThrow(/attestation/i);
-
-    const real = await ctx.characters.create({
-      memberId: member.id,
-      questionnaire: { name: "Maya", isFictional: false, topics: ["dinosaurs"] },
-      attestation: "I am the guardian",
-    });
-    expect(real.displayName).toBe("Maya");
+    ).rejects.toThrow(/fictional|Family roster/i);
   });
 
   it("generates text-only Story without subscription or fal", async () => {

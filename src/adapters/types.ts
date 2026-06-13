@@ -17,12 +17,27 @@ export interface TextStoryGenerationInput {
   characters: { displayName: string; questionnaire: TraitQuestionnaire }[];
 }
 
+export interface VideoClipResult {
+  videoUrl: string;
+  bytes?: Buffer;
+}
+
+export interface VideoAdapter {
+  generatePageClip(
+    illustrationBlobKey: string,
+    narrationText: string,
+    options?: { idempotencyKey?: string }
+  ): Promise<VideoClipResult>;
+}
+
 export interface AnthropicAdapter {
   generateStory(input: {
     brief: string;
     personaNames: string[];
+    characterNames?: string[];
     pageCount: number;
     storyType: StoryType;
+    lullabyPhrase?: string;
   }): Promise<GeneratedStory>;
   generateTextStory(input: TextStoryGenerationInput): Promise<{ text: string }>;
   adaptStory(input: {

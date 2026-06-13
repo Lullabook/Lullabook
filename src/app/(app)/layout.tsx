@@ -1,24 +1,33 @@
-import Link from "next/link";
+import { Baloo_2, Nunito } from "next/font/google";
 import { requireAuthedContext } from "@/lib/auth";
-import { NavLinks } from "@/components/nav-links";
+import { AppShell } from "@/components/v2/app-shell";
+
+const baloo = Baloo_2({
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+  variable: "--font-baloo",
+});
+
+const nunito = Nunito({
+  subsets: ["latin"],
+  weight: ["400", "600", "700", "800"],
+  variable: "--font-nunito",
+});
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireAuthedContext();
+  const { ctx, member } = await requireAuthedContext();
+  const illustrated = ctx.subscriptions.isActive(member.familyId);
+  const userInitial = (member.email?.charAt(0) ?? "U").toUpperCase();
+
   return (
-    <>
-      <header className="topbar">
-        <Link href="/library" className="brand">
-          <span aria-hidden="true">🌙</span> Lullabook
-        </Link>
-        <nav className="nav" aria-label="Primary">
-          <NavLinks />
-        </nav>
-      </header>
-      <main className="shell">{children}</main>
-    </>
+    <div className={`${baloo.variable} ${nunito.variable}`}>
+      <AppShell userInitial={userInitial} illustrated={illustrated}>
+        {children}
+      </AppShell>
+    </div>
   );
 }

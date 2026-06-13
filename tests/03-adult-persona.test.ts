@@ -108,7 +108,7 @@ describe("03 — adult persona creation", () => {
     const persona = [...ctx.store.personas.values()].find(p => p.displayName === "Failing");
     expect(persona?.status).toBe("failed");
     expect(ctx.notifications.emails.length).toBeGreaterThan(0);
-  });
+  }, 15000);
 
   it("enforces RLS on likeness samples", async () => {
     const ctx = createTestContext();

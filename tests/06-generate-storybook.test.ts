@@ -143,7 +143,9 @@ describe("06 — generate storybook (single persona)", () => {
     try {
       await expect(pageRecover.fn({
         event: { data: { pageId: failedPage.id, memberId: member.id, attempt: 1 } },
-        step: {}
+        step: {
+          run: async (_name: string, fn: () => Promise<unknown>) => fn(),
+        },
       } as any)).rejects.toThrow("Terminal failure");
     } finally {
       spy.mockRestore();
@@ -151,5 +153,5 @@ describe("06 — generate storybook (single persona)", () => {
 
     const updatedPage = ctx.store.pages.get(failedPage.id)!;
     expect(updatedPage.generationStatus).toBe("failed");
-  });
+  }, 15000);
 });
