@@ -55,10 +55,10 @@ export class DataStore {
     return family;
   }
 
-  createMember(input: Omit<Member, "id" | "createdAt">): Member {
+  createMember(input: Omit<Member, "id" | "createdAt" | "selectedBabyId"> & { selectedBabyId?: string | null }): Member {
     const member: Member = {
-      selectedBabyId: null,
       ...input,
+      selectedBabyId: input.selectedBabyId ?? null,
       id: uuid(),
       createdAt: new Date(),
     };

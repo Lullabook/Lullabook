@@ -83,7 +83,10 @@ export class VoiceClipService {
   async getPlaybackUrl(memberId: string, clipId: string): Promise<string> {
     const clip = this.store.getVoiceClip(clipId, memberId);
     if (!clip) throw new Error("Voice clip not found");
-    return this.blobs.signedUrl(clip.blobKey);
+    if (this.blobs.signedUrl) {
+      return this.blobs.signedUrl(clip.blobKey);
+    }
+    return `memory://${clip.blobKey}`;
   }
 
   async revokeConsent(memberId: string, personaId: string): Promise<void> {

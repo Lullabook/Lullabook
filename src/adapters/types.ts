@@ -113,6 +113,7 @@ export interface BlobStore {
   delete(key: string): Promise<void>;
   list(prefix: string): Promise<string[]>;
   deletePrefix(prefix: string): Promise<void>;
+  signedUrl?(key: string): Promise<string>;
 }
 
 export interface StripeCheckoutSession {

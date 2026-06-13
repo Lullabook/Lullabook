@@ -188,6 +188,7 @@ export class SupabaseDataStore extends DataStore {
         email: r.email,
         role: r.role,
         selfPersonaId: r.self_persona_id,
+        selectedBabyId: r.selected_baby_id ?? null,
         jurisdiction: r.jurisdiction,
         createdAt: new Date(r.created_at),
       };
@@ -375,6 +376,9 @@ export class SupabaseDataStore extends DataStore {
           text: r.text,
           illustrationUrl: r.illustration_url,
           illustrationBlobKey: r.illustration_blob_key,
+          videoBlobKey: r.video_blob_key ?? null,
+          videoUrl: r.video_url ?? null,
+          voiceClipId: r.voice_clip_id ?? null,
           generationStatus: r.generation_status,
           personaCount: r.persona_count,
         };
