@@ -260,6 +260,60 @@ machine-facing wording.
 
 ---
 
-_Last updated 2026-06-13: added the v5 "Maya's World" revamp language (Household,
-World, multi-Baby, Family-roster, Voice clip, Video page). Prior update same day:
-native iOS Email-Plus VPC + Subscription gate line._
+## Journal & Moments — incoming language (PRD v6)
+
+> Grilled 2026-06-13. Adds a real-life capture loop that personalizes generation.
+> Builds on the v5 [Baby](#baby)/[World](#world) language above. See
+> `planning/prd-v6-journal-and-moments.md` and
+> [ADR-0019](docs/adr/0019-moments-auto-context-personalization.md). Monetization
+> deferred (tier-agnostic, consistent with PRD v5).
+
+- **Moment** — a single dated, parent-logged thing that happened to a **Baby**
+  ("Maya took her first steps today"). The raw material that makes Stories
+  personal. **Light structure (v1):** free text + a date + optional **linked
+  people** (which [Family](#family-roster) members / [Characters](#character) were
+  present) + a **`significant`** flag. Mood and photo attachments are a deliberate
+  later "rich-structure" pass, not v1. A Moment belongs to exactly **one Baby**
+  (one [World](#world)); it carries no new biometric data, so it rides the Baby's
+  existing consent and the [Hard-delete](#hard-delete)/purge path (ADR-0007)
+  rather than a new consent gate.
+  _Avoid_: "note" (too sticky-note), "memory" (collides with the keepsake framing
+  and is undated), "entry" (generic), "Page"/"Scene" (those belong to a Storybook).
+
+- **Significant Moment** — a Moment with its `significant ✨` flag set. It always
+  reaches the [auto-context layer](#auto-context-layer) regardless of recency and
+  pins to the [Journal](#journal) timeline. The flag is how a parent says "this day
+  mattered — weigh it." Modeled as a boolean flag, **not** a separate "Milestone"
+  entity and **not** a 1–5 score.
+
+- **Journal** — a **per-Baby** surface inside the [World](#world) ("Maya's
+  Journal") holding the timeline of [Moments](#moment) plus a **weekly spread**
+  view (the "day in the life" layout). One Journal per Baby. The home of the daily
+  capture loop and the weekly-story suggestion.
+  _Avoid_: "diary" (first-person; the baby can't write), "feed", "timeline" alone.
+
+- **Auto-context layer** — the mechanism by which [Moments](#moment) personalize
+  generation. Recent Moments are injected into the [Prompt](#prompt) as background
+  context automatically — they are **not** a [Brief](#brief) input the parent
+  curates per Story. **Contract:** every [Significant Moment](#significant-moment)
+  for the Baby + every ordinary Moment logged **since that Baby's last Story**.
+  See [ADR-0019](docs/adr/0019-moments-auto-context-personalization.md).
+
+- **Daily nudge** — the once-a-day "What happened today?" capture prompt. Surfaces
+  as a card on the [World](#world) home everywhere; on native iOS it additionally
+  fires through the existing push infrastructure (issue 30). It drives the capture
+  habit but never forces a schedule — capture stays free-form (log anytime).
+
+- **Weekly Story suggestion** — a once-a-week offer ("Make Maya's week into a
+  story") that assembles a **suggested [Brief](#brief)** from that week's
+  [Moments](#moment): the Baby stars, the cast is the people linked in the week's
+  Moments, and the theme is seeded from the [Significant Moments](#significant-moment).
+  The parent picks [Story Type](#story-type) and **confirms before any generation
+  spend** — a one-tap suggestion, **never** silent background generation.
+
+---
+
+_Last updated 2026-06-13: added Journal & Moments language (Moment, Significant
+Moment, Journal, Auto-context layer, Daily nudge, Weekly Story suggestion; PRD v6,
+ADR-0019). Prior update same day: v5 "Maya's World" revamp language (Household,
+World, multi-Baby, Family-roster, Voice clip, Video page)._
