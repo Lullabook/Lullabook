@@ -3,14 +3,14 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-maya-world-part2.md`** —
-> Character auto-description (issue 46), "Maya's World" seed + dev injector (issue 47),
-> v2 Create composer, Stories shelf (routing fix + Continue reading + filters), family-page
-> tokenization + Character edit page, and an HTML design deliverable. **168 tests green.**
-> Deferred: v2 Reader rebuild, legacy-route restyle, voice UI.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-session-wrap.md`** —
+> session arc + open PR/auth state on top of the maya-world-part2 build. PR is
+> ready-to-send (`.git/PR_BODY_maya_world.md`); needs `gh auth login`. **168 tests green.**
+> Next: issue 49 (v2 two-pane Reader).
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-13-session-wrap.md` — session wrap: upload fix, design-research subagents, the /part2 build, and the pending PR (gh auth needed)
 - `SESSION-HANDOFF-2026-06-13-maya-world-part2.md` — issues 46–47 + v2 UI (composer, stories shelf, tokenize, edit-character, HTML deliverable); 168 tests
 - `SESSION-HANDOFF-2026-06-13-delete-and-ui-polish.md` — delete Character + UI/perf polish (156 tests)
 - `SESSION-HANDOFF-2026-06-13-issues-34-44.md` — issues 34–44 DONE: multi-baby, roster, voice, video, v2 UI
