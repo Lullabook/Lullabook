@@ -3,12 +3,14 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-local-run-and-bugfixes.md`** —
-> first local run of the web app + 4 bug fixes. A large **Persona→"Family"/world
-> revamp** is being planned next via `/part1` (not yet implemented).
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-maya-world-part1.md`** —
+> "Maya's World" revamp planned via `/part1`: **PRD v5 + issues 34–44**, glossary
+> reframe (Household/World/multi-Baby/Family-roster/Voice/Video), live v2 design port
+> at `/world`. **Next ready issue: 34.** Monetization deferred.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-13-maya-world-part1.md` — Maya's World revamp: PRD v5, issues 34–44, glossary reframe, `/world` design port, pricing/video/limits research
 - `SESSION-HANDOFF-2026-06-13-local-run-and-bugfixes.md` — local-dev setup + 4 bug fixes (FK-ordered sync, dev moderation, multi-photo upload, auth middleware); revamp queued for `/part1`
 - `SESSION-HANDOFF-2026-06-13-skills-push-handoff.md` — `/part1` + `/part2` require mandatory `push-handoff` at end
 - `SESSION-HANDOFF-2026-06-13-issue-33.md` — issue 33 DONE: VPC revoke withdraws consent; PRD v4 complete
