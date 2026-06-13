@@ -143,6 +143,29 @@ export class DataStore {
     return [...this.consentReceipts.values()].find((r) => r.familyId === familyId);
   }
 
+  getPushSubscriptionsForMember(
+    targetMemberId: string,
+    actorMemberId: string
+  ): PushSubscription[] {
+    if (targetMemberId !== actorMemberId) {
+      throw new RlsViolationError("Cannot read push subscriptions for another member");
+    }
+    return [...this.pushSubscriptions.values()].filter((s) => s.memberId === targetMemberId);
+  }
+
+  getEmailPlusVpcRequestsForFamily(
+    familyId: string,
+    actorMemberId: string
+  ): Omit<EmailPlusVpcRequest, "token">[] {
+    const actor = this.members.get(actorMemberId);
+    if (!actor || actor.familyId !== familyId) {
+      throw new RlsViolationError("Cannot read Email-Plus VPC requests for another family");
+    }
+    return [...this.emailPlusVpcRequests.values()]
+      .filter((r) => r.familyId === familyId)
+      .map(({ token: _token, ...rest }) => rest);
+  }
+
   saveStorybook(book: Storybook): void {
     this.storybooks.set(book.id, book);
   }

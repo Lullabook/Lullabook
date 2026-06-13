@@ -3,20 +3,15 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-persistence.md`** — the
-> native iOS app was **built** by Cursor (commit `c2750d9`, 116 tests; see
-> `SESSION-HANDOFF-2026-06-13-native-ios.md`). This planning session added **PRD v4**
-> (`planning/prd-v4-production-persistence.md`) → **issues `32`–`33`**: persist the
-> two tables the native work left in-memory (`push_subscriptions`,
-> `email_plus_vpc_requests`) with migration `003` + RLS + hard-delete + CI smoke,
-> and make Email-Plus VPC revoke withdraw consent. **Next: run `/part2` → it picks
-> issue `32`.** The 8 web shared-service bugs remain pending — see
-> `docs/ANTIGRAVITY-WEB-BUGFIX-PROMPT.md` (verify-then-fix, for Antigravity).
-> Earlier native plan: PRD v3 (`planning/prd-v3-native-ios.md`, issues `23`–`31`),
-> authorized by **ADR-0018**. `README.md` is the web orientation doc.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-issue-32.md`** — issue **32**
+> complete: migration `003`, `SupabaseDataStore` push/VPC hydrate+sync, simulated
+> RLS reads, hard-delete via `sync()`, CI migration smoke (127 tests). **Next:
+> run `/part2` → issue `33`** (Email-Plus VPC revoke withdraws consent). Earlier:
+> `SESSION-HANDOFF-2026-06-13-persistence.md` (PRD v4 planning).
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-13-issue-32.md` — issue 32 DONE: migration 003, Supabase push/VPC persist, CI smoke; next issue 33
 - `SESSION-HANDOFF-2026-06-13-persistence.md` — PRD v4 + issues 32–33 (persist push/VPC tables), global /part1+/part2 skills, Antigravity bug-fix prompt
 - `SESSION-HANDOFF-2026-06-13-native-ios.md` — Cursor BUILT the native iOS app (commit c2750d9, 116 tests); honest follow-ups (screens/migrations)
 - `SESSION-HANDOFF-2026-06-13.md` — native iOS one-shot → PRD v3 + issues 23–31 (Cursor), grill decisions, glossary updates
