@@ -24,15 +24,17 @@ export default async function PromoteCharacterPage({
   const babyGate = ctx.subscriptions.canCreateBabyPersona(member.id);
 
   return (
-    <>
-      <p className="eyebrow">Character → Persona</p>
-      <h1>Bring {character.displayName} to life</h1>
-      <p className="muted" style={{ maxWidth: 540 }}>
-        Everything you wrote about {character.displayName} carries forward.
-        Adding photos trains a private likeness model so they can star in
-        illustrated storybooks.
-      </p>
-      <div className="card">
+    <div className="v2-stack" style={{ gap: 18, maxWidth: 640 }}>
+      <div>
+        <p className="v2-eyebrow">✨ Character → Persona</p>
+        <h1 className="v2-page-title">Bring {character.displayName} to life</h1>
+        <p className="v2-page-lead" style={{ maxWidth: 540 }}>
+          Everything you wrote about {character.displayName} carries forward.
+          Adding photos trains a private likeness model so they can star in
+          illustrated storybooks.
+        </p>
+      </div>
+      <div className="v2-card v2-form">
         <PersonaForm
           characterId={character.id}
           characterName={character.displayName}
@@ -41,6 +43,6 @@ export default async function PromoteCharacterPage({
           babyBlockedReason={babyGate.reason}
         />
       </div>
-    </>
+    </div>
   );
 }

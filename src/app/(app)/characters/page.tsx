@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { requireAuthedContext } from "@/lib/auth";
 import { AVATAR_GRADIENTS, characterEmoji } from "@/lib/v2-theme";
+import { DeleteCharacterButton } from "@/components/v2/delete-character-button";
 
 export const metadata: Metadata = { title: "Characters" };
 
@@ -129,23 +130,18 @@ export default async function CharactersPage() {
                   </div>
                 )}
                 <div style={{ height: 1, background: "#F0E6D2" }} />
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <Link
                     className="v2-btn v2-btn--ghost-surface"
-                    href="/stories/new"
-                    style={{ flex: 1, justifyContent: "center", padding: 10, fontSize: "0.88rem" }}
+                    href="/storybooks/new"
+                    style={{ width: "100%", justifyContent: "center", padding: 10, fontSize: "0.88rem" }}
                   >
-                    Write a story
+                    ✨ Write a story
                   </Link>
-                  {!c.promotedPersonaId && (
-                    <Link
-                      className="v2-btn v2-btn--outline"
-                      href={`/characters/${c.id}/promote`}
-                      style={{ flex: 1, justifyContent: "center", padding: 10, fontSize: "0.88rem" }}
-                    >
-                      Upgrade →
-                    </Link>
-                  )}
+                  <DeleteCharacterButton
+                    characterId={c.id}
+                    characterName={c.displayName}
+                  />
                 </div>
               </div>
             );

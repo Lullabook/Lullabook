@@ -75,6 +75,21 @@ export async function createCharacterAction(
   }
 }
 
+export async function deleteCharacterAction(
+  characterId: string
+): Promise<ActionResult> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    await ctx.characters.delete({ characterId, memberId: member.id });
+    await ctx.persist();
+    revalidatePath("/characters");
+    revalidatePath("/world");
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 export async function createTextStoryAction(
   brief: TextStoryBrief
 ): Promise<ActionResult<{ storyId: string }>> {
