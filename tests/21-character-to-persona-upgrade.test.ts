@@ -29,17 +29,48 @@ describe("21 — Character → Persona upgrade", () => {
       attestation: "I am a parent/guardian creating this for my own family",
     });
 
-    const persona = await ctx.characters.promoteToPersona({
-      characterId: character.id,
-      memberId: guardian.id,
-      kind: "baby",
-      photos: [goodPhoto(), goodPhoto(), goodPhoto()],
-    });
+    const photoKeys = ["test-photo-1.jpg", "test-photo-2.jpg", "test-photo-3.jpg"];
+    for (const key of photoKeys) {
+      await ctx.blobs.put(key, goodPhoto());
+    }
 
-    expect(persona.kind).toBe("baby");
-    expect(persona.displayName).toBe("Emma");
-    expect(persona.promotedFromCharacterId).toBe(character.id);
-    expect(persona.questionnaire).toMatchObject({
+    const { personaCreate } = await import("@/workflows/functions");
+    const contextModule = await import("@/lib/context");
+    const vi = await import("vitest");
+    (ctx.store as any).hydrateByMemberId = async () => {};
+    (ctx.store as any).sync = async () => {};
+    (ctx as any).persist = async () => {};
+    (ctx.workflow as any).runWithStepContext = async (step: any, fn: () => Promise<any>) => await fn();
+    const spy = vi.vi.spyOn(contextModule, "createRequestContext").mockReturnValue(ctx as any);
+
+    try {
+      await personaCreate.fn({
+        event: {
+          data: {
+            mode: "promote-character",
+            memberId: guardian.id,
+            characterId: character.id,
+            displayName: character.displayName,
+            kind: "baby",
+            photoKeys,
+          },
+        },
+        step: {
+          run: async (_name: string, fn: () => Promise<any>) => await fn(),
+        },
+      } as any);
+    } finally {
+      spy.mockRestore();
+    }
+
+    const persona = [...ctx.store.personas.values()].find(
+      (p) => p.promotedFromCharacterId === character.id
+    );
+    expect(persona).toBeDefined();
+    expect(persona!.kind).toBe("baby");
+    expect(persona!.displayName).toBe("Emma");
+    expect(persona!.promotedFromCharacterId).toBe(character.id);
+    expect(persona!.questionnaire).toMatchObject({
       nickname: "Emmy",
       favoriteAnimals: ["bunny"],
       topics: ["dinosaurs"],
