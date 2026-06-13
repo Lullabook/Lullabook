@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState, useTransition, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import { createMomentAction } from "@/lib/actions";
 import {
   MOMENT_TYPES,
   momentMeta,
@@ -14,9 +15,11 @@ export interface DailyMomentView {
   type: MomentType;
   text: string;
   date: string;
+  isSignificant?: boolean;
 }
 
 interface DailyLifeClientProps {
+  babyId: string;
   babyName: string;
   initialMoments: DailyMomentView[];
   routine: RoutineEntry[];
@@ -38,22 +41,35 @@ function prettyTime(hhmm: string): string {
   return `${h12}:${String(m).padStart(2, "0")} ${ap}`;
 }
 
-export function DailyLifeClient({ babyName, initialMoments, routine }: DailyLifeClientProps) {
+export function DailyLifeClient({ babyId, babyName, initialMoments, routine }: DailyLifeClientProps) {
   const router = useRouter();
   const [moments, setMoments] = useState<DailyMomentView[]>(initialMoments);
   const [draft, setDraft] = useState("");
   const [draftType, setDraftType] = useState<MomentType>("milestone");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
   function addMoment() {
     const text = draft.trim();
-    if (!text) return;
-    // TODO: persist via a createDayMomentAction(formData) server action, then
-    // revalidate. Optimistic local insert for now:
-    setMoments((prev) => [
-      { id: `tmp-${Date.now()}`, type: draftType, text, date: "Today · just now" },
-      ...prev,
-    ]);
-    setDraft("");
+    if (!text || pending) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await createMomentAction({
+        babyId,
+        body: text,
+        momentType: draftType,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setMoments((prev) => [
+        { id: result.data.momentId, type: draftType, text, date: "Today" },
+        ...prev,
+      ]);
+      setDraft("");
+      router.refresh();
+    });
   }
 
   function turnIntoStory(text: string) {
@@ -108,12 +124,17 @@ export function DailyLifeClient({ babyName, initialMoments, routine }: DailyLife
               <button
                 type="button"
                 onClick={addMoment}
-                disabled={!draft.trim()}
-                style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 20px", borderRadius: 999, border: "none", background: draft.trim() ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#E7DCCB", color: draft.trim() ? "#fff" : "#9A8A78", fontWeight: 800, fontSize: "0.92rem", cursor: draft.trim() ? "pointer" : "not-allowed", boxShadow: draft.trim() ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
+                disabled={!draft.trim() || pending}
+                style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 20px", borderRadius: 999, border: "none", background: draft.trim() && !pending ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#E7DCCB", color: draft.trim() && !pending ? "#fff" : "#9A8A78", fontWeight: 800, fontSize: "0.92rem", cursor: draft.trim() && !pending ? "pointer" : "not-allowed", boxShadow: draft.trim() && !pending ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
               >
                 ＋ Add moment
               </button>
             </div>
+            {error ? (
+              <p role="alert" style={{ margin: "12px 0 0", color: "#B5618A", fontSize: "0.88rem", fontWeight: 700 }}>
+                {error}
+              </p>
+            ) : null}
           </div>
 
           {/* feed */}

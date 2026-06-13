@@ -27,6 +27,7 @@ import { StorybookService } from "@/services/storybook";
 import { SubscriptionService } from "@/services/subscription";
 import { TextStoryService } from "@/services/text-story";
 import { VoiceClipService } from "@/services/voice-clip";
+import { MomentService } from "@/services/moment";
 import { WorldService } from "@/services/world";
 
 export function createTestContext() {
@@ -60,6 +61,7 @@ export function createTestContext() {
   const babies = new BabyService(store);
   const familyRoster = new FamilyRosterService(store);
   const voiceClips = new VoiceClipService(store, blobs);
+  const moments = new MomentService(store);
   const world = new WorldService(store, babies, familyRoster);
   const storybooks = new StorybookService(
     store,
@@ -113,6 +115,7 @@ export function createTestContext() {
     babies,
     familyRoster,
     voiceClips,
+    moments,
     world,
     storybooks,
     multiStorybooks,

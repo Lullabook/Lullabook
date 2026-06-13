@@ -81,6 +81,21 @@ export interface VoiceConsentReceipt {
   revokedAt?: Date;
 }
 
+/** Parent-logged Moment about a Baby (issue 50 / ADR-0019). */
+export interface Moment {
+  id: string;
+  familyId: string;
+  babyId: string;
+  createdByMemberId: string;
+  body: string;
+  /** Calendar date YYYY-MM-DD. */
+  occurredOn: string;
+  isSignificant: boolean;
+  /** UI category from the Daily capture form (design drop-in). */
+  momentType: import("@/domain/daily-types").MomentType;
+  createdAt: Date;
+}
+
 export interface Persona {
   id: string;
   familyId: string;

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EVENTS, inngest } from "@/adapters/inngest";
 import type { Brief, TextStoryBrief, TraitQuestionnaire } from "@/domain/types";
+import type { MomentType } from "@/domain/daily-types";
 import { requireAuthedContext } from "@/lib/auth";
 import { createAuthClient } from "@/lib/supabase";
 
@@ -546,6 +547,35 @@ export async function startCheckoutFormAction(): Promise<void> {
 
 export async function cancelSubscriptionFormAction(): Promise<void> {
   await cancelSubscriptionAction();
+}
+
+// ---------------------------------------------------------------------------
+// Moments / Daily Journal (issue 50)
+// ---------------------------------------------------------------------------
+
+export async function createMomentAction(input: {
+  babyId: string;
+  body: string;
+  momentType: MomentType;
+  occurredOn?: string;
+  isSignificant?: boolean;
+}): Promise<ActionResult<{ momentId: string }>> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    const moment = ctx.moments.create({
+      memberId: member.id,
+      babyId: input.babyId,
+      body: input.body,
+      momentType: input.momentType,
+      occurredOn: input.occurredOn,
+      isSignificant: input.isSignificant,
+    });
+    await ctx.persist();
+    revalidatePath("/daily");
+    return { ok: true, data: { momentId: moment.id } };
+  } catch (err) {
+    return fail(err);
+  }
 }
 
 // ---------------------------------------------------------------------------

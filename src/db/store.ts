@@ -21,6 +21,7 @@ import type {
   EmailPlusVpcRequest,
   VoiceClip,
   VoiceConsentReceipt,
+  Moment,
 } from "@/domain/types";
 
 export class DataStore {
@@ -48,6 +49,7 @@ export class DataStore {
   babyPersonBonds = new Map<string, BabyPersonBond>();
   voiceClips = new Map<string, VoiceClip>();
   voiceConsentReceipts = new Map<string, VoiceConsentReceipt>();
+  moments = new Map<string, Moment>();
 
   createFamily(): Family {
     const family: Family = { id: uuid(), createdAt: new Date() };
@@ -130,6 +132,22 @@ export class DataStore {
 
   saveVoiceConsentReceipt(receipt: VoiceConsentReceipt): void {
     this.voiceConsentReceipts.set(receipt.id, receipt);
+  }
+
+  getMomentsForBaby(babyId: string, actorMemberId: string): Moment[] {
+    const baby = this.getBaby(babyId, actorMemberId);
+    if (!baby) throw new RlsViolationError("Cannot read moments for another family");
+    return [...this.moments.values()]
+      .filter((m) => m.babyId === babyId)
+      .sort((a, b) => {
+        const dateCmp = b.occurredOn.localeCompare(a.occurredOn);
+        if (dateCmp !== 0) return dateCmp;
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      });
+  }
+
+  saveMoment(moment: Moment): void {
+    this.moments.set(moment.id, moment);
   }
 
   getPersonasByRosterGroup(rosterGroupId: string, actorMemberId: string): Persona[] {
@@ -442,6 +460,9 @@ export class DataStore {
     }
     for (const [id, r] of this.voiceConsentReceipts) {
       if (r.familyId === familyId) this.voiceConsentReceipts.delete(id);
+    }
+    for (const [id, m] of this.moments) {
+      if (m.familyId === familyId) this.moments.delete(id);
     }
 
     this.subscriptions.delete(familyId);
