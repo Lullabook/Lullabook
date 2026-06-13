@@ -65,9 +65,26 @@ export const pageRecover = inngest.createFunction(
     await ctx.store.hydrateByMemberId(memberId);
     ctx.workflow.onStepCommitted = () => ctx.store.sync();
 
-    await ctx.workflow.runWithStepContext(step as DurableStepTools, () =>
-      ctx.storybooks.runRecoveryBody(memberId, pageId, attempt)
-    );
+    try {
+      await ctx.workflow.runWithStepContext(step as DurableStepTools, () =>
+        ctx.storybooks.runRecoveryBody(memberId, pageId, attempt)
+      );
+    } catch (err) {
+      const page = ctx.store.pages.get(pageId);
+      if (page && page.generationStatus !== "ready") {
+        page.generationStatus = "failed";
+        ctx.store.savePage(page);
+        const book = ctx.store.storybooks.get(page.storybookId);
+        if (book && (book.status === "generating" || book.status === "failed")) {
+          const pages = ctx.store.getPagesForStorybook(book.id);
+          const readyCount = pages.filter((p) => p.generationStatus === "ready").length;
+          book.status = readyCount >= 10 ? "draft" : "failed";
+          ctx.store.saveStorybook(book);
+        }
+      }
+      await ctx.store.sync();
+      throw err;
+    }
     await ctx.persist();
   }
 );
@@ -77,6 +94,7 @@ export interface PersonaCreatePayload {
   memberId: string;
   displayName: string;
   characterId?: string;
+  kind?: "baby" | "adult";
   /** Staged upload keys — the request handler stores bytes, events stay small. */
   photoKeys: string[];
   selfieKey?: string;
@@ -111,7 +129,7 @@ export const personaCreate = inngest.createFunction(
           await ctx.characters.promoteToPersona({
             characterId: payload.characterId!,
             memberId: payload.memberId,
-            kind: "adult",
+            kind: payload.kind ?? "baby",
             photos,
             selfie,
           });
@@ -133,6 +151,16 @@ export const personaCreate = inngest.createFunction(
     } catch (err) {
       // Validation failures (selfie mismatch, pre-flight, moderation) happen
       // out-of-band — surface them by email rather than vanish silently.
+      const failedPersona = [...ctx.store.personas.values()].find(
+        (p) =>
+          p.createdByMemberId === payload.memberId &&
+          p.displayName === payload.displayName &&
+          p.status === "training"
+      );
+      if (failedPersona) {
+        failedPersona.status = "failed";
+        ctx.store.savePersona(failedPersona);
+      }
       if (member) {
         await ctx.notifications.sendEmail(
           member.email,

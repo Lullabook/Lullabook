@@ -400,225 +400,229 @@ export class SupabaseDataStore extends DataStore {
       if (error) throw new Error(`sync delete ${table} failed: ${error.message}`);
     };
 
-    await upsert(
-      "families",
-      [...this.families.values()].map((f) => ({
-        id: f.id,
-        created_at: f.createdAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "members",
-      [...this.members.values()].map((m) => ({
-        id: m.id,
-        auth_user_id: m.authUserId,
-        family_id: m.familyId,
-        email: m.email,
-        role: m.role,
-        self_persona_id: m.selfPersonaId,
-        jurisdiction: m.jurisdiction,
-        created_at: m.createdAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "personas",
-      [...this.personas.values()].map((p) => ({
-        id: p.id,
-        family_id: p.familyId,
-        created_by_member_id: p.createdByMemberId,
-        kind: p.kind,
-        display_name: p.displayName,
-        status: p.status,
-        lora_weight_key: p.loraWeightKey,
-        promoted_from_character_id: p.promotedFromCharacterId ?? null,
-        questionnaire: p.questionnaire ?? null,
-        created_at: p.createdAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "characters",
-      [...this.characters.values()].map((c) => ({
-        id: c.id,
-        family_id: c.familyId,
-        created_by_member_id: c.createdByMemberId,
-        display_name: c.displayName,
-        questionnaire: c.questionnaire,
-        promoted_persona_id: c.promotedPersonaId ?? null,
-        created_at: c.createdAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "subscriptions",
-      [...this.subscriptions.values()].map((s) => ({
-        family_id: s.familyId,
-        status: s.status,
-        stripe_customer_id: s.stripeCustomerId,
-        stripe_subscription_id: s.stripeSubscriptionId,
-        updated_at: s.updatedAt.toISOString(),
-      })),
-      "family_id"
-    );
-    await upsert(
-      "consent_receipts",
-      [...this.consentReceipts.values()].map((r) => ({
-        id: r.id,
-        family_id: r.familyId,
-        member_id: r.memberId,
-        jurisdiction: r.jurisdiction,
-        notice_version: r.noticeVersion,
-        consented_at: r.consentedAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "light_consent_receipts",
-      [...this.lightConsentReceipts.values()].map((r) => ({
-        id: r.id,
-        character_id: r.characterId,
-        family_id: r.familyId,
-        member_id: r.memberId,
-        jurisdiction: r.jurisdiction,
-        notice_version: r.noticeVersion,
-        attestation: r.attestation,
-        consented_at: r.consentedAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "storybooks",
-      [...this.storybooks.values()].map((b) => ({
-        id: b.id,
-        family_id: b.familyId,
-        created_by_member_id: b.createdByMemberId,
-        status: b.status,
-        brief: b.brief,
-        classic_id: b.classicId ?? null,
-        style_bible: b.styleBible,
-        reroll_budget_remaining: b.rerollBudgetRemaining,
-        reroll_credits: b.rerollCredits,
-        created_at: b.createdAt.toISOString(),
-        finalized_at: b.finalizedAt?.toISOString() ?? null,
-      }))
-    );
-    await upsert(
-      "pages",
-      [...this.pages.values()].map((p) => ({
-        id: p.id,
-        storybook_id: p.storybookId,
-        index: p.index,
-        text: p.text,
-        illustration_url: p.illustrationUrl,
-        illustration_blob_key: p.illustrationBlobKey,
-        generation_status: p.generationStatus,
-        persona_count: p.personaCount,
-      }))
-    );
-    await upsert(
-      "page_candidates",
-      [...this.pageCandidates.values()].map((c) => ({
-        id: c.id,
-        page_id: c.pageId,
-        kind: c.kind,
-        content: c.content,
-        selected: c.selected,
-        created_at: c.createdAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "persisted_generations",
-      [...this.persistedGenerations.values()].map((g) => ({
-        storybook_id: g.storybookId,
-        story: g.story,
-        persisted_at: g.persistedAt.toISOString(),
-      })),
-      "storybook_id"
-    );
-    await upsert(
-      "text_stories",
-      [...this.textStories.values()].map((s) => ({
-        id: s.id,
-        family_id: s.familyId,
-        created_by_member_id: s.createdByMemberId,
-        brief: s.brief,
-        text: s.text,
-        created_at: s.createdAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "share_links",
-      [...this.shareLinks.values()].map((l) => ({
-        id: l.id,
-        storybook_id: l.storybookId,
-        token: l.token,
-        expires_at: l.expiresAt?.toISOString() ?? null,
-        passcode_hash: l.passcodeHash,
-        revoked_at: l.revokedAt?.toISOString() ?? null,
-        created_at: l.createdAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "moderation_audit",
-      [...this.moderationAudit.values()].map((e) => ({
-        id: e.id,
-        resource_type: e.resourceType,
-        resource_id: e.resourceId,
-        outcome: e.outcome,
-        reason: e.reason,
-        created_at: e.createdAt.toISOString(),
-      }))
-    );
-    await upsert(
-      "invites",
-      [...this.invites.values()].map((i) => ({
-        id: i.id,
-        family_id: i.familyId,
-        email: i.email,
-        invited_by: i.invitedBy,
-      }))
-    );
-    await upsert(
-      "pending_briefs",
-      [...this.pendingBriefs.entries()].map(([key, p]) => ({
-        key,
-        member_id: p.memberId,
-        persona_id: p.personaId,
-        brief: p.brief,
-        submitted_at: p.submittedAt.toISOString(),
-      })),
-      "key"
-    );
-    await upsert(
-      "purge_schedule",
-      [...this.purgeScheduled.values()].map((p) => ({
-        family_id: p.familyId,
-        purge_at: p.purgeAt.toISOString(),
-      })),
-      "family_id"
-    );
-    await upsert(
-      "banned_accounts",
-      [...this.bannedAccounts].map((accountId) => ({ account_id: accountId })),
-      "account_id"
-    );
+    await Promise.all([
+      upsert(
+        "families",
+        [...this.families.values()].map((f) => ({
+          id: f.id,
+          created_at: f.createdAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "members",
+        [...this.members.values()].map((m) => ({
+          id: m.id,
+          auth_user_id: m.authUserId,
+          family_id: m.familyId,
+          email: m.email,
+          role: m.role,
+          self_persona_id: m.selfPersonaId,
+          jurisdiction: m.jurisdiction,
+          created_at: m.createdAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "personas",
+        [...this.personas.values()].map((p) => ({
+          id: p.id,
+          family_id: p.familyId,
+          created_by_member_id: p.createdByMemberId,
+          kind: p.kind,
+          display_name: p.displayName,
+          status: p.status,
+          lora_weight_key: p.loraWeightKey,
+          promoted_from_character_id: p.promotedFromCharacterId ?? null,
+          questionnaire: p.questionnaire ?? null,
+          created_at: p.createdAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "characters",
+        [...this.characters.values()].map((c) => ({
+          id: c.id,
+          family_id: c.familyId,
+          created_by_member_id: c.createdByMemberId,
+          display_name: c.displayName,
+          questionnaire: c.questionnaire,
+          promoted_persona_id: c.promotedPersonaId ?? null,
+          created_at: c.createdAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "subscriptions",
+        [...this.subscriptions.values()].map((s) => ({
+          family_id: s.familyId,
+          status: s.status,
+          stripe_customer_id: s.stripeCustomerId,
+          stripe_subscription_id: s.stripeSubscriptionId,
+          updated_at: s.updatedAt.toISOString(),
+        })),
+        "family_id"
+      ),
+      upsert(
+        "consent_receipts",
+        [...this.consentReceipts.values()].map((r) => ({
+          id: r.id,
+          family_id: r.familyId,
+          member_id: r.memberId,
+          jurisdiction: r.jurisdiction,
+          notice_version: r.noticeVersion,
+          consented_at: r.consentedAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "light_consent_receipts",
+        [...this.lightConsentReceipts.values()].map((r) => ({
+          id: r.id,
+          character_id: r.characterId,
+          family_id: r.familyId,
+          member_id: r.memberId,
+          jurisdiction: r.jurisdiction,
+          notice_version: r.noticeVersion,
+          attestation: r.attestation,
+          consented_at: r.consentedAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "storybooks",
+        [...this.storybooks.values()].map((b) => ({
+          id: b.id,
+          family_id: b.familyId,
+          created_by_member_id: b.createdByMemberId,
+          status: b.status,
+          brief: b.brief,
+          classic_id: b.classicId ?? null,
+          style_bible: b.styleBible,
+          reroll_budget_remaining: b.rerollBudgetRemaining,
+          reroll_credits: b.rerollCredits,
+          created_at: b.createdAt.toISOString(),
+          finalized_at: b.finalizedAt?.toISOString() ?? null,
+        }))
+      ),
+      upsert(
+        "pages",
+        [...this.pages.values()].map((p) => ({
+          id: p.id,
+          storybook_id: p.storybookId,
+          index: p.index,
+          text: p.text,
+          illustration_url: p.illustrationUrl,
+          illustration_blob_key: p.illustrationBlobKey,
+          generation_status: p.generationStatus,
+          persona_count: p.personaCount,
+        }))
+      ),
+      upsert(
+        "page_candidates",
+        [...this.pageCandidates.values()].map((c) => ({
+          id: c.id,
+          page_id: c.pageId,
+          kind: c.kind,
+          content: c.content,
+          selected: c.selected,
+          created_at: c.createdAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "persisted_generations",
+        [...this.persistedGenerations.values()].map((g) => ({
+          storybook_id: g.storybookId,
+          story: g.story,
+          persisted_at: g.persistedAt.toISOString(),
+        })),
+        "storybook_id"
+      ),
+      upsert(
+        "text_stories",
+        [...this.textStories.values()].map((s) => ({
+          id: s.id,
+          family_id: s.familyId,
+          created_by_member_id: s.createdByMemberId,
+          brief: s.brief,
+          text: s.text,
+          created_at: s.createdAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "share_links",
+        [...this.shareLinks.values()].map((l) => ({
+          id: l.id,
+          storybook_id: l.storybookId,
+          token: l.token,
+          expires_at: l.expiresAt?.toISOString() ?? null,
+          passcode_hash: l.passcodeHash,
+          revoked_at: l.revokedAt?.toISOString() ?? null,
+          created_at: l.createdAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "moderation_audit",
+        [...this.moderationAudit.values()].map((e) => ({
+          id: e.id,
+          resource_type: e.resourceType,
+          resource_id: e.resourceId,
+          outcome: e.outcome,
+          reason: e.reason,
+          created_at: e.createdAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "invites",
+        [...this.invites.values()].map((i) => ({
+          id: i.id,
+          family_id: i.familyId,
+          email: i.email,
+          invited_by: i.invitedBy,
+        }))
+      ),
+      upsert(
+        "pending_briefs",
+        [...this.pendingBriefs.entries()].map(([key, p]) => ({
+          key,
+          member_id: p.memberId,
+          persona_id: p.personaId,
+          brief: p.brief,
+          submitted_at: p.submittedAt.toISOString(),
+        })),
+        "key"
+      ),
+      upsert(
+        "purge_schedule",
+        [...this.purgeScheduled.values()].map((p) => ({
+          family_id: p.familyId,
+          purge_at: p.purgeAt.toISOString(),
+        })),
+        "family_id"
+      ),
+      upsert(
+        "banned_accounts",
+        [...this.bannedAccounts].map((accountId) => ({ account_id: accountId })),
+        "account_id"
+      ),
+    ]);
 
-    // Deletions, children before parents so FKs never block.
-    await deleteMissing("page_candidates", new Set(this.pageCandidates.keys()));
-    await deleteMissing("pages", new Set(this.pages.keys()));
-    await deleteMissing(
-      "persisted_generations",
-      new Set(this.persistedGenerations.keys()),
-      "storybook_id"
-    );
-    await deleteMissing("share_links", new Set(this.shareLinks.keys()));
-    await deleteMissing("text_stories", new Set(this.textStories.keys()));
-    await deleteMissing("storybooks", new Set(this.storybooks.keys()));
-    await deleteMissing("light_consent_receipts", new Set(this.lightConsentReceipts.keys()));
-    await deleteMissing("consent_receipts", new Set(this.consentReceipts.keys()));
-    await deleteMissing("invites", new Set(this.invites.keys()));
-    await deleteMissing("pending_briefs", new Set(this.pendingBriefs.keys()), "key");
-    await deleteMissing("purge_schedule", new Set(this.purgeScheduled.keys()), "family_id");
-    await deleteMissing("subscriptions", new Set(this.subscriptions.keys()), "family_id");
-    await deleteMissing("characters", new Set(this.characters.keys()));
-    await deleteMissing("personas", new Set(this.personas.keys()));
-    await deleteMissing("members", new Set(this.members.keys()));
-    await deleteMissing("families", new Set(this.families.keys()));
+    await Promise.all([
+      deleteMissing("page_candidates", new Set(this.pageCandidates.keys())),
+      deleteMissing("pages", new Set(this.pages.keys())),
+      deleteMissing(
+        "persisted_generations",
+        new Set(this.persistedGenerations.keys()),
+        "storybook_id"
+      ),
+      deleteMissing("share_links", new Set(this.shareLinks.keys())),
+      deleteMissing("text_stories", new Set(this.textStories.keys())),
+      deleteMissing("storybooks", new Set(this.storybooks.keys())),
+      deleteMissing("light_consent_receipts", new Set(this.lightConsentReceipts.keys())),
+      deleteMissing("consent_receipts", new Set(this.consentReceipts.keys())),
+      deleteMissing("invites", new Set(this.invites.keys())),
+      deleteMissing("pending_briefs", new Set(this.pendingBriefs.keys()), "key"),
+      deleteMissing("purge_schedule", new Set(this.purgeScheduled.keys()), "family_id"),
+      deleteMissing("subscriptions", new Set(this.subscriptions.keys()), "family_id"),
+      deleteMissing("characters", new Set(this.characters.keys())),
+      deleteMissing("personas", new Set(this.personas.keys())),
+      deleteMissing("members", new Set(this.members.keys())),
+      deleteMissing("families", new Set(this.families.keys())),
+      deleteMissing("moderation_audit", new Set(this.moderationAudit.keys())),
+    ]);
   }
 }

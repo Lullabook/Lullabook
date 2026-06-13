@@ -93,7 +93,10 @@ export class RealModerationAdapter implements ModerationAdapter {
     const classes = data.moderation_classes ?? {};
     for (const [label, raw] of Object.entries(classes)) {
       if (label === "available") continue;
-      const score = typeof raw === "number" ? raw : 0;
+      const score = typeof raw === "number" ? raw : null;
+      if (score === null) {
+        return { allowed: false, reason: `unsafe text: invalid score for ${label}` };
+      }
       if (score >= IMAGE_BLOCK_THRESHOLD) {
         return { allowed: false, reason: `unsafe text: ${label}` };
       }
