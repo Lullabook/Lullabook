@@ -7,28 +7,34 @@ import {
   FakeNotifications,
   FakePdf,
   FakeStripe,
+  FakeVideo,
   FakeWorkflow,
   InMemoryBlobStore,
 } from "@/adapters/fakes";
 import { DataStore } from "@/db/store";
+import { BabyService } from "@/services/baby";
+import { CharacterService } from "@/services/character";
 import { ChildSafetyService } from "@/services/child-safety";
 import { ColdStartService } from "@/services/cold-start";
 import { ExportService } from "@/services/export";
+import { FamilyRosterService } from "@/services/family-roster";
 import { FamilyService } from "@/services/family";
 import { HardDeleteService } from "@/services/hard-delete";
 import { OnboardingService } from "@/services/onboarding";
-import { CharacterService } from "@/services/character";
 import { PersonaService } from "@/services/persona";
 import { SharingService } from "@/services/sharing";
 import { StorybookService } from "@/services/storybook";
 import { SubscriptionService } from "@/services/subscription";
 import { TextStoryService } from "@/services/text-story";
+import { VoiceClipService } from "@/services/voice-clip";
+import { WorldService } from "@/services/world";
 
 export function createTestContext() {
   const store = new DataStore();
   const anthropic = new FakeAnthropic();
   const classicCatalog = new FakeClassicCatalog();
   const fal = new FakeFal();
+  const video = new FakeVideo();
   const moderation = new FakeModeration();
   const liveness = new FakeLiveness();
   const blobs = new InMemoryBlobStore();
@@ -50,7 +56,11 @@ export function createTestContext() {
     subscriptions,
     childSafety
   );
-  const characters = new CharacterService(store, personas);
+  const characters = new CharacterService(store);
+  const babies = new BabyService(store);
+  const familyRoster = new FamilyRosterService(store);
+  const voiceClips = new VoiceClipService(store, blobs);
+  const world = new WorldService(store, babies, familyRoster);
   const storybooks = new StorybookService(
     store,
     anthropic,
@@ -59,7 +69,9 @@ export function createTestContext() {
     blobs,
     workflow,
     subscriptions,
-    classicCatalog
+    classicCatalog,
+    false,
+    video
   );
   const multiStorybooks = new StorybookService(
     store,
@@ -70,7 +82,8 @@ export function createTestContext() {
     workflow,
     subscriptions,
     classicCatalog,
-    true
+    true,
+    video
   );
   const sharing = new SharingService(store);
   const family = new FamilyService(store);
@@ -85,6 +98,7 @@ export function createTestContext() {
     anthropic,
     classicCatalog,
     fal,
+    video,
     moderation,
     liveness,
     blobs,
@@ -96,6 +110,10 @@ export function createTestContext() {
     subscriptions,
     characters,
     personas,
+    babies,
+    familyRoster,
+    voiceClips,
+    world,
     storybooks,
     multiStorybooks,
     sharing,
@@ -131,4 +149,38 @@ export function goodPhoto(seed = 0xaa): Buffer {
   buf[1] = 0x01;
   buf[2] = 0x00;
   return buf;
+}
+
+/** Guardian with subscription + consent, ready for baby/adult persona creation. */
+export async function subscribedGuardian(ctx: ReturnType<typeof createTestContext>) {
+  const guardian = ctx.onboarding.ensureFamilyForNewUser("guardian", "g@example.com");
+  withActiveSubscription(ctx, guardian);
+  ctx.subscriptions.recordConsent(guardian.familyId, guardian.id, "US");
+  return guardian;
+}
+
+/** Full household setup: guardian, baby persona, default Baby record. */
+export async function householdWithBaby(ctx: ReturnType<typeof createTestContext>, name = "Maya") {
+  const guardian = await subscribedGuardian(ctx);
+  const babyPersona = await ctx.personas.createBaby({
+    memberId: guardian.id,
+    displayName: name,
+    photos: [goodPhoto(), goodPhoto(), goodPhoto()],
+  });
+  const baby = ctx.babies.addBaby({ memberId: guardian.id, displayName: name });
+  return { guardian, babyPersona, baby };
+}
+
+export async function createReadyAdult(
+  ctx: ReturnType<typeof createTestContext>,
+  guardian: { id: string },
+  displayName = "Adult"
+) {
+  ctx.liveness.shouldMatch = true;
+  return ctx.personas.createAdult({
+    memberId: guardian.id,
+    displayName,
+    photos: [goodPhoto(), goodPhoto(), goodPhoto()],
+    selfie: Buffer.from("selfie"),
+  });
 }

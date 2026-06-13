@@ -11,10 +11,12 @@ import { PdfLibAdapter } from "@/adapters/pdf";
 import { RealStripeAdapter } from "@/adapters/stripe";
 import { SupabaseDataStore } from "@/db/supabase-store";
 import { createServiceClient } from "@/lib/supabase";
+import { BabyService } from "@/services/baby";
 import { CharacterService } from "@/services/character";
 import { ChildSafetyService } from "@/services/child-safety";
 import { ColdStartService } from "@/services/cold-start";
 import { ExportService } from "@/services/export";
+import { FamilyRosterService } from "@/services/family-roster";
 import { FamilyService } from "@/services/family";
 import { HardDeleteService } from "@/services/hard-delete";
 import { OnboardingService } from "@/services/onboarding";
@@ -24,6 +26,8 @@ import { SharingService } from "@/services/sharing";
 import { StorybookService } from "@/services/storybook";
 import { SubscriptionService } from "@/services/subscription";
 import { TextStoryService } from "@/services/text-story";
+import { VoiceClipService } from "@/services/voice-clip";
+import { WorldService } from "@/services/world";
 
 export type RequestContext = ReturnType<typeof createRequestContext>;
 
@@ -67,7 +71,11 @@ export function createRequestContext() {
     subscriptions,
     childSafety
   );
-  const characters = new CharacterService(store, personas);
+  const characters = new CharacterService(store);
+  const babies = new BabyService(store);
+  const familyRoster = new FamilyRosterService(store);
+  const voiceClips = new VoiceClipService(store, blobs);
+  const world = new WorldService(store, babies, familyRoster);
   // ADR-0005: multi-persona pages go through the Gemini reference-model path
   // only once the composition spike passes; flipped by env, not a deploy.
   const useReferenceModelForMulti =
@@ -100,6 +108,10 @@ export function createRequestContext() {
     childSafety,
     subscriptions,
     characters,
+    babies,
+    familyRoster,
+    voiceClips,
+    world,
     personas,
     storybooks,
     sharing,

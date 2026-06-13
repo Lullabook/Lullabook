@@ -4,7 +4,16 @@ export type PersonaKind = "baby" | "adult";
 
 export type PersonaStatus = "training" | "ready" | "failed";
 
-export type StoryType = "bedtime" | "learning";
+export type StoryType =
+  | "everyday"
+  | "milestone"
+  | "adventure"
+  | "lesson"
+  | "bedtime"
+  | "silly"
+  | "learning"; // legacy alias → lesson
+
+export type RosterScope = "shared" | "isolated";
 
 export type StorybookStatus = "generating" | "draft" | "finalized" | "failed";
 
@@ -24,8 +33,52 @@ export interface Member {
   email: string;
   role: MemberRole;
   selfPersonaId: string | null;
+  selectedBabyId: string | null;
   jurisdiction: string;
   createdAt: Date;
+}
+
+/** Household account boundary (internal: `Family`). One or more Babies. */
+export interface Baby {
+  id: string;
+  familyId: string;
+  displayName: string;
+  rosterGroupId: string;
+  rosterScope: RosterScope;
+  isDefault: boolean;
+  createdAt: Date;
+}
+
+/** Per baby–person relationship + nicknames (issue 35). */
+export interface BabyPersonBond {
+  id: string;
+  babyId: string;
+  personaId: string;
+  relationship: string;
+  babyCallsThem: string;
+  theyCallBaby: string;
+}
+
+export interface VoiceClip {
+  id: string;
+  familyId: string;
+  personaId: string;
+  label: string;
+  transcript: string;
+  durationSecs: number;
+  blobKey: string;
+  createdAt: Date;
+}
+
+export interface VoiceConsentReceipt {
+  id: string;
+  familyId: string;
+  personaId: string;
+  memberId: string;
+  jurisdiction: string;
+  noticeVersion: string;
+  consentedAt: Date;
+  revokedAt?: Date;
 }
 
 export interface Persona {
@@ -92,11 +145,17 @@ export interface Subscription {
 
 export interface Brief {
   starringPersonaIds: string[];
+  starringCharacterIds?: string[];
+  babyId?: string;
   storyType: StoryType;
   theme: string;
   setting?: string;
   note?: string;
   customStyleNote?: string;
+  artStyle?: string;
+  pageCount?: number;
+  lullabyClipId?: string;
+  voiceClipIds?: string[];
 }
 
 export interface TextStoryBrief {
@@ -137,6 +196,9 @@ export interface Page {
   text: string;
   illustrationUrl: string | null;
   illustrationBlobKey: string | null;
+  videoBlobKey: string | null;
+  videoUrl: string | null;
+  voiceClipId: string | null;
   generationStatus: PageGenerationStatus;
   personaCount: number;
 }
@@ -150,6 +212,8 @@ export interface PersistedGeneration {
 export interface Storybook {
   id: string;
   familyId: string;
+  /** Baby whose World this storybook belongs to. */
+  babyId?: string;
   createdByMemberId: string;
   status: StorybookStatus;
   brief: Brief;

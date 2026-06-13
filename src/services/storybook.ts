@@ -4,17 +4,17 @@ import type {
   BlobStore,
   ClassicCatalog,
   FalAdapter,
+  VideoAdapter,
   WorkflowAdapter,
   WorkflowStep,
 } from "@/adapters/types";
 import type { DataStore } from "@/db/store";
 import type { Brief, GeneratedStory, PageGenerationStatus, Storybook } from "@/domain/types";
+import { readyPageFloor, resolvePageCount } from "@/domain/story-type";
 import { ChildSafetyService } from "@/services/child-safety";
 import type { SubscriptionService } from "@/services/subscription";
 
 const FREE_REROLL_BUDGET = 5;
-const PAGE_COUNT = 12;
-const DEFAULT_READY_PAGE_FLOOR = 10;
 
 type PersonaRecord = NonNullable<ReturnType<DataStore["getPersona"]>>;
 
@@ -29,8 +29,36 @@ export class StorybookService {
     private readonly subscriptions: SubscriptionService,
     private readonly classicCatalog: ClassicCatalog,
     private readonly useReferenceModelForMulti = false,
-    private readonly readyPageFloor = DEFAULT_READY_PAGE_FLOOR
+    private readonly video: VideoAdapter | null = null
   ) {}
+
+  private normalizeBrief(memberId: string, brief: Brief): Brief {
+    const member = this.store.members.get(memberId);
+    if (!member) throw new Error("Member not found");
+
+    const babyPersona = [...this.store.personas.values()].find(
+      (p) => p.familyId === member.familyId && p.kind === "baby" && p.status === "ready"
+    );
+    const starringPersonaIds = [...brief.starringPersonaIds];
+    if (babyPersona && !starringPersonaIds.includes(babyPersona.id)) {
+      starringPersonaIds.unshift(babyPersona.id);
+    }
+
+    return {
+      ...brief,
+      starringPersonaIds,
+      babyId: brief.babyId ?? member.selectedBabyId ?? undefined,
+      pageCount: resolvePageCount(brief),
+    };
+  }
+
+  getVoiceClipForPage(brief: Brief, pageIndex: number, pageCount: number): string | null {
+    if (brief.lullabyClipId && pageIndex === pageCount - 1) {
+      return brief.lullabyClipId;
+    }
+    const ids = brief.voiceClipIds ?? [];
+    return ids[pageIndex] ?? null;
+  }
 
   async generate(memberId: string, brief: Brief): Promise<Storybook> {
     const member = this.store.members.get(memberId);
@@ -43,7 +71,9 @@ export class StorybookService {
     const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
     if (note) await this.childSafety.checkText(note, `brief-${memberId}`);
 
-    for (const id of brief.starringPersonaIds) {
+    const normalized = this.normalizeBrief(memberId, brief);
+
+    for (const id of normalized.starringPersonaIds) {
       const p = this.store.getPersona(id, memberId);
       if (!p || p.status !== "ready") throw new Error(`Persona ${id} not ready`);
     }
@@ -51,9 +81,10 @@ export class StorybookService {
     const storybook: Storybook = {
       id: uuid(),
       familyId: member.familyId,
+      babyId: normalized.babyId,
       createdByMemberId: memberId,
       status: "generating",
-      brief,
+      brief: normalized,
       styleBible: null,
       rerollBudgetRemaining: FREE_REROLL_BUDGET,
       rerollCredits: 0,
@@ -138,12 +169,24 @@ export class StorybookService {
     if (!storybook) return;
 
     const brief = storybook.brief;
+    const pageCount = resolvePageCount(brief);
     const personas = brief.starringPersonaIds.map((id) => {
       const p = this.store.getPersona(id, memberId);
       if (!p) throw new Error(`Persona ${id} not found`);
       return p;
     });
+    const characterNames = (brief.starringCharacterIds ?? [])
+      .map((id) => this.store.getCharacter(id, memberId)?.displayName)
+      .filter(Boolean) as string[];
+
+    let lullabyPhrase: string | undefined;
+    if (brief.lullabyClipId) {
+      const clip = this.store.getVoiceClip(brief.lullabyClipId, memberId);
+      lullabyPhrase = clip?.transcript;
+    }
+
     const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
+    const artNote = brief.artStyle ? `Art style: ${brief.artStyle}.` : "";
 
     const generateStory = storybook.classicId
       ? async () => {
@@ -152,17 +195,19 @@ export class StorybookService {
           return this.anthropic.adaptStory({
             sourceTale,
             personaNames: personas.map((p) => p.displayName),
-            pageCount: PAGE_COUNT,
+            pageCount,
             storyType: brief.storyType,
             twist: note || undefined,
           });
         }
       : async () =>
           this.anthropic.generateStory({
-            brief: `${brief.theme} ${brief.setting ?? ""} ${note}`,
+            brief: `${brief.theme} ${brief.setting ?? ""} ${note} ${artNote}`,
             personaNames: personas.map((p) => p.displayName),
-            pageCount: PAGE_COUNT,
+            characterNames,
+            pageCount,
             storyType: brief.storyType,
+            lullabyPhrase,
           });
 
     await this.runGeneration(memberId, storybookId, brief, personas, generateStory);
@@ -383,6 +428,26 @@ export class StorybookService {
           await this.blobs.put(blobKey, bytes);
         },
       },
+      ...(this.video
+        ? [
+            {
+              name: `video-${pageIndex}`,
+              idempotencyKey: `${prefix}/video`,
+              run: async () => {
+                const modOutcome = (await this.blobs.get(moderationKey))?.toString();
+                if (modOutcome !== "allowed") return;
+                const videoKey = `books/${storybook.familyId}/${storybook.id}/page-${pageIndex}.mp4`;
+                if (await this.blobs.get(videoKey)) return;
+                const result = await this.video!.generatePageClip(blobKey, pageData.text, {
+                  idempotencyKey: `${prefix}/video-gen`,
+                });
+                const bytes =
+                  result.bytes ?? Buffer.from(`fetched:${result.videoUrl}`);
+                await this.blobs.put(videoKey, bytes);
+              },
+            } satisfies WorkflowStep,
+          ]
+        : []),
       {
         name: `persist-${pageIndex}`,
         idempotencyKey: `${prefix}/persist`,
@@ -390,10 +455,15 @@ export class StorybookService {
           const modOutcome = (await this.blobs.get(moderationKey))?.toString() ?? "failed";
           let generationStatus: PageGenerationStatus = "failed";
           let illustrationBlobKey: string | null = null;
+          let videoBlobKey: string | null = null;
 
           if (modOutcome === "allowed" && (await this.blobs.get(blobKey))) {
             generationStatus = "ready";
             illustrationBlobKey = blobKey;
+            const videoKey = `books/${storybook.familyId}/${storybook.id}/page-${pageIndex}.mp4`;
+            if (this.video && (await this.blobs.get(videoKey))) {
+              videoBlobKey = videoKey;
+            }
           } else if (modOutcome === "quarantined") {
             generationStatus = "quarantined";
           }
@@ -405,6 +475,13 @@ export class StorybookService {
             text: pageData.text,
             illustrationUrl: null,
             illustrationBlobKey,
+            videoBlobKey,
+            videoUrl: null,
+            voiceClipId: this.getVoiceClipForPage(
+              storybook.brief,
+              pageIndex,
+              resolvePageCount(storybook.brief)
+            ),
             generationStatus,
             personaCount,
           });
@@ -420,8 +497,9 @@ export class StorybookService {
 
     const pages = this.store.getPagesForStorybook(storybookId);
     const readyCount = pages.filter((p) => p.generationStatus === "ready").length;
+    const floor = readyPageFloor(resolvePageCount(storybook.brief));
 
-    if (readyCount < this.readyPageFloor) {
+    if (readyCount < floor) {
       storybook.status = "failed";
     } else {
       storybook.status = "draft";

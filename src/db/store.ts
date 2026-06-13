@@ -1,5 +1,7 @@
 import { v4 as uuid } from "uuid";
 import type {
+  Baby,
+  BabyPersonBond,
   Character,
   ConsentReceipt,
   Family,
@@ -17,6 +19,8 @@ import type {
   TextStory,
   PushSubscription,
   EmailPlusVpcRequest,
+  VoiceClip,
+  VoiceConsentReceipt,
 } from "@/domain/types";
 
 export class DataStore {
@@ -40,6 +44,10 @@ export class DataStore {
   textStories = new Map<string, TextStory>();
   pushSubscriptions = new Map<string, PushSubscription>();
   emailPlusVpcRequests = new Map<string, EmailPlusVpcRequest>();
+  babies = new Map<string, Baby>();
+  babyPersonBonds = new Map<string, BabyPersonBond>();
+  voiceClips = new Map<string, VoiceClip>();
+  voiceConsentReceipts = new Map<string, VoiceConsentReceipt>();
 
   createFamily(): Family {
     const family: Family = { id: uuid(), createdAt: new Date() };
@@ -47,10 +55,97 @@ export class DataStore {
     return family;
   }
 
-  createMember(input: Omit<Member, "id" | "createdAt">): Member {
-    const member: Member = { ...input, id: uuid(), createdAt: new Date() };
+  createMember(input: Omit<Member, "id" | "createdAt" | "selectedBabyId"> & { selectedBabyId?: string | null }): Member {
+    const member: Member = {
+      ...input,
+      selectedBabyId: input.selectedBabyId ?? null,
+      id: uuid(),
+      createdAt: new Date(),
+    };
     this.members.set(member.id, member);
     return member;
+  }
+
+  getBabiesByFamily(familyId: string, actorMemberId: string): Baby[] {
+    const actor = this.members.get(actorMemberId);
+    if (!actor || actor.familyId !== familyId) {
+      throw new RlsViolationError("Cannot read babies for another family");
+    }
+    return [...this.babies.values()].filter((b) => b.familyId === familyId);
+  }
+
+  getBaby(id: string, actorMemberId: string): Baby | undefined {
+    const baby = this.babies.get(id);
+    if (!baby) return undefined;
+    const actor = this.members.get(actorMemberId);
+    if (!actor || actor.familyId !== baby.familyId) {
+      throw new RlsViolationError("Cannot read baby for another family");
+    }
+    return baby;
+  }
+
+  saveBaby(baby: Baby): void {
+    this.babies.set(baby.id, baby);
+  }
+
+  getBondsForBaby(babyId: string, actorMemberId: string): BabyPersonBond[] {
+    const baby = this.getBaby(babyId, actorMemberId);
+    if (!baby) throw new RlsViolationError("Cannot read bonds for another family");
+    return [...this.babyPersonBonds.values()].filter((b) => b.babyId === babyId);
+  }
+
+  saveBabyPersonBond(bond: BabyPersonBond): void {
+    this.babyPersonBonds.set(bond.id, bond);
+  }
+
+  getVoiceClipsForPersona(personaId: string, actorMemberId: string): VoiceClip[] {
+    const persona = this.getPersona(personaId, actorMemberId);
+    if (!persona) throw new RlsViolationError("Cannot read voice clips for another family");
+    return [...this.voiceClips.values()].filter((c) => c.personaId === personaId);
+  }
+
+  getVoiceClip(id: string, actorMemberId: string): VoiceClip | undefined {
+    const clip = this.voiceClips.get(id);
+    if (!clip) return undefined;
+    const actor = this.members.get(actorMemberId);
+    if (!actor || actor.familyId !== clip.familyId) {
+      throw new RlsViolationError("Cannot read voice clip for another family");
+    }
+    return clip;
+  }
+
+  saveVoiceClip(clip: VoiceClip): void {
+    this.voiceClips.set(clip.id, clip);
+  }
+
+  deleteVoiceClip(id: string): void {
+    this.voiceClips.delete(id);
+  }
+
+  getVoiceConsentForPersona(personaId: string): VoiceConsentReceipt | undefined {
+    return [...this.voiceConsentReceipts.values()].find(
+      (r) => r.personaId === personaId && !r.revokedAt
+    );
+  }
+
+  saveVoiceConsentReceipt(receipt: VoiceConsentReceipt): void {
+    this.voiceConsentReceipts.set(receipt.id, receipt);
+  }
+
+  getPersonasByRosterGroup(rosterGroupId: string, actorMemberId: string): Persona[] {
+    const actor = this.members.get(actorMemberId);
+    if (!actor) throw new RlsViolationError("Member not found");
+    const babyIds = [...this.babies.values()]
+      .filter((b) => b.rosterGroupId === rosterGroupId && b.familyId === actor.familyId)
+      .map((b) => b.id);
+    const personaIds = new Set(
+      [...this.babyPersonBonds.values()]
+        .filter((b) => babyIds.includes(b.babyId))
+        .map((b) => b.personaId)
+    );
+    return [...this.personas.values()].filter(
+      (p) => p.familyId === actor.familyId && (personaIds.size === 0 || personaIds.has(p.id))
+    );
   }
 
   getMemberByAuthUserId(authUserId: string): Member | undefined {
@@ -203,6 +298,14 @@ export class DataStore {
     });
   }
 
+  listStorybooksForBaby(babyId: string, actorMemberId: string): Storybook[] {
+    const baby = this.getBaby(babyId, actorMemberId);
+    if (!baby) throw new RlsViolationError("Cannot list storybooks for another family");
+    return this.listStorybooksForFamily(baby.familyId, actorMemberId).filter(
+      (b) => !b.babyId || b.babyId === babyId
+    );
+  }
+
   savePage(page: Page): void {
     this.pages.set(page.id, page);
   }
@@ -314,6 +417,21 @@ export class DataStore {
     }
     for (const [id, r] of this.emailPlusVpcRequests) {
       if (r.familyId === familyId) this.emailPlusVpcRequests.delete(id);
+    }
+    const babyIds = [...this.babies.values()]
+      .filter((b) => b.familyId === familyId)
+      .map((b) => b.id);
+    for (const [id, b] of this.babyPersonBonds) {
+      if (babyIds.includes(b.babyId)) this.babyPersonBonds.delete(id);
+    }
+    for (const [id, b] of this.babies) {
+      if (b.familyId === familyId) this.babies.delete(id);
+    }
+    for (const [id, c] of this.voiceClips) {
+      if (c.familyId === familyId) this.voiceClips.delete(id);
+    }
+    for (const [id, r] of this.voiceConsentReceipts) {
+      if (r.familyId === familyId) this.voiceConsentReceipts.delete(id);
     }
 
     this.subscriptions.delete(familyId);

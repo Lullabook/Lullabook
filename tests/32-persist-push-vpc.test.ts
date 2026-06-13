@@ -172,6 +172,7 @@ describe("32 — persist push_subscriptions + email_plus_vpc_requests", () => {
       email: "m@example.com",
       role: "member",
       selfPersonaId: null,
+      selectedBabyId: null,
       jurisdiction: "US",
     });
     ctx.store.pushSubscriptions.set("ps-g", {

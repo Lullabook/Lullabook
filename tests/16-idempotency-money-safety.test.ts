@@ -139,7 +139,7 @@ describe("16 — idempotency & money-safety", () => {
       ctx.subscriptions,
       ctx.classicCatalog,
       false,
-      10
+      null
     );
 
     const book = await strictStorybooks.generate(member.id, {

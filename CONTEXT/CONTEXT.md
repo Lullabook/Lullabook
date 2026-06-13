@@ -236,5 +236,30 @@ machine-facing wording.
 
 ---
 
-_Last updated during grill-with-docs session, 2026-06-13 (native iOS effort:
-Email-Plus VPC, Subscription gate line)._
+## v5 "Maya's World" revamp — incoming language (PRD v5)
+
+> Grilled 2026-06-13. These supersede the bedtime framing where they conflict, but
+> the **code rename has not happened yet** — the terms above still describe current
+> code. See `planning/prd-v5-maya-world-revamp.md`. Monetization/paywall is deferred.
+
+- **Household** — the account / billing / consent boundary. Reframes the old
+  [Family](#family)=account. Owns **one or more Babies**.
+- **Baby** — a starring child (reframes "Baby Persona"). A Household may have several.
+- **World** — a Baby's home surface; everything centered on that baby. One per Baby.
+- **Family (roster)** — the real people who love a Baby (reframes [Persona](#persona),
+  retired in UI). Each has a **relationship** + two nicknames (what the baby calls
+  them / what they call the baby) **per baby–person pair**, **photos** (likeness model
+  still per ADR-0001/0002), and **Voice clips**. Shared across a Household's babies by
+  default; a baby added as a "different family" gets its own roster.
+- **Character** — now **fictional-only** (no photos/voice); free. Real people live in
+  the Family roster, not here.
+- **Voice clip** — a real recorded audio line from a Family member, woven into stories
+  (incl. a **lullaby-ending weave**). Recorded only in v1 — **no voice cloning**.
+- **Video page** — premium: a page's illustration animated into a ~5-sec clip with the
+  page's narration over it (short books only).
+
+---
+
+_Last updated 2026-06-13: added the v5 "Maya's World" revamp language (Household,
+World, multi-Baby, Family-roster, Voice clip, Video page). Prior update same day:
+native iOS Email-Plus VPC + Subscription gate line._

@@ -105,19 +105,22 @@ interface WireGeneratedStory {
 
 /** Story Type shapes the narrative arc, not just the theme (CONTEXT.md). */
 function storyTypeInstructions(storyType: StoryType): string {
-  if (storyType === "bedtime") {
-    return [
-      "STORY TYPE: Bedtime.",
-      "Write a calming wind-down arc: gentle adventure early, settling rhythm in the middle,",
-      "and a soft landing at the end — the final pages ease the child toward sleep.",
-      "No cliffhangers, no peril, no exciting endings. End with rest, warmth, and safety.",
-    ].join(" ");
-  }
-  return [
-    "STORY TYPE: Learning.",
-    "Carry an explicit lesson, message, or early-numeracy/counting thread woven through the narrative.",
-    "Use gentle repetition so the concept lands. The lesson resolves clearly by the final page.",
-  ].join(" ");
+  const t = storyType === "learning" ? "lesson" : storyType;
+  const map: Record<string, string> = {
+    everyday:
+      "STORY TYPE: Everyday moment. A small, real slice of the child's day — familiar places, gentle rhythms, cozy details.",
+    milestone:
+      "STORY TYPE: Big milestone. Celebrate a first or special moment with warmth and pride; build toward a joyful reveal.",
+    adventure:
+      "STORY TYPE: Little adventure. A brave quest in a safe, whimsical world; mild stakes, happy resolution.",
+    lesson:
+      "STORY TYPE: Gentle lesson. Weave sharing, kindness, or big feelings into the plot; the lesson resolves clearly by the final page.",
+    bedtime:
+      "STORY TYPE: Bedtime calm. Calming wind-down arc ending in rest, warmth, and safety — no cliffhangers or peril.",
+    silly:
+      "STORY TYPE: Silly & giggly. Playful nonsense, sound effects, and happy absurdity; keep it age-appropriate and joyful.",
+  };
+  return map[t] ?? map.lesson!;
 }
 
 const SAFETY_CONSTRAINTS = [
@@ -165,10 +168,25 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
   async generateStory(input: {
     brief: string;
     personaNames: string[];
+    characterNames?: string[];
     pageCount: number;
     storyType: StoryType;
+    lullabyPhrase?: string;
   }): Promise<GeneratedStory> {
     const client = buildClient();
+    const castLine = [
+      input.personaNames.length ? `CAST (use these exact names): ${input.personaNames.join(", ")}.` : "",
+      input.characterNames?.length
+        ? `FICTIONAL CHARACTERS (use these exact names): ${input.characterNames.join(", ")}.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const lullabyLine = input.lullabyPhrase
+      ? `LULLABY WEAVE: The final page must naturally lead into this exact recorded phrase: "${input.lullabyPhrase}".`
+      : "";
+
     const message = await client.messages.create({
       model: STORY_MODEL,
       max_tokens: MAX_TOKENS,
@@ -186,10 +204,13 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
           role: "user",
           content: [
             storyTypeInstructions(input.storyType),
-            `CAST (use these exact names): ${input.personaNames.join(", ")}.`,
+            castLine,
+            lullabyLine,
             `PAGE COUNT: exactly ${input.pageCount} pages, indexes 0 through ${input.pageCount - 1}.`,
             `BRIEF: ${input.brief}`,
-          ].join("\n\n"),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
         },
       ],
       output_config: {
