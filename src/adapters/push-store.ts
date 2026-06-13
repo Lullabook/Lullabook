@@ -7,7 +7,7 @@ export class InMemoryPushSubscriptionStore implements PushSubscriptionStore {
   constructor(private readonly store: DataStore) {}
 
   async registerToken(memberId: string, expoPushToken: string): Promise<PushSubscription> {
-    for (const [id, sub] of this.store.pushSubscriptions) {
+    for (const [, sub] of this.store.pushSubscriptions) {
       if (sub.memberId === memberId && sub.expoPushToken === expoPushToken) {
         return sub;
       }

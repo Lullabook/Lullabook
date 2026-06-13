@@ -3,21 +3,22 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-13.md`** — the native iOS
-> effort was switched from a Fable one-shot to the normal workflow (Fable
-> unavailable, US restriction). It is now **PRD v3**
-> (`planning/prd-v3-native-ios.md`) broken into dependency-ordered, money-first
-> **issues `23`–`31`**, to be built by **Cursor Composer 2.5** (TDD). The web
-> productionization stays (105 tests). Authorized by **ADR-0018** (native Expo
-> rebuild, Apple IAP via RevenueCat, Email-Plus VPC). Start at
-> **`issues/23-native-auth-bearer-backend.md`** and follow the `Blocked by` chain;
-> issue `31` is HITL and ends by producing `INTEGRATION-FOR-OPUS.md` for **Opus**
-> to walk the human through Apple/RevenueCat/App Store Connect.
-> `docs/FABLE-NATIVE-IOS-ONESHOT-PROMPT.md` remains the full screen-inventory +
-> credential-table reference; `README.md` is the web orientation doc.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-persistence.md`** — the
+> native iOS app was **built** by Cursor (commit `c2750d9`, 116 tests; see
+> `SESSION-HANDOFF-2026-06-13-native-ios.md`). This planning session added **PRD v4**
+> (`planning/prd-v4-production-persistence.md`) → **issues `32`–`33`**: persist the
+> two tables the native work left in-memory (`push_subscriptions`,
+> `email_plus_vpc_requests`) with migration `003` + RLS + hard-delete + CI smoke,
+> and make Email-Plus VPC revoke withdraw consent. **Next: run `/part2` → it picks
+> issue `32`.** The 8 web shared-service bugs remain pending — see
+> `docs/ANTIGRAVITY-WEB-BUGFIX-PROMPT.md` (verify-then-fix, for Antigravity).
+> Earlier native plan: PRD v3 (`planning/prd-v3-native-ios.md`, issues `23`–`31`),
+> authorized by **ADR-0018**. `README.md` is the web orientation doc.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-13-persistence.md` — PRD v4 + issues 32–33 (persist push/VPC tables), global /part1+/part2 skills, Antigravity bug-fix prompt
+- `SESSION-HANDOFF-2026-06-13-native-ios.md` — Cursor BUILT the native iOS app (commit c2750d9, 116 tests); honest follow-ups (screens/migrations)
 - `SESSION-HANDOFF-2026-06-13.md` — native iOS one-shot → PRD v3 + issues 23–31 (Cursor), grill decisions, glossary updates
 - `SESSION-HANDOFF-2026-06-12_2.md` — native iOS planning, code review, ADR-0018, native one-shot prompt
 - `SESSION-HANDOFF-2026-06-12.md` — web one-shot COMPLETE: composition root, Inngest functions, actions/routes/webhooks, full UI, glue + new tests

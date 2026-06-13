@@ -154,6 +154,17 @@ describe("RealModerationAdapter", () => {
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("sexual");
   });
+
+  it("fails closed on a non-numeric moderation class score", async () => {
+    const { fetch } = fetchSequence([
+      { status: "success", moderation_classes: { available: "x", sexual: "0.9" } },
+    ]);
+    vi.stubGlobal("fetch", fetch);
+
+    const result = await new RealModerationAdapter().checkText("bad text");
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("invalid score");
+  });
 });
 
 describe("RealNotificationAdapter", () => {

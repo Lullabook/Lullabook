@@ -230,6 +230,10 @@ export class DataStore {
       [...this.members.values()].filter((m) => m.familyId === familyId).map((m) => m.id)
     );
 
+    const personaIds = [...this.personas.values()]
+      .filter((p) => p.familyId === familyId)
+      .map((p) => p.id);
+
     for (const [id, p] of this.pages) {
       if (bookIds.includes(p.storybookId)) this.pages.delete(id);
     }
@@ -273,7 +277,12 @@ export class DataStore {
       if (pending && memberIds.has(pending.memberId)) this.pendingBriefs.delete(key);
     }
     for (const [id, e] of this.moderationAudit) {
-      if (memberIds.has(e.resourceId) || bookIds.includes(e.resourceId)) {
+      const isMatch =
+        memberIds.has(e.resourceId) ||
+        bookIds.includes(e.resourceId) ||
+        personaIds.includes(e.resourceId) ||
+        [...memberIds].some((m) => e.resourceId.includes(m));
+      if (isMatch) {
         this.moderationAudit.delete(id);
       }
     }

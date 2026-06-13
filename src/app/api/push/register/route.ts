@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withBearerAuth, jsonOk, jsonError } from "@/lib/api-route";
+import { withBearerAuth, jsonOk } from "@/lib/api-route";
 import { InMemoryPushSubscriptionStore } from "@/adapters/push-store";
 
 export async function POST(request: Request): Promise<NextResponse> {

@@ -66,7 +66,7 @@ export class PersonaService {
     }
 
     for (const photo of input.photos) {
-      await this.childSafety.checkUpload(photo, `persona-upload-${uuid()}`);
+      await this.childSafety.checkUpload(photo, `persona-upload-${member.id}-${uuid()}`);
     }
 
     const preflight = runPreflightChecks(input.photos);

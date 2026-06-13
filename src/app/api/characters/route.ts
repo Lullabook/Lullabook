@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { withBearerAuth, jsonOk, jsonError } from "@/lib/api-route";
-import type { TraitQuestionnaire, TextStoryBrief } from "@/domain/types";
+import type { TraitQuestionnaire } from "@/domain/types";
 
 export async function POST(request: Request): Promise<NextResponse> {
   return withBearerAuth(request, async (ctx, member) => {

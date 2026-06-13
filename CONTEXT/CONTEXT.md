@@ -134,7 +134,11 @@ version-stamped [Consent receipt](#consent-receipt). The **"plus"** is a
 *delayed second confirmation email* with a revoke link sent after the first
 confirmation. It is one of the configurable per-[Jurisdiction](#jurisdiction)
 consent methods (ADR-0015), and **gates Baby Persona creation** wherever
-configured. Adult Persona still uses self + liveness; the
+configured. The consent request is retained as the audit record; the revoke link
+stays available (a Guardian may **withdraw** consent at any time, COPPA), and
+revoking clears the Family's `consent_verified` — blocking new Baby Persona
+creation and routing existing child data to the [Hard-delete](#hard-delete) /
+purge path (ADR-0007). Adult Persona still uses self + liveness; the
 [Character](#character) tier still uses the light attestation. See
 [ADR-0018](docs/adr/0018-native-ios-app-iap-and-email-plus-vpc.md).
 _Avoid_: "email verification" (that proves an inbox, not parental consent).

@@ -16,10 +16,24 @@ describe("12 — hard-delete & cancellation purge", () => {
     await ctx.blobs.put(`lora/${guardian.familyId}/weights.bin`, Buffer.from("lora"));
     await ctx.blobs.put(`books/${guardian.familyId}/${baby.id}.png`, Buffer.from("book"));
 
+    // Populate maps that were historically left behind
+    ctx.store.textStories.set("ts-1", { familyId: guardian.familyId } as any);
+    ctx.store.pendingBriefs.set("pb-1", { memberId: guardian.id } as any);
+    ctx.store.moderationAudit.set("ma-1", { resourceId: guardian.id } as any);
+    ctx.store.pushSubscriptions.set("ps-1", { memberId: guardian.id } as any);
+    ctx.store.emailPlusVpcRequests.set("ep-1", { familyId: guardian.familyId } as any);
+
     await ctx.hardDelete.hardDelete(guardian.id);
 
     expect(ctx.store.familyDataExists(guardian.familyId)).toBe(false);
     expect(ctx.blobs.size()).toBe(0);
+
+    // Verify everything was cleared
+    expect(ctx.store.textStories.size).toBe(0);
+    expect(ctx.store.pendingBriefs.size).toBe(0);
+    expect(ctx.store.moderationAudit.size).toBe(0);
+    expect(ctx.store.pushSubscriptions.size).toBe(0);
+    expect(ctx.store.emailPlusVpcRequests.size).toBe(0);
   });
 
   it("runs automatic purge after 30-day cancel window", async () => {
