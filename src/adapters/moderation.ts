@@ -130,3 +130,19 @@ export class RealModerationAdapter implements ModerationAdapter {
     return data.match === true;
   }
 }
+
+/**
+ * Permissive moderation for LOCAL DEVELOPMENT ONLY. Allows everything so the
+ * app is clickable without a Sightengine account. The composition root selects
+ * this only when SIGHTENGINE keys are absent AND NODE_ENV !== "production" —
+ * production keeps {@link RealModerationAdapter}, which fails closed (ADR-0010).
+ * Never wire this into a deployed build.
+ */
+export class PermissiveDevModeration implements ModerationAdapter {
+  async checkImage(_image: Buffer): Promise<ModerationResult> {
+    return { allowed: true };
+  }
+  async checkText(_text: string): Promise<ModerationResult> {
+    return { allowed: true };
+  }
+}

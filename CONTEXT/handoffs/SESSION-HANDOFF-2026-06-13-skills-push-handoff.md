@@ -22,7 +22,13 @@ N/A — skill docs only.
 
 - Skill files are **not** in the Lullabook git repo; they live under `~/.claude/skills/`.
   Re-sync to other machines manually or copy from this handoff's table.
-- **`push-handoff`** skill unchanged (`~/.claude/skills/push-handoff/SKILL.md`).
+- **`push-handoff`** updated: must merge to **`main`** and verify `origin/main` HEAD
+  (not just push a feature branch). Root cause of user seeing stale `6ec63a1`.
+
+## Main branch sync (2026-06-13)
+
+Merged `fix/web-shared-service-bugs` → `main` and pushed. **`origin/main` is now
+`a8b5f76`** (includes issues 32–33 + skill handoff doc).
 
 ## Next ready issue
 

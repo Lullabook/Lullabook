@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ActionResult } from "@/lib/actions";
 import { createPersonaAction, promoteCharacterAction } from "@/lib/actions";
@@ -27,10 +27,48 @@ export function PersonaForm({
   const [mode, setMode] = useState<"adult" | "baby">("adult");
   const [consented, setConsented] = useState(false);
 
+  // Native <input type="file" multiple> REPLACES its FileList every time the
+  // picker reopens, so users can't add photos one at a time. We keep our own
+  // accumulating list and mirror it back into the real input via DataTransfer
+  // so the server action still receives them under formData.getAll("photos").
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
+
+  useEffect(() => {
+    if (!photoInputRef.current) return;
+    const dt = new DataTransfer();
+    for (const file of photos) dt.items.add(file);
+    photoInputRef.current.files = dt.files;
+  }, [photos]);
+
+  function addPhotos(picked: FileList | null) {
+    if (!picked || picked.length === 0) return;
+    setPhotos((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}:${f.size}:${f.lastModified}`));
+      const merged = [...prev];
+      for (const file of Array.from(picked)) {
+        const key = `${file.name}:${file.size}:${file.lastModified}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          merged.push(file);
+        }
+      }
+      return merged;
+    });
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function submit(formData: FormData) {
     setError(null);
     if (!consented) {
       setError("Please confirm the consent statement first.");
+      return;
+    }
+    if (photos.length < 3) {
+      setError(`Please add at least 3 photos (you have ${photos.length}).`);
       return;
     }
     formData.set("mode", mode);
@@ -105,12 +143,40 @@ export function PersonaForm({
       )}
 
       <div className="field">
-        <label htmlFor="photos">Photos (at least 3)</label>
-        <input id="photos" name="photos" type="file" accept="image/*" multiple required />
+        <label htmlFor="photos">
+          Photos (at least 3){photos.length > 0 ? ` — ${photos.length} added` : ""}
+        </label>
+        <input
+          ref={photoInputRef}
+          id="photos"
+          name="photos"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => addPhotos(e.target.files)}
+        />
         <span className="hint">
-          Clear, well-lit photos of one person. We check each photo before
-          training and delete originals on hard-delete.
+          Clear, well-lit photos of one person. Pick a few at once, or keep
+          adding — they accumulate. We check each photo before training and
+          delete originals on hard-delete.
         </span>
+        {photos.length > 0 && (
+          <ul className="photo-previews">
+            {photos.map((file, i) => (
+              <li key={`${file.name}:${file.size}:${file.lastModified}`} className="photo-preview">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={URL.createObjectURL(file)} alt={file.name} />
+                <button
+                  type="button"
+                  aria-label={`Remove ${file.name}`}
+                  onClick={() => removePhoto(i)}
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {(mode === "adult" || characterId) && (

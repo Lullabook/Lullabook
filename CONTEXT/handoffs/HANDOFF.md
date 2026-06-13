@@ -3,12 +3,13 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-skills-push-handoff.md`** —
-> `/part1` + `/part2` skills now **require** `push-handoff` as the final step.
-> PRD v4 (issues 32–33) complete — see `SESSION-HANDOFF-2026-06-13-issue-33.md`.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-local-run-and-bugfixes.md`** —
+> first local run of the web app + 4 bug fixes. A large **Persona→"Family"/world
+> revamp** is being planned next via `/part1` (not yet implemented).
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-13-local-run-and-bugfixes.md` — local-dev setup + 4 bug fixes (FK-ordered sync, dev moderation, multi-photo upload, auth middleware); revamp queued for `/part1`
 - `SESSION-HANDOFF-2026-06-13-skills-push-handoff.md` — `/part1` + `/part2` require mandatory `push-handoff` at end
 - `SESSION-HANDOFF-2026-06-13-issue-33.md` — issue 33 DONE: VPC revoke withdraws consent; PRD v4 complete
 - `SESSION-HANDOFF-2026-06-13-issue-32.md` — issue 32 DONE: migration 003, Supabase push/VPC persist, CI smoke

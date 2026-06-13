@@ -453,15 +453,18 @@ export class SupabaseDataStore extends DataStore {
       if (error) throw new Error(`sync delete ${table} failed: ${error.message}`);
     };
 
-    await Promise.all([
-      upsert(
+    // Upserts run sequentially in FK-dependency order (parents before
+    // children) — Postgres enforces the foreign keys the in-memory fakes do
+    // not, so a concurrent Promise.all races child rows ahead of their parent.
+    const upsertOps: Array<() => Promise<void>> = [
+      () => upsert(
         "families",
         [...this.families.values()].map((f) => ({
           id: f.id,
           created_at: f.createdAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "members",
         [...this.members.values()].map((m) => ({
           id: m.id,
@@ -474,7 +477,7 @@ export class SupabaseDataStore extends DataStore {
           created_at: m.createdAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "personas",
         [...this.personas.values()].map((p) => ({
           id: p.id,
@@ -489,7 +492,7 @@ export class SupabaseDataStore extends DataStore {
           created_at: p.createdAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "characters",
         [...this.characters.values()].map((c) => ({
           id: c.id,
@@ -501,7 +504,7 @@ export class SupabaseDataStore extends DataStore {
           created_at: c.createdAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "subscriptions",
         [...this.subscriptions.values()].map((s) => ({
           family_id: s.familyId,
@@ -512,7 +515,7 @@ export class SupabaseDataStore extends DataStore {
         })),
         "family_id"
       ),
-      upsert(
+      () => upsert(
         "consent_receipts",
         [...this.consentReceipts.values()].map((r) => ({
           id: r.id,
@@ -523,7 +526,7 @@ export class SupabaseDataStore extends DataStore {
           consented_at: r.consentedAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "light_consent_receipts",
         [...this.lightConsentReceipts.values()].map((r) => ({
           id: r.id,
@@ -536,7 +539,7 @@ export class SupabaseDataStore extends DataStore {
           consented_at: r.consentedAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "storybooks",
         [...this.storybooks.values()].map((b) => ({
           id: b.id,
@@ -552,7 +555,7 @@ export class SupabaseDataStore extends DataStore {
           finalized_at: b.finalizedAt?.toISOString() ?? null,
         }))
       ),
-      upsert(
+      () => upsert(
         "pages",
         [...this.pages.values()].map((p) => ({
           id: p.id,
@@ -565,7 +568,7 @@ export class SupabaseDataStore extends DataStore {
           persona_count: p.personaCount,
         }))
       ),
-      upsert(
+      () => upsert(
         "page_candidates",
         [...this.pageCandidates.values()].map((c) => ({
           id: c.id,
@@ -576,7 +579,7 @@ export class SupabaseDataStore extends DataStore {
           created_at: c.createdAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "persisted_generations",
         [...this.persistedGenerations.values()].map((g) => ({
           storybook_id: g.storybookId,
@@ -585,7 +588,7 @@ export class SupabaseDataStore extends DataStore {
         })),
         "storybook_id"
       ),
-      upsert(
+      () => upsert(
         "text_stories",
         [...this.textStories.values()].map((s) => ({
           id: s.id,
@@ -596,7 +599,7 @@ export class SupabaseDataStore extends DataStore {
           created_at: s.createdAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "share_links",
         [...this.shareLinks.values()].map((l) => ({
           id: l.id,
@@ -608,7 +611,7 @@ export class SupabaseDataStore extends DataStore {
           created_at: l.createdAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "moderation_audit",
         [...this.moderationAudit.values()].map((e) => ({
           id: e.id,
@@ -619,7 +622,7 @@ export class SupabaseDataStore extends DataStore {
           created_at: e.createdAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "invites",
         [...this.invites.values()].map((i) => ({
           id: i.id,
@@ -628,7 +631,7 @@ export class SupabaseDataStore extends DataStore {
           invited_by: i.invitedBy,
         }))
       ),
-      upsert(
+      () => upsert(
         "pending_briefs",
         [...this.pendingBriefs.entries()].map(([key, p]) => ({
           key,
@@ -639,7 +642,7 @@ export class SupabaseDataStore extends DataStore {
         })),
         "key"
       ),
-      upsert(
+      () => upsert(
         "purge_schedule",
         [...this.purgeScheduled.values()].map((p) => ({
           family_id: p.familyId,
@@ -647,12 +650,12 @@ export class SupabaseDataStore extends DataStore {
         })),
         "family_id"
       ),
-      upsert(
+      () => upsert(
         "banned_accounts",
         [...this.bannedAccounts].map((accountId) => ({ account_id: accountId })),
         "account_id"
       ),
-      upsert(
+      () => upsert(
         "push_subscriptions",
         [...this.pushSubscriptions.values()].map((s) => ({
           id: s.id,
@@ -661,7 +664,7 @@ export class SupabaseDataStore extends DataStore {
           created_at: s.createdAt.toISOString(),
         }))
       ),
-      upsert(
+      () => upsert(
         "email_plus_vpc_requests",
         [...this.emailPlusVpcRequests.values()].map((r) => ({
           id: r.id,
@@ -675,32 +678,35 @@ export class SupabaseDataStore extends DataStore {
           confirmed_at: r.confirmedAt?.toISOString() ?? null,
         }))
       ),
-    ]);
+    ];
+    for (const op of upsertOps) await op();
 
-    await Promise.all([
-      deleteMissing("page_candidates", new Set(this.pageCandidates.keys())),
-      deleteMissing("pages", new Set(this.pages.keys())),
-      deleteMissing(
+    // Deletes run sequentially child-first for the same reason.
+    const deleteOps: Array<() => Promise<void>> = [
+      () => deleteMissing("page_candidates", new Set(this.pageCandidates.keys())),
+      () => deleteMissing("pages", new Set(this.pages.keys())),
+      () => deleteMissing(
         "persisted_generations",
         new Set(this.persistedGenerations.keys()),
         "storybook_id"
       ),
-      deleteMissing("share_links", new Set(this.shareLinks.keys())),
-      deleteMissing("text_stories", new Set(this.textStories.keys())),
-      deleteMissing("storybooks", new Set(this.storybooks.keys())),
-      deleteMissing("light_consent_receipts", new Set(this.lightConsentReceipts.keys())),
-      deleteMissing("consent_receipts", new Set(this.consentReceipts.keys())),
-      deleteMissing("invites", new Set(this.invites.keys())),
-      deleteMissing("pending_briefs", new Set(this.pendingBriefs.keys()), "key"),
-      deleteMissing("purge_schedule", new Set(this.purgeScheduled.keys()), "family_id"),
-      deleteMissing("subscriptions", new Set(this.subscriptions.keys()), "family_id"),
-      deleteMissing("characters", new Set(this.characters.keys())),
-      deleteMissing("personas", new Set(this.personas.keys())),
-      deleteMissing("members", new Set(this.members.keys())),
-      deleteMissing("families", new Set(this.families.keys())),
-      deleteMissing("moderation_audit", new Set(this.moderationAudit.keys())),
-      deleteMissing("push_subscriptions", new Set(this.pushSubscriptions.keys())),
-      deleteMissing("email_plus_vpc_requests", new Set(this.emailPlusVpcRequests.keys())),
-    ]);
+      () => deleteMissing("share_links", new Set(this.shareLinks.keys())),
+      () => deleteMissing("text_stories", new Set(this.textStories.keys())),
+      () => deleteMissing("storybooks", new Set(this.storybooks.keys())),
+      () => deleteMissing("light_consent_receipts", new Set(this.lightConsentReceipts.keys())),
+      () => deleteMissing("consent_receipts", new Set(this.consentReceipts.keys())),
+      () => deleteMissing("invites", new Set(this.invites.keys())),
+      () => deleteMissing("pending_briefs", new Set(this.pendingBriefs.keys()), "key"),
+      () => deleteMissing("purge_schedule", new Set(this.purgeScheduled.keys()), "family_id"),
+      () => deleteMissing("subscriptions", new Set(this.subscriptions.keys()), "family_id"),
+      () => deleteMissing("characters", new Set(this.characters.keys())),
+      () => deleteMissing("personas", new Set(this.personas.keys())),
+      () => deleteMissing("members", new Set(this.members.keys())),
+      () => deleteMissing("families", new Set(this.families.keys())),
+      () => deleteMissing("moderation_audit", new Set(this.moderationAudit.keys())),
+      () => deleteMissing("push_subscriptions", new Set(this.pushSubscriptions.keys())),
+      () => deleteMissing("email_plus_vpc_requests", new Set(this.emailPlusVpcRequests.keys())),
+    ];
+    for (const op of deleteOps) await op();
   }
 }

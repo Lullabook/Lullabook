@@ -5,7 +5,7 @@ import { optionalEnv } from "@/adapters/env";
 import { RealFalAdapter } from "@/adapters/fal";
 import { InngestWorkflowAdapter } from "@/adapters/inngest";
 import { RekognitionLivenessAdapter } from "@/adapters/liveness";
-import { RealModerationAdapter } from "@/adapters/moderation";
+import { PermissiveDevModeration, RealModerationAdapter } from "@/adapters/moderation";
 import { RealNotificationAdapter } from "@/adapters/notifications";
 import { PdfLibAdapter } from "@/adapters/pdf";
 import { RealStripeAdapter } from "@/adapters/stripe";
@@ -40,7 +40,13 @@ export function createRequestContext() {
   const anthropic = new RealAnthropicAdapter();
   const classicCatalog = new CuratedClassicCatalog();
   const fal = new RealFalAdapter();
-  const moderation = new RealModerationAdapter();
+  // ADR-0010: real classifiers in production (fail closed). Locally, when no
+  // Sightengine account is configured, fall back to a permissive dev adapter
+  // so the app is clickable — never in production.
+  const moderation =
+    optionalEnv("SIGHTENGINE_API_USER") || process.env.NODE_ENV === "production"
+      ? new RealModerationAdapter()
+      : new PermissiveDevModeration();
   const liveness = new RekognitionLivenessAdapter();
   const blobs = new R2BlobStore();
   const workflow = new InngestWorkflowAdapter();
