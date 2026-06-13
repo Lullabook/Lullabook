@@ -88,12 +88,31 @@ export class EmailPlusVpcService {
   revokeConsent(token: string): void {
     const request = [...this.store.emailPlusVpcRequests.values()].find((r) => r.token === token);
     if (!request) throw new Error("Invalid revoke link");
+    if (request.status === "revoked") {
+      throw new Error("Consent already revoked");
+    }
+    if (request.status !== "confirmed") {
+      throw new Error("Consent not yet confirmed");
+    }
+
     request.status = "revoked";
     this.store.emailPlusVpcRequests.set(request.id, request);
     for (const [id, receipt] of this.store.consentReceipts) {
       if (receipt.familyId === request.familyId) {
         this.store.consentReceipts.delete(id);
       }
+    }
+
+    const hasBabyPersonas = [...this.store.personas.values()].some(
+      (p) => p.familyId === request.familyId && p.kind === "baby"
+    );
+    if (hasBabyPersonas) {
+      const purgeAt = new Date();
+      purgeAt.setDate(purgeAt.getDate() + 30);
+      this.store.purgeScheduled.set(request.familyId, {
+        familyId: request.familyId,
+        purgeAt,
+      });
     }
   }
 

@@ -15,6 +15,8 @@ import type {
   Storybook,
   Subscription,
   TextStory,
+  PushSubscription,
+  EmailPlusVpcRequest,
 } from "@/domain/types";
 
 /**
@@ -133,6 +135,7 @@ export class SupabaseDataStore extends DataStore {
       pendingBriefsRes,
       purgeRows,
       banned,
+      emailPlusVpcRequests,
     ] = await Promise.all([
       this.client.from("families").select("*").eq("id", familyId),
       q("members"),
@@ -150,9 +153,25 @@ export class SupabaseDataStore extends DataStore {
         .eq("members.family_id", familyId),
       q("purge_schedule"),
       this.client.from("banned_accounts").select("account_id"),
+      q("email_plus_vpc_requests"),
     ]);
 
-    for (const res of [families, members, personas, characters, subscriptions, consentReceipts, lightReceipts, storybooks, textStories, invites, pendingBriefsRes, purgeRows, banned]) {
+    for (const res of [
+      families,
+      members,
+      personas,
+      characters,
+      subscriptions,
+      consentReceipts,
+      lightReceipts,
+      storybooks,
+      textStories,
+      invites,
+      pendingBriefsRes,
+      purgeRows,
+      banned,
+      emailPlusVpcRequests,
+    ]) {
       if (res.error) throw new Error(`hydrateFamily failed: ${res.error.message}`);
     }
 
@@ -282,6 +301,40 @@ export class SupabaseDataStore extends DataStore {
     for (const r of (banned.data ?? []) as Row[]) {
       this.bannedAccounts.add(r.account_id);
       this.snap("banned_accounts", r.account_id);
+    }
+    for (const r of emailPlusVpcRequests.data ?? []) {
+      const request: EmailPlusVpcRequest = {
+        id: r.id,
+        familyId: r.family_id,
+        memberId: r.member_id,
+        email: r.email,
+        status: r.status,
+        token: r.token,
+        noticeVersion: r.notice_version,
+        requestedAt: new Date(r.requested_at),
+        confirmedAt: r.confirmed_at ? new Date(r.confirmed_at) : undefined,
+      };
+      this.emailPlusVpcRequests.set(request.id, request);
+      this.snap("email_plus_vpc_requests", request.id);
+    }
+
+    const memberIds = (members.data ?? []).map((r) => r.id as string);
+    if (memberIds.length > 0) {
+      const pushRes = await this.client
+        .from("push_subscriptions")
+        .select("*")
+        .in("member_id", memberIds);
+      if (pushRes.error) throw new Error(`hydrateFamily failed: ${pushRes.error.message}`);
+      for (const r of (pushRes.data ?? []) as Row[]) {
+        const sub: PushSubscription = {
+          id: r.id,
+          memberId: r.member_id,
+          expoPushToken: r.expo_push_token,
+          createdAt: new Date(r.created_at),
+        };
+        this.pushSubscriptions.set(sub.id, sub);
+        this.snap("push_subscriptions", sub.id);
+      }
     }
 
     const bookIds = (storybooks.data ?? []).map((r) => r.id as string);
@@ -599,6 +652,29 @@ export class SupabaseDataStore extends DataStore {
         [...this.bannedAccounts].map((accountId) => ({ account_id: accountId })),
         "account_id"
       ),
+      upsert(
+        "push_subscriptions",
+        [...this.pushSubscriptions.values()].map((s) => ({
+          id: s.id,
+          member_id: s.memberId,
+          expo_push_token: s.expoPushToken,
+          created_at: s.createdAt.toISOString(),
+        }))
+      ),
+      upsert(
+        "email_plus_vpc_requests",
+        [...this.emailPlusVpcRequests.values()].map((r) => ({
+          id: r.id,
+          family_id: r.familyId,
+          member_id: r.memberId,
+          email: r.email,
+          status: r.status,
+          token: r.token,
+          notice_version: r.noticeVersion,
+          requested_at: r.requestedAt.toISOString(),
+          confirmed_at: r.confirmedAt?.toISOString() ?? null,
+        }))
+      ),
     ]);
 
     await Promise.all([
@@ -623,6 +699,8 @@ export class SupabaseDataStore extends DataStore {
       deleteMissing("members", new Set(this.members.keys())),
       deleteMissing("families", new Set(this.families.keys())),
       deleteMissing("moderation_audit", new Set(this.moderationAudit.keys())),
+      deleteMissing("push_subscriptions", new Set(this.pushSubscriptions.keys())),
+      deleteMissing("email_plus_vpc_requests", new Set(this.emailPlusVpcRequests.keys())),
     ]);
   }
 }
