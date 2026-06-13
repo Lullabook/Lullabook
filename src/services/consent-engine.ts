@@ -31,6 +31,15 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     residencyRegion: "us-east-1",
     enabled: true,
   },
+  US_IOS: {
+    code: "US_IOS",
+    childAgeThreshold: 13,
+    consentMethod: "email_plus",
+    characterConsentMethod: "light_attestation",
+    noticeVersion: "us-coppa-v1",
+    residencyRegion: "us-east-1",
+    enabled: true,
+  },
   IN: {
     code: "IN",
     childAgeThreshold: 18,

@@ -415,7 +415,8 @@ export class StorybookService {
 
   private async finalizeStorybookStatus(storybookId: string): Promise<void> {
     const storybook = this.store.storybooks.get(storybookId);
-    if (!storybook || storybook.status !== "generating") return;
+    if (!storybook) return;
+    if (storybook.status !== "generating" && storybook.status !== "failed") return;
 
     const pages = this.store.getPagesForStorybook(storybookId);
     const readyCount = pages.filter((p) => p.generationStatus === "ready").length;
@@ -480,12 +481,13 @@ export class StorybookService {
     this.store.savePageCandidate(candidate);
   }
 
-  selectCandidate(memberId: string, candidateId: string): void {
+  async selectCandidate(memberId: string, candidateId: string): Promise<void> {
     const candidate = this.store.pageCandidates.get(candidateId);
     if (!candidate) throw new Error("Candidate not found");
     const page = this.store.pages.get(candidate.pageId);
     if (!page) throw new Error("Page not found");
-    this.store.getStorybook(page.storybookId, memberId);
+    const book = this.store.getStorybook(page.storybookId, memberId);
+    if (!book) throw new Error("Storybook not found");
 
     for (const c of this.store.getCandidatesForPage(candidate.pageId)) {
       c.selected = c.id === candidateId;
@@ -493,7 +495,14 @@ export class StorybookService {
     }
 
     if (candidate.kind === "image") {
-      page.illustrationUrl = candidate.content;
+      const res = await fetch(candidate.content);
+      if (!res.ok) throw new Error("Failed to fetch illustration candidate");
+      const bytes = Buffer.from(await res.arrayBuffer());
+      await this.childSafety.checkUpload(bytes, `candidate-${candidateId}`);
+      const blobKey = `${book.id}/pages/${page.id}/selected-${candidateId}.png`;
+      await this.blobs.put(blobKey, bytes);
+      page.illustrationBlobKey = blobKey;
+      page.illustrationUrl = null;
     } else {
       page.text = candidate.content;
     }

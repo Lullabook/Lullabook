@@ -26,6 +26,17 @@ export class SubscriptionService {
     });
   }
 
+  handleRevenueCatActivated(familyId: string, revenueCatSubscriptionId: string) {
+    const existing = this.store.getSubscription(familyId);
+    this.store.saveSubscription({
+      familyId,
+      status: "active",
+      stripeCustomerId: existing?.stripeCustomerId ?? null,
+      stripeSubscriptionId: existing?.stripeSubscriptionId ?? revenueCatSubscriptionId,
+      updatedAt: new Date(),
+    });
+  }
+
   cancel(familyId: string) {
     const sub = this.store.getSubscription(familyId);
     if (!sub?.stripeSubscriptionId) throw new Error("No subscription");

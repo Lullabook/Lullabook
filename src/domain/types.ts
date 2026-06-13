@@ -188,7 +188,26 @@ export interface PendingBrief {
   submittedAt: Date;
 }
 
-export type ConsentMethod = "payment_vpc" | "signed_form" | "otp";
+export interface PushSubscription {
+  id: string;
+  memberId: string;
+  expoPushToken: string;
+  createdAt: Date;
+}
+
+export interface EmailPlusVpcRequest {
+  id: string;
+  familyId: string;
+  memberId: string;
+  email: string;
+  status: "requested" | "link_sent" | "confirmed" | "revoked";
+  token: string;
+  noticeVersion: string;
+  requestedAt: Date;
+  confirmedAt?: Date;
+}
+
+export type ConsentMethod = "payment_vpc" | "signed_form" | "otp" | "email_plus";
 
 export type CharacterConsentMethod = "light_attestation" | ConsentMethod;
 

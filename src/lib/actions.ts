@@ -185,6 +185,7 @@ export async function promoteCharacterAction(
         memberId: member.id,
         displayName: character.displayName,
         characterId,
+        kind: String(formData.get("kind") ?? "baby") as "baby" | "adult",
         photoKeys,
         selfieKey,
       },
@@ -308,7 +309,7 @@ export async function selectCandidateAction(
 ): Promise<ActionResult> {
   const { ctx, member } = await requireAuthedContext();
   try {
-    ctx.storybooks.selectCandidate(member.id, candidateId);
+    await ctx.storybooks.selectCandidate(member.id, candidateId);
     await ctx.persist();
     revalidatePath(`/storybooks/${storybookId}`);
     return { ok: true, data: undefined };

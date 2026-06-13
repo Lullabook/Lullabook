@@ -15,6 +15,8 @@ import type {
   Storybook,
   Subscription,
   TextStory,
+  PushSubscription,
+  EmailPlusVpcRequest,
 } from "@/domain/types";
 
 export class DataStore {
@@ -36,6 +38,8 @@ export class DataStore {
   purgeScheduled = new Map<string, { familyId: string; purgeAt: Date }>();
   persistedGenerations = new Map<string, PersistedGeneration>();
   textStories = new Map<string, TextStory>();
+  pushSubscriptions = new Map<string, PushSubscription>();
+  emailPlusVpcRequests = new Map<string, EmailPlusVpcRequest>();
 
   createFamily(): Family {
     const family: Family = { id: uuid(), createdAt: new Date() };
@@ -222,6 +226,9 @@ export class DataStore {
     const bookIds = [...this.storybooks.values()]
       .filter((b) => b.familyId === familyId)
       .map((b) => b.id);
+    const memberIds = new Set(
+      [...this.members.values()].filter((m) => m.familyId === familyId).map((m) => m.id)
+    );
 
     for (const [id, p] of this.pages) {
       if (bookIds.includes(p.storybookId)) this.pages.delete(id);
@@ -257,6 +264,24 @@ export class DataStore {
     }
     for (const [id, i] of this.invites) {
       if (i.familyId === familyId) this.invites.delete(id);
+    }
+    for (const [id, s] of this.textStories) {
+      if (s.familyId === familyId) this.textStories.delete(id);
+    }
+    for (const [key] of this.pendingBriefs) {
+      const pending = this.pendingBriefs.get(key);
+      if (pending && memberIds.has(pending.memberId)) this.pendingBriefs.delete(key);
+    }
+    for (const [id, e] of this.moderationAudit) {
+      if (memberIds.has(e.resourceId) || bookIds.includes(e.resourceId)) {
+        this.moderationAudit.delete(id);
+      }
+    }
+    for (const [id, p] of this.pushSubscriptions) {
+      if (memberIds.has(p.memberId)) this.pushSubscriptions.delete(id);
+    }
+    for (const [id, r] of this.emailPlusVpcRequests) {
+      if (r.familyId === familyId) this.emailPlusVpcRequests.delete(id);
     }
 
     this.subscriptions.delete(familyId);

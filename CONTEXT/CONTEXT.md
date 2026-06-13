@@ -122,6 +122,37 @@ consented, when, and to which version of the consent notice — captured before 
 Baby Persona is created. See
 [ADR-0008](docs/adr/0008-verifiable-parental-consent.md).
 
+## Email-Plus VPC
+A **payment-independent** Verifiable Parental Consent method (`consentMethod =
+email_plus`), required on the **iOS** surface because Apple IAP cannot prove the
+payer's identity, so the web "payment = consent" path (ADR-0008) does not hold
+there. The flow: the Guardian enters their email and attests guardianship → the
+backend emails a unique consent link stamped with the current notice version →
+the Guardian opens it, sees exactly what is collected (baby photos → biometric
+LoRA) and confirms → the [Family](#family) is flagged `consent_verified` with a
+version-stamped [Consent receipt](#consent-receipt). The **"plus"** is a
+*delayed second confirmation email* with a revoke link sent after the first
+confirmation. It is one of the configurable per-[Jurisdiction](#jurisdiction)
+consent methods (ADR-0015), and **gates Baby Persona creation** wherever
+configured. Adult Persona still uses self + liveness; the
+[Character](#character) tier still uses the light attestation. See
+[ADR-0018](docs/adr/0018-native-ios-app-iap-and-email-plus-vpc.md).
+_Avoid_: "email verification" (that proves an inbox, not parental consent).
+
+## Subscription
+The paid unlock. A [Family](#family) is `active` or `inactive`; either payment
+rail flips the same state — **Stripe** on web, **Apple IAP via RevenueCat** on
+iOS (ADR-0018). The **gate line is illustration + Personas**: text-only Stories
+from a [Character](#character) are **always free** (the acquisition hook); an
+active Subscription unlocks **everything else** — promoting a Character into a
+[Persona](#persona), illustrated [Storybooks](#storybook), multi-Persona Scenes,
+[Personalized Classics](#personalized-classic), [Share links](#share-link), and
+[Export](#export). Persona count stays the cost lever (ADR-0009); Storybooks are
+unlimited under fair use. See
+[ADR-0009](docs/adr/0009-subscription-monetization.md),
+[ADR-0016](docs/adr/0016-character-tier-two-tier-consent.md).
+_Avoid_: "premium", "pro" (no named tiers in v1 — it is a single `active` state).
+
 ## Family
 The shared container that owns the Persona roster and is the unit of data
 ownership and the **COPPA consent boundary**. Has one or more
@@ -201,4 +232,5 @@ machine-facing wording.
 
 ---
 
-_Last updated during grill-with-docs session, 2026-06-09._
+_Last updated during grill-with-docs session, 2026-06-13 (native iOS effort:
+Email-Plus VPC, Subscription gate line)._
