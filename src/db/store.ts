@@ -200,6 +200,16 @@ export class DataStore {
     this.characters.set(character.id, character);
   }
 
+  deleteCharacter(id: string): void {
+    this.characters.delete(id);
+  }
+
+  deleteLightConsentReceiptsForCharacter(characterId: string): void {
+    for (const [id, r] of this.lightConsentReceipts) {
+      if (r.characterId === characterId) this.lightConsentReceipts.delete(id);
+    }
+  }
+
   saveTextStory(story: TextStory): void {
     this.textStories.set(story.id, story);
   }

@@ -49,7 +49,7 @@ export function QuestionnaireForm() {
         !isFictional && attested ? ATTESTATION_TEXT : undefined
       );
       if (!res.ok) return setError(res.error);
-      router.push("/stories/new");
+      router.push("/characters");
     });
   }
 

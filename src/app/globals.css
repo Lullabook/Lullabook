@@ -1071,6 +1071,22 @@ table.plain th {
   border: 1px solid var(--v2-border);
 }
 
+.v2-btn--danger {
+  background: linear-gradient(135deg, #d9647a, #b23a48);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(178, 58, 72, 0.28);
+}
+
+.v2-btn--danger-ghost {
+  background: var(--v2-surface);
+  color: #b23a48;
+  border: 1px solid #eccdd2;
+}
+
+.v2-btn--danger-ghost:hover {
+  background: #fdf1f3;
+}
+
 .v2-hero {
   position: relative;
   border-radius: 30px;
@@ -1351,6 +1367,184 @@ table.plain th {
   display: grid;
   gap: 18px;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+
+/* Warm-themed form controls, scoped to .v2-form so legacy pages are
+   untouched. Lets the shared QuestionnaireForm / PersonaForm render in the
+   v2 "Maya's World" look instead of the old dark theme. */
+.v2-form .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.v2-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.v2-form label,
+.v2-form legend {
+  font-family: var(--v2-font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--v2-text);
+}
+
+.v2-form input[type="text"],
+.v2-form input[type="file"],
+.v2-form input:not([type]) {
+  width: 100%;
+  font-family: var(--v2-font-body);
+  font-size: 1rem;
+  color: var(--v2-text);
+  background: var(--v2-bg);
+  border: 1px solid var(--v2-border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+}
+
+.v2-form input[type="text"]:focus,
+.v2-form input:not([type]):focus {
+  outline: none;
+  border-color: var(--v2-purple-light);
+  box-shadow: 0 0 0 3px rgba(139, 109, 240, 0.14);
+}
+
+.v2-form .hint {
+  font-size: 0.82rem;
+  color: var(--v2-text-subtle);
+}
+
+.v2-form fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.v2-form .chips {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.v2-form .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--v2-radius-pill);
+  border: 1.5px solid var(--v2-border);
+  background: var(--v2-surface);
+  color: var(--v2-text);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.v2-form .chip:has(input:checked) {
+  border-color: var(--v2-purple-light);
+  background: var(--v2-purple-tint);
+  color: var(--v2-purple);
+}
+
+.v2-form .alert {
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-size: 0.92rem;
+  border: 1px solid var(--v2-border);
+  background: var(--v2-surface-warm);
+  color: var(--v2-text-muted);
+}
+
+.v2-form .alert-error {
+  background: #fdf1f3;
+  border-color: #eccdd2;
+  color: #b23a48;
+}
+
+.v2-form .alert-warning {
+  background: var(--v2-amber-tint);
+  border-color: #f0d9ad;
+  color: #9a6b1e;
+}
+
+.v2-form .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border-radius: var(--v2-radius-pill);
+  border: none;
+  font-family: var(--v2-font-body);
+  font-weight: 800;
+  font-size: 0.98rem;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.v2-form .btn-primary {
+  background: linear-gradient(135deg, var(--v2-purple-light), var(--v2-purple));
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(106, 85, 201, 0.3);
+}
+
+.v2-form .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.v2-form .photo-previews {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+}
+
+.v2-form .photo-preview {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--v2-border);
+}
+
+.v2-form .photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.v2-form .photo-preview button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(46, 36, 56, 0.72);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.v2-notice {
+  border-radius: 16px;
+  padding: 14px 16px;
+  font-size: 0.92rem;
+  background: var(--v2-amber-tint);
+  border: 1px solid #f0d9ad;
+  color: #9a6b1e;
 }
 
 .v2-empty {

@@ -537,19 +537,23 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                         </div>
                       ))
                     )}
-                    <button
-                      type="button"
-                      className="v2-btn"
+                    <span
                       style={{
                         alignSelf: "flex-start",
-                        background: "#FAF4E6",
-                        color: "#2A2452",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        background: "rgba(255,255,255,0.1)",
+                        border: "1px dashed rgba(255,255,255,0.3)",
+                        color: "#C9BDE8",
                         padding: "11px 18px",
+                        borderRadius: 999,
                         fontSize: "0.9rem",
+                        fontWeight: 800,
                       }}
                     >
-                      🔴 Record a new message
-                    </button>
+                      🔴 Record a new message · coming soon
+                    </span>
                   </div>
                 </div>
 

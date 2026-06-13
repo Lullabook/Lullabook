@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import type { Member } from "@/domain/types";
 import { createRequestContext, type RequestContext } from "@/lib/context";
@@ -13,8 +14,13 @@ export interface AuthedContext {
  * request context. First sign-in has no Member row yet — onboarding creates
  * the Family + Guardian (jurisdiction comes from the signup form metadata,
  * defaulting to US).
+ *
+ * Wrapped in React `cache()` so the layout and the page in a single render
+ * share ONE auth round-trip + ONE family hydration instead of each doing the
+ * full Supabase fetch. This roughly halves server work (and perceived load
+ * time) on every authenticated navigation.
  */
-export async function getAuthedContext(): Promise<AuthedContext | null> {
+export const getAuthedContext = cache(async function (): Promise<AuthedContext | null> {
   const supabase = await createAuthClient();
   const {
     data: { user },
@@ -32,7 +38,7 @@ export async function getAuthedContext(): Promise<AuthedContext | null> {
     await ctx.persist();
   }
   return { ctx, member };
-}
+});
 
 /** Page/route guard: redirect anonymous visitors to sign-in. */
 export async function requireAuthedContext(): Promise<AuthedContext> {
