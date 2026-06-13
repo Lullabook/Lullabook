@@ -10,6 +10,9 @@ export default async function CharactersPage() {
   const { ctx, member } = await requireAuthedContext();
   const baby = ctx.babies.ensureDefaultBaby(member.id);
   const characters = ctx.store.getCharactersByFamily(member.familyId, member.id);
+  const familyBooks = ctx.store.listStorybooksForFamily(member.familyId, member.id);
+  const storyCountFor = (characterId: string) =>
+    familyBooks.filter((b) => b.brief.starringCharacterIds?.includes(characterId)).length;
 
   return (
     <div className="v2-stack" style={{ gap: 22 }}>
@@ -54,14 +57,13 @@ export default async function CharactersPage() {
         <div className="v2-card-grid">
           {characters.map((c, i) => {
             const q = c.questionnaire;
-            const tags = [
-              ...(q.favoriteAnimals ?? []).slice(0, 1),
-              ...(q.topics ?? []).slice(0, 1),
-            ].filter(Boolean);
+            const tags = (q.topics ?? []).slice(0, 3).filter(Boolean);
             const trait =
+              c.description ||
               q.nickname ||
               (q.favoriteToys?.length ? `Loves ${q.favoriteToys[0]}` : null) ||
-              (q.isFictional ? "A made-up friend in their world" : "Someone they love");
+              "A made-up friend in their world";
+            const storyCount = storyCountFor(c.id);
 
             return (
               <div key={c.id} className="v2-card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -94,7 +96,9 @@ export default async function CharactersPage() {
                       {c.displayName}
                     </h3>
                     <span style={{ color: "#9A8A78", fontSize: "0.82rem", fontWeight: 700 }}>
-                      {q.isFictional ? "Made-up friend" : "Real child"}
+                      {storyCount > 0
+                        ? `In ${storyCount} stor${storyCount === 1 ? "y" : "ies"}`
+                        : "Made-up friend"}
                       {c.promotedPersonaId && " · upgraded to Persona"}
                     </span>
                   </div>
@@ -133,10 +137,10 @@ export default async function CharactersPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <Link
                     className="v2-btn v2-btn--ghost-surface"
-                    href="/storybooks/new"
+                    href={`/characters/${c.id}/edit`}
                     style={{ width: "100%", justifyContent: "center", padding: 10, fontSize: "0.88rem" }}
                   >
-                    ✨ Write a story
+                    Edit character →
                   </Link>
                   <DeleteCharacterButton
                     characterId={c.id}

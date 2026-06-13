@@ -2039,6 +2039,145 @@ table.plain th {
 
 .v2-stack { display: flex; flex-direction: column; gap: 26px; }
 
+/* ---------------------------------------------------------------------------
+   Stories shelf: Continue-reading banner + filter chips (issue, UX spec §2G)
+   --------------------------------------------------------------------------- */
+
+.v2-continue-banner {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+  flex-wrap: wrap;
+  border-radius: 28px;
+  padding: 26px;
+  background: linear-gradient(135deg, #6a55c9 0%, #b5739e 52%, #f0a878 100%);
+  box-shadow: 0 22px 50px rgba(106, 85, 201, 0.3);
+}
+
+.v2-continue-banner__cover {
+  position: relative;
+  width: 150px;
+  height: 188px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #3b2f6e, #6a55c9);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 12px;
+  animation: v2-float 6s ease-in-out infinite;
+}
+
+.v2-continue-banner__cover-title {
+  font-family: var(--v2-font-display);
+  font-weight: 700;
+  color: #faf4e6;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.v2-continue-banner__body { flex: 1; min-width: 240px; }
+
+.v2-continue-banner__label {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #ffe9c9;
+  margin: 0 0 6px;
+}
+
+.v2-continue-banner__title {
+  font-family: var(--v2-font-display);
+  font-weight: 700;
+  font-size: 1.85rem;
+  color: #fff;
+  margin: 0;
+}
+
+.v2-continue-banner__meta { color: #fbeaf3; margin: 4px 0 0; }
+
+.v2-continue-banner__progress {
+  height: 9px;
+  max-width: 380px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  margin: 16px 0;
+  overflow: hidden;
+}
+
+.v2-continue-banner__progress-fill {
+  display: block;
+  height: 100%;
+  width: 33%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fffdf9, #f6c177);
+}
+
+.v2-continue-banner__actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+.v2-btn--ghost-light {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.v2-shelf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.v2-filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.v2-filter-chip {
+  padding: 7px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--v2-border);
+  background: var(--v2-surface);
+  color: var(--v2-text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.v2-filter-chip:hover { border-color: var(--v2-purple); color: var(--v2-purple); }
+
+.v2-filter-chip--active {
+  background: #ede7fe;
+  color: var(--v2-purple);
+  border-color: #ede7fe;
+}
+
+/* ---------------------------------------------------------------------------
+   Create composer (issue, UX spec §2F)
+   --------------------------------------------------------------------------- */
+
+.v2-composer {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 26px;
+  align-items: start;
+}
+
+.v2-brief-rail {
+  position: sticky;
+  top: 90px;
+  border-radius: 24px;
+  padding: 24px;
+  background: linear-gradient(160deg, #6a55c9, #b5739e);
+  box-shadow: 0 18px 44px rgba(106, 85, 201, 0.28);
+}
+
+@media (max-width: 900px) {
+  .v2-composer { grid-template-columns: 1fr; }
+  .v2-brief-rail { position: static; }
+}
+
 @media (max-width: 768px) {
   .v2-nav-link span:last-child { display: none; }
   .v2-tier-badge { display: none; }

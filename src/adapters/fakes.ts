@@ -44,6 +44,7 @@ export class FakeAnthropic implements AnthropicAdapter {
   public calls: unknown[] = [];
   public adaptCalls: unknown[] = [];
   public textStoryCalls: TextStoryGenerationInput[] = [];
+  public characterDescriptionCalls: import("@/domain/types").TraitQuestionnaire[] = [];
   public textStoryResponse = { text: "Once upon a time, Emma went on a cozy forest adventure..." };
   public response: GeneratedStory = {
     text: "Once upon a time...",
@@ -98,6 +99,17 @@ export class FakeAnthropic implements AnthropicAdapter {
   async generateTextStory(input: TextStoryGenerationInput): Promise<{ text: string }> {
     this.textStoryCalls.push(input);
     return this.textStoryResponse;
+  }
+
+  async generateCharacterDescription(
+    questionnaire: import("@/domain/types").TraitQuestionnaire
+  ): Promise<{ description: string }> {
+    this.characterDescriptionCalls.push(questionnaire);
+    const traits = (questionnaire.topics ?? []).slice(0, 2).join(", ").toLowerCase();
+    const lead = traits ? `A ${traits} friend` : "A gentle friend";
+    return {
+      description: `${lead} named ${questionnaire.name} who loves being part of the story.`,
+    };
   }
 
   async adaptStory(input: {
@@ -391,6 +403,11 @@ export class StubAnthropic implements AnthropicAdapter {
     throw new Error("Anthropic adapter not configured");
   }
   async adaptStory(_input: Parameters<AnthropicAdapter["adaptStory"]>[0]): Promise<GeneratedStory> {
+    throw new Error("Anthropic adapter not configured");
+  }
+  async generateCharacterDescription(
+    _questionnaire: Parameters<AnthropicAdapter["generateCharacterDescription"]>[0]
+  ): Promise<{ description: string }> {
     throw new Error("Anthropic adapter not configured");
   }
 }

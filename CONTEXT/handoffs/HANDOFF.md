@@ -3,12 +3,15 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-delete-and-ui-polish.md`** —
-> delete-Character (hard-delete), v2 create-flow fix, per-request auth/hydration
-> dedup (perf), dead-button cleanup. **156 tests green.**
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-maya-world-part2.md`** —
+> Character auto-description (issue 46), "Maya's World" seed + dev injector (issue 47),
+> v2 Create composer, Stories shelf (routing fix + Continue reading + filters), family-page
+> tokenization + Character edit page, and an HTML design deliverable. **168 tests green.**
+> Deferred: v2 Reader rebuild, legacy-route restyle, voice UI.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-13-maya-world-part2.md` — issues 46–47 + v2 UI (composer, stories shelf, tokenize, edit-character, HTML deliverable); 168 tests
 - `SESSION-HANDOFF-2026-06-13-delete-and-ui-polish.md` — delete Character + UI/perf polish (156 tests)
 - `SESSION-HANDOFF-2026-06-13-issues-34-44.md` — issues 34–44 DONE: multi-baby, roster, voice, video, v2 UI
 - `SESSION-HANDOFF-2026-06-13-local-run-and-bugfixes.md` — local-dev setup + 4 bug fixes (FK-ordered sync, dev moderation, multi-photo upload, auth middleware); revamp queued for `/part1`

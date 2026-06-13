@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { TraitQuestionnaire } from "@/domain/types";
-import { createCharacterAction } from "@/lib/actions";
+import { createCharacterAction, updateCharacterAction } from "@/lib/actions";
 
 const ATTESTATION_TEXT =
   "I am this child's parent or guardian, or I have their guardian's permission to describe them in stories.";
@@ -16,12 +16,20 @@ function splitList(value: string): string[] | undefined {
   return items.length > 0 ? items : undefined;
 }
 
-export function QuestionnaireForm() {
+export function QuestionnaireForm({
+  characterId,
+  initial,
+}: {
+  characterId?: string;
+  initial?: TraitQuestionnaire;
+} = {}) {
   const router = useRouter();
+  const isEdit = Boolean(characterId);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [isFictional, setIsFictional] = useState(true);
+  const [isFictional, setIsFictional] = useState(initial?.isFictional ?? true);
   const [attested, setAttested] = useState(false);
+  const csv = (items?: string[]) => (items ?? []).join(", ");
 
   function submit(formData: FormData) {
     setError(null);
@@ -44,10 +52,13 @@ export function QuestionnaireForm() {
       return;
     }
     startTransition(async () => {
-      const res = await createCharacterAction(
-        questionnaire,
-        !isFictional && attested ? ATTESTATION_TEXT : undefined
-      );
+      const res =
+        isEdit && characterId
+          ? await updateCharacterAction(characterId, questionnaire)
+          : await createCharacterAction(
+              questionnaire,
+              !isFictional && attested ? ATTESTATION_TEXT : undefined
+            );
       if (!res.ok) return setError(res.error);
       router.push("/characters");
     });
@@ -87,11 +98,11 @@ export function QuestionnaireForm() {
 
       <div className="field">
         <label htmlFor="name">Name</label>
-        <input id="name" name="name" type="text" required placeholder="Mia" />
+        <input id="name" name="name" type="text" required placeholder="Mia" defaultValue={initial?.name ?? ""} />
       </div>
       <div className="field">
         <label htmlFor="nickname">Nickname (optional)</label>
-        <input id="nickname" name="nickname" type="text" placeholder="Mimi" />
+        <input id="nickname" name="nickname" type="text" placeholder="Mimi" defaultValue={initial?.nickname ?? ""} />
       </div>
       <div className="field">
         <label htmlFor="relationships">Important people (optional)</label>
@@ -100,24 +111,26 @@ export function QuestionnaireForm() {
           name="relationships"
           type="text"
           placeholder="Mama, Papa, big brother Theo"
+          defaultValue={csv(initial?.relationships)}
         />
         <span className="hint">Separate with commas.</span>
       </div>
       <div className="field">
         <label htmlFor="favoriteAnimals">Favorite animals (optional)</label>
-        <input id="favoriteAnimals" name="favoriteAnimals" type="text" placeholder="bunnies, whales" />
+        <input id="favoriteAnimals" name="favoriteAnimals" type="text" placeholder="bunnies, whales" defaultValue={csv(initial?.favoriteAnimals)} />
       </div>
       <div className="field">
         <label htmlFor="favoriteToys">Favorite toys (optional)</label>
-        <input id="favoriteToys" name="favoriteToys" type="text" placeholder="a wooden train, Blankie" />
+        <input id="favoriteToys" name="favoriteToys" type="text" placeholder="a wooden train, Blankie" defaultValue={csv(initial?.favoriteToys)} />
       </div>
       <div className="field">
         <label htmlFor="songs">Songs they love (optional)</label>
-        <input id="songs" name="songs" type="text" placeholder="Twinkle Twinkle" />
+        <input id="songs" name="songs" type="text" placeholder="Twinkle Twinkle" defaultValue={csv(initial?.songs)} />
       </div>
       <div className="field">
-        <label htmlFor="topics">Things they&apos;re into right now (optional)</label>
-        <input id="topics" name="topics" type="text" placeholder="the moon, puddles, dinosaurs" />
+        <label htmlFor="topics">Traits &amp; things they love (optional)</label>
+        <input id="topics" name="topics" type="text" placeholder="Curious, Cuddly, the moon" defaultValue={csv(initial?.topics)} />
+        <span className="hint">These become trait tags and shape the auto-written description.</span>
       </div>
 
       {!isFictional && (
@@ -135,7 +148,13 @@ export function QuestionnaireForm() {
       )}
 
       <button className="btn btn-primary" type="submit" disabled={pending}>
-        {pending ? "Creating…" : "Create character"}
+        {pending
+          ? isEdit
+            ? "Saving…"
+            : "Creating…"
+          : isEdit
+            ? "Save changes"
+            : "Create character"}
       </button>
     </form>
   );

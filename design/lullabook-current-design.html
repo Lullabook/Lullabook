@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lullabook — Current v2 Design Language</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
+<style>
+  /* ----------------------------------------------------------------------
+     Lullabook v2 "Maya's World" design language — AS IMPLEMENTED.
+     Token values mirror src/components/v2/tokens.ts + src/app/globals.css as
+     of the issue-46/47 build. Self-contained; hand to an external reviewer.
+     ---------------------------------------------------------------------- */
+  :root {
+    /* Core surfaces */
+    --bg: #FBF4E7;
+    --surface: #FFFDF9;
+    --surface-warm: #FFF8EC;
+    --border: #ECE1CE;
+    --border-soft: #F0E6D2;
+    --border-dashed: #D8C9B0;
+    /* Text */
+    --text: #2E2438;
+    --text-muted: #6E6076;
+    --text-soft: #9A8A78;
+    --text-date: #A99FB0;
+    /* Brand */
+    --purple: #6A55C9;
+    --purple-light: #8B6DF0;
+    --purple-bg: #EDE7FE;
+    --selected-text: #4A3D6B;
+    --amber: #E79A3C;
+    --amber-light: #F6C177;
+    --amber-dark-text: #3a2410;
+    --gold-bg: #FBEBCE;
+    --gold-text: #9A6B1E;
+    /* Cast accents */
+    --rose: #E78AA0;
+    --sage: #5FB389;
+    --teal: #3f9bb0;
+    --hover-tint: #F6F1FF;
+    /* Voice panel */
+    --night: #2A2452;
+    --night-mid: #3E2F63;
+    --voice-muted: #C9BDE8;
+    --voice-quote: #D7CBEE;
+    --voice-cream: #FAF4E6;
+    --waveform: rgba(185,165,245,0.75);
+    /* Status dots */
+    --dot-ready: #5FB389;
+    --dot-training: #E79A3C;
+    --dot-needs: #C9A9A9;
+    /* Chips */
+    --chip-green-bg: #E1F1E8;
+    --chip-green-text: #3E7A5A;
+    /* Radii */
+    --r-pill: 999px; --r-hero: 30px; --r-banner: 28px; --r-book: 18px;
+    --r-card: 22px; --r-detail: 26px; --r-row: 18px; --r-slot: 12px;
+    /* Shadows */
+    --sh-hero: 0 24px 56px rgba(106,85,201,0.32);
+    --sh-banner: 0 22px 50px rgba(106,85,201,0.3);
+    --sh-book: 0 12px 28px rgba(58,40,80,0.16);
+    --sh-card: 0 8px 24px rgba(58,40,80,0.06);
+    --sh-detail: 0 12px 32px rgba(58,40,80,0.08);
+    --sh-row-active: 0 6px 18px rgba(139,109,240,0.14);
+    --sh-brief: 0 18px 44px rgba(106,85,201,0.28);
+    /* Gradients */
+    --g-hero: linear-gradient(135deg,#6A55C9 0%,#B5739E 48%,#F0A878 100%);
+    --g-banner: linear-gradient(135deg,#6A55C9 0%,#B5739E 52%,#F0A878 100%);
+    --g-brief: linear-gradient(160deg,#6A55C9,#B5739E);
+    --g-voice: linear-gradient(160deg,#2A2452,#3E2F63);
+    --g-cta-amber: linear-gradient(135deg,#F6C177,#E79A3C);
+    --g-cta-purple: linear-gradient(135deg,#8B6DF0,#6A55C9);
+    --g-progress: linear-gradient(90deg,#FFFDF9,#F6C177);
+    --font-display: 'Baloo 2', cursive;
+    --font-body: 'Nunito', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-body); line-height: 1.6; }
+  @keyframes lbTwinkle { 0%,100%{opacity:.25;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
+  @keyframes lbFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  h1,h2,h3 { font-family: var(--font-display); }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 30px 22px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.74rem; font-weight: 800; color: var(--purple-light); margin: 0 0 6px; }
+  .page-title { font-weight: 800; font-size: 2.3rem; margin: 0; letter-spacing: -0.02em; }
+  .lead { color: var(--text-muted); font-size: 1.02rem; max-width: 560px; }
+  .screen { margin: 0 0 56px; }
+  .screen > .label { display:inline-block; font-family: var(--font-body); font-weight: 800; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--purple); background: var(--purple-bg); padding: 5px 11px; border-radius: 999px; margin: 0 0 14px; }
+  .btn { display:inline-flex; align-items:center; gap:8px; border:none; border-radius:999px; padding:12px 20px; font-family:var(--font-body); font-weight:800; font-size:0.95rem; cursor:pointer; text-decoration:none; }
+  .btn-purple { background: var(--g-cta-purple); color:#fff; box-shadow:0 8px 20px rgba(106,85,201,0.3); }
+  .btn-amber { background: var(--g-cta-amber); color: var(--amber-dark-text); box-shadow:0 8px 20px rgba(231,154,60,0.32); }
+  .btn-cream { background: var(--surface); color: var(--purple); box-shadow:0 12px 28px rgba(0,0,0,0.18); }
+  .btn-outline { background: var(--surface); color: var(--purple); border:1px solid var(--border); }
+  .card { background: var(--surface); border:1px solid var(--border); border-radius: var(--r-card); padding: 22px; box-shadow: var(--sh-card); }
+</style>
+</head>
+<body>
+
+<!-- ========================= HEADER / NAV ========================= -->
+<header style="position:sticky; top:0; z-index:40; backdrop-filter:saturate(1.3) blur(10px); background:rgba(251,244,231,0.82); border-bottom:1px solid var(--border-soft);">
+  <div style="max-width:1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px 22px;">
+    <div style="display:flex; align-items:center; gap:9px;">
+      <span style="width:38px; height:38px; border-radius:13px; background:var(--g-cta-purple); display:flex; align-items:center; justify-content:center; font-size:1.15rem; box-shadow:0 6px 16px rgba(106,85,201,0.35);">☀️</span>
+      <span style="font-family:var(--font-display); font-weight:800; font-size:1.5rem; letter-spacing:-0.01em;">Lullabook</span>
+    </div>
+    <nav style="display:flex; gap:3px; background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:5px; box-shadow:0 4px 14px rgba(58,40,80,0.05);">
+      <span style="padding:9px 14px; border-radius:999px; background:var(--purple-bg); color:var(--purple); font-weight:700; font-size:0.9rem;">☀️ World</span>
+      <span style="padding:9px 14px; border-radius:999px; color:var(--text-muted); font-weight:700; font-size:0.9rem;">📚 Stories</span>
+      <span style="padding:9px 14px; border-radius:999px; color:var(--text-muted); font-weight:700; font-size:0.9rem;">✨ Create</span>
+      <span style="padding:9px 14px; border-radius:999px; color:var(--text-muted); font-weight:700; font-size:0.9rem;">💛 Family</span>
+      <span style="padding:9px 14px; border-radius:999px; color:var(--text-muted); font-weight:700; font-size:0.9rem;">🐻 Characters</span>
+    </nav>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span style="display:inline-flex; align-items:center; gap:6px; padding:6px 13px; border-radius:999px; background:var(--gold-bg); color:var(--gold-text); font-weight:800; font-size:0.78rem;">✨ Illustrated</span>
+      <span style="width:40px; height:40px; border-radius:50%; background:linear-gradient(150deg,#E78AA0,#8B6DF0); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:1.05rem;">M</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <p class="lead" style="margin-bottom:32px;">This single file documents Lullabook's <strong>current</strong> v2 “Maya’s World” design language — the live token values and the implemented shapes for each key screen. Reader two-pane is shown as the design target (not yet built in-app).</p>
+
+  <!-- ========================= TOKEN SWATCHES ========================= -->
+  <section class="screen">
+    <span class="label">Tokens</span>
+    <h2 class="page-title" style="font-size:1.6rem;">Color &amp; surface tokens</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px; margin-top:16px;">
+      <div><div style="height:48px;border-radius:10px;border:1px solid var(--border);background:var(--bg);"></div><small>bg #FBF4E7</small></div>
+      <div><div style="height:48px;border-radius:10px;border:1px solid var(--border);background:var(--surface);"></div><small>surface #FFFDF9</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--purple);"></div><small>purple #6A55C9</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--purple-light);"></div><small>purple-light</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--amber);"></div><small>amber #E79A3C</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--rose);"></div><small>rose #E78AA0</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--sage);"></div><small>sage #5FB389</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--teal);"></div><small>teal #3f9bb0</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--night);"></div><small>night #2A2452</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--g-hero);"></div><small>hero gradient</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--g-brief);"></div><small>brief rail</small></div>
+      <div><div style="height:48px;border-radius:10px;background:var(--g-voice);"></div><small>voice panel</small></div>
+    </div>
+  </section>
+
+  <!-- ========================= WORLD ========================= -->
+  <section class="screen">
+    <span class="label">World · /world</span>
+    <div style="position:relative; border-radius:var(--r-hero); overflow:hidden; background:var(--g-hero); box-shadow:var(--sh-hero); padding:42px 32px; text-align:center;">
+      <div style="position:absolute; top:34px; left:60px; width:6px; height:6px; border-radius:50%; background:#fff; animation:lbTwinkle 2.6s ease-in-out infinite;"></div>
+      <div style="position:absolute; top:70px; right:90px; width:5px; height:5px; border-radius:50%; background:#FFF3D6; animation:lbTwinkle 3s ease-in-out infinite .5s;"></div>
+      <p style="text-transform:uppercase; letter-spacing:0.18em; font-size:0.74rem; font-weight:800; color:#FFE9C9; margin:0 0 16px;">✨ A growing world starring</p>
+      <div style="width:120px; height:120px; border-radius:50%; margin:0 auto 18px; background:linear-gradient(150deg,#FFFDF9,#FBE7C8); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:800; font-size:3.2rem; color:var(--purple); box-shadow:0 14px 34px rgba(0,0,0,0.22); border:5px solid rgba(255,255,255,0.5); animation:lbFloat 6s ease-in-out infinite;">M</div>
+      <h1 style="font-weight:800; font-size:2.8rem; margin:0; color:#fff; letter-spacing:-0.02em;">Maya’s World</h1>
+      <p style="margin:10px auto 0; max-width:520px; color:#FBEAF3; font-size:1.1rem;">A whole world of stories starring Maya — and everyone who loves her. Built page by page, voice by voice.</p>
+      <div style="display:flex; gap:18px; justify-content:center; margin-top:22px; flex-wrap:wrap;">
+        <span style="padding:8px 16px; border-radius:999px; background:rgba(255,255,255,0.18); color:#fff; font-weight:800; font-size:0.9rem;">💛 5 family</span>
+        <span style="padding:8px 16px; border-radius:999px; background:rgba(255,255,255,0.18); color:#fff; font-weight:800; font-size:0.9rem;">🐻 4 characters</span>
+        <span style="padding:8px 16px; border-radius:999px; background:rgba(255,255,255,0.18); color:#fff; font-weight:800; font-size:0.9rem;">📚 6 stories</span>
+      </div>
+      <span class="btn btn-cream" style="margin-top:24px;">✨ Start a new story</span>
+    </div>
+    <!-- roster avatars -->
+    <div style="display:flex; gap:18px; flex-wrap:wrap; margin-top:26px;">
+      <div style="width:84px; display:flex; flex-direction:column; align-items:center; gap:8px;">
+        <div style="position:relative; width:68px; height:68px; border-radius:50%; background:var(--g-cta-amber); border:3px solid var(--surface); box-shadow:0 8px 18px rgba(58,40,80,0.14); display:flex; align-items:center; justify-content:center; color:#fff; font-family:var(--font-display); font-weight:700; font-size:1.5rem;">M<span style="position:absolute; bottom:-2px; right:-2px; width:22px; height:22px; border-radius:50%; background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:0.7rem;">⭐</span></div>
+        <span style="font-size:0.8rem; font-weight:800;">Maya</span><span style="font-size:0.68rem; color:var(--text-soft); margin-top:-6px;">the star</span>
+      </div>
+      <div style="width:84px; display:flex; flex-direction:column; align-items:center; gap:8px;">
+        <div style="width:68px; height:68px; border-radius:50%; background:linear-gradient(150deg,#E78AA0,#C77FA6); border:3px solid var(--surface); box-shadow:0 8px 18px rgba(58,40,80,0.14); display:flex; align-items:center; justify-content:center; color:#fff; font-family:var(--font-display); font-weight:700; font-size:1.5rem;">R</div>
+        <span style="font-size:0.8rem; font-weight:800;">Grandma Rose</span><span style="font-size:0.68rem; color:var(--text-soft); margin-top:-6px;">Nani</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= STORIES ========================= -->
+  <section class="screen">
+    <span class="label">Stories · /stories</span>
+    <!-- Continue reading banner -->
+    <div style="display:flex; gap:28px; align-items:center; flex-wrap:wrap; border-radius:var(--r-banner); padding:26px; background:var(--g-banner); box-shadow:var(--sh-banner);">
+      <div style="position:relative; width:150px; height:188px; border-radius:16px; background:linear-gradient(160deg,#3b2f6e,#6a55c9); box-shadow:0 12px 30px rgba(0,0,0,0.28); flex-shrink:0; display:flex; align-items:flex-end; padding:12px; animation:lbFloat 6s ease-in-out infinite;"><span style="font-family:var(--font-display); font-weight:700; color:#FAF4E6; font-size:0.95rem;">A Morning in Nani’s Garden</span></div>
+      <div style="flex:1; min-width:240px;">
+        <p style="text-transform:uppercase; letter-spacing:0.16em; font-size:0.72rem; font-weight:800; color:#FFE9C9; margin:0 0 6px;">📖 Continue reading</p>
+        <h2 style="font-weight:700; font-size:1.85rem; color:#fff; margin:0;">A Morning in Nani’s Garden</h2>
+        <p style="color:#FBEAF3; margin:4px 0 0;">Maya &amp; Nani</p>
+        <div style="height:9px; max-width:380px; border-radius:999px; background:rgba(255,255,255,0.22); margin:16px 0; overflow:hidden;"><span style="display:block; height:100%; width:33%; border-radius:999px; background:var(--g-progress);"></span></div>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;"><span class="btn btn-cream">▶ Resume reading</span><span class="btn" style="background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.4);">Share</span></div>
+      </div>
+    </div>
+    <!-- filter row -->
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; margin:26px 0 14px;">
+      <h2 style="font-weight:700; font-size:1.5rem; margin:0;">Every story so far</h2>
+      <div style="display:flex; gap:8px;">
+        <span style="padding:7px 15px; border-radius:999px; background:var(--purple-bg); color:var(--purple); font-weight:700; font-size:0.85rem;">All</span>
+        <span style="padding:7px 15px; border-radius:999px; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); font-weight:700; font-size:0.85rem;">Finalized</span>
+        <span style="padding:7px 15px; border-radius:999px; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); font-weight:700; font-size:0.85rem;">Drafts</span>
+        <span style="padding:7px 15px; border-radius:999px; border:1px solid var(--border); background:var(--surface); color:var(--text-muted); font-weight:700; font-size:0.85rem;">Generating</span>
+      </div>
+    </div>
+    <!-- book grid -->
+    <div style="display:grid; gap:22px; grid-template-columns:repeat(auto-fill,minmax(196px,1fr));">
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="position:relative; aspect-ratio:4/5; border-radius:var(--r-book); overflow:hidden; box-shadow:var(--sh-book); background:linear-gradient(160deg,#4a7f5a,#e8c46a);">
+          <span style="position:absolute; top:16px; right:18px; width:34px; height:34px; border-radius:50%; background:#FFF6DD; box-shadow:0 0 20px rgba(255,240,200,0.45);"></span>
+          <span style="position:absolute; bottom:-26px; left:-18px; width:140px; height:90px; border-radius:50%; background:#33442a;"></span>
+          <span style="position:absolute; left:0; right:0; bottom:0; height:62%; background:linear-gradient(to top, rgba(20,14,40,0.78), transparent);"></span>
+          <span style="position:absolute; top:13px; left:14px; padding:4px 10px; border-radius:999px; background:rgba(159,216,177,0.95); color:#1d4a30; font-size:0.68rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase;">Finalized</span>
+          <span style="position:absolute; left:16px; right:16px; bottom:14px; font-family:var(--font-display); font-weight:700; font-size:1.02rem; color:#FAF4E6;">A Morning in Nani’s Garden</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:0 4px;"><span style="color:var(--text-muted); font-size:0.82rem; font-weight:700;">Maya &amp; Nani</span><span style="color:var(--text-date); font-size:0.8rem;">Jun 12</span></div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:11px;">
+        <div style="position:relative; aspect-ratio:4/5; border-radius:var(--r-book); overflow:hidden; box-shadow:var(--sh-book); background:linear-gradient(160deg,#3b2f6e,#6a55c9);">
+          <span style="position:absolute; top:13px; left:14px; padding:4px 10px; border-radius:999px; background:rgba(185,165,245,0.95); color:#2e1f5e; font-size:0.68rem; font-weight:800; letter-spacing:0.05em; text-transform:uppercase;">Generating</span>
+          <span style="position:absolute; left:16px; right:16px; bottom:14px; font-family:var(--font-display); font-weight:700; font-size:1.02rem; color:#FAF4E6;">Counting Stars with Nani</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:0 4px;"><span style="color:var(--text-muted); font-size:0.82rem; font-weight:700;">Maya &amp; Nani</span><span style="color:var(--text-date); font-size:0.8rem;">Jun 13</span></div>
+      </div>
+      <a href="#" style="aspect-ratio:4/5; border:2px dashed var(--border-dashed); border-radius:var(--r-book); background:var(--surface-warm); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; color:var(--text-soft); font-weight:800; text-decoration:none;"><span style="width:48px; height:48px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; font-size:1.5rem; box-shadow:0 6px 16px rgba(58,40,80,0.1);">＋</span>New Story</a>
+    </div>
+  </section>
+
+  <!-- ========================= CREATE ========================= -->
+  <section class="screen">
+    <span class="label">Create · /storybooks/new</span>
+    <div style="display:grid; grid-template-columns:1.55fr 1fr; gap:26px; align-items:start;">
+      <div style="display:flex; flex-direction:column; gap:22px;">
+        <div class="card">
+          <h3 style="font-weight:700; font-size:1.15rem; margin:0 0 4px;">What’s the story about?</h3>
+          <input value="A trip to the moon" style="width:100%; background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:14px 16px; font-size:1.05rem; font-family:var(--font-body);" />
+          <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; align-items:center;"><span style="font-size:0.82rem; font-weight:700; color:var(--text-soft);">Try:</span>
+            <span style="padding:6px 12px; border-radius:999px; background:var(--purple-bg); color:var(--purple); font-size:0.82rem; font-weight:700;">A trip to the moon</span>
+            <span style="padding:6px 12px; border-radius:999px; background:var(--gold-bg); color:var(--gold-text); font-size:0.82rem; font-weight:700;">The first snow</span>
+            <span style="padding:6px 12px; border-radius:999px; background:var(--chip-green-bg); color:var(--chip-green-text); font-size:0.82rem; font-weight:700;">Learning to share</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="font-weight:700; font-size:1.15rem; margin:0 0 12px;">Who stars?</h3>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <span style="display:inline-flex; align-items:center; gap:9px; padding:9px 14px 9px 9px; border-radius:999px; border:1.5px solid var(--purple-light); background:var(--purple-bg); color:var(--selected-text); box-shadow:0 0 0 3px rgba(139,109,240,0.12);"><span style="width:34px; height:34px; border-radius:50%; background:var(--g-cta-purple); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800;">M</span><span style="display:flex; flex-direction:column; line-height:1.1;"><span style="font-size:0.92rem; font-weight:800;">Maya</span><span style="font-size:0.72rem; opacity:.7;">✓ Baby</span></span></span>
+            <span style="display:inline-flex; align-items:center; gap:9px; padding:9px 14px 9px 9px; border-radius:999px; border:1.5px solid var(--border); background:var(--surface);"><span style="width:34px; height:34px; border-radius:50%; background:linear-gradient(150deg,#E78AA0,#F2A6B8); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800;">R</span><span style="display:flex; flex-direction:column; line-height:1.1;"><span style="font-size:0.92rem; font-weight:800;">Grandma Rose</span><span style="font-size:0.72rem; opacity:.7;">Family</span></span></span>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="font-weight:700; font-size:1.15rem; margin:0 0 12px;">What kind of story?</h3>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px;">
+            <div style="padding:16px; border-radius:16px; border:1.5px solid var(--purple-light); background:var(--purple-bg); box-shadow:0 6px 18px rgba(139,109,240,0.16);"><div style="font-size:1.5rem;">🌙</div><div style="font-family:var(--font-display); font-weight:700; color:var(--selected-text);">Bedtime</div><div style="font-size:0.82rem; color:var(--text-muted);">A sleepy wind-down</div></div>
+            <div style="padding:16px; border-radius:16px; border:1.5px solid var(--border); background:var(--surface);"><div style="font-size:1.5rem;">🚀</div><div style="font-family:var(--font-display); font-weight:700;">Adventure</div><div style="font-size:0.82rem; color:var(--text-muted);">A brave little quest</div></div>
+            <div style="padding:16px; border-radius:16px; border:1.5px solid var(--border); background:var(--surface);"><div style="font-size:1.5rem;">😄</div><div style="font-family:var(--font-display); font-weight:700;">Silly</div><div style="font-size:0.82rem; color:var(--text-muted);">Giggles and nonsense</div></div>
+          </div>
+        </div>
+      </div>
+      <!-- brief rail -->
+      <aside style="position:sticky; top:90px; border-radius:24px; padding:24px; background:var(--g-brief); box-shadow:var(--sh-brief);">
+        <p style="text-transform:uppercase; letter-spacing:0.16em; font-size:0.72rem; font-weight:800; color:#FFE9C9; margin:0 0 14px;">Your brief</p>
+        <div style="aspect-ratio:4/5; border-radius:16px; background:linear-gradient(160deg,#3b2f6e,#6a55c9); position:relative; display:flex; align-items:flex-end; padding:16px; margin-bottom:18px;"><span style="position:absolute; top:16px; right:18px; width:30px; height:30px; border-radius:50%; background:#F6C177; box-shadow:0 0 20px rgba(246,193,119,0.6);"></span><span style="font-family:var(--font-display); font-weight:700; color:#FAF4E6; font-size:1.1rem;">A trip to the moon</span></div>
+        <div style="display:flex; justify-content:space-between; padding:10px 0; font-size:0.92rem;"><span style="color:#FBEAF3;">Starring</span><span style="color:#fff; font-weight:800;">Maya, Grandma Rose</span></div>
+        <div style="display:flex; justify-content:space-between; padding:10px 0; font-size:0.92rem; border-top:1px solid rgba(255,255,255,0.18);"><span style="color:#FBEAF3;">Kind</span><span style="color:#fff; font-weight:800;">Bedtime</span></div>
+        <div style="display:flex; justify-content:space-between; padding:10px 0; font-size:0.92rem; border-top:1px solid rgba(255,255,255,0.18);"><span style="color:#FBEAF3;">Length</span><span style="color:#fff; font-weight:800;">12 pages</span></div>
+        <button class="btn" style="width:100%; justify-content:center; margin-top:14px; border-radius:14px; background:var(--surface); color:var(--purple); font-size:1.02rem;">✨ Generate story</button>
+        <p style="text-align:center; color:#FBEAF3; font-size:0.8rem; margin:10px 0 0;">About 4 minutes to your first pages</p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ========================= FAMILY ========================= -->
+  <section class="screen">
+    <span class="label">Family · /family</span>
+    <div style="display:grid; grid-template-columns:320px 1fr; gap:22px;">
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div style="display:flex; align-items:center; gap:13px; padding:13px 14px; border-radius:var(--r-row); border:1.5px solid var(--purple-light); background:var(--hover-tint); box-shadow:var(--sh-row-active);">
+          <span style="width:50px; height:50px; border-radius:50%; background:linear-gradient(150deg,#E78AA0,#C77FA6); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:1.3rem;">R</span>
+          <span style="flex:1; display:flex; flex-direction:column;"><span style="font-family:var(--font-display); font-weight:700; font-size:1.1rem;">Grandma Rose</span><span style="font-size:0.82rem; color:var(--text-soft); font-weight:700;">Grandmother · “Nani”</span></span>
+          <span style="width:9px; height:9px; border-radius:50%; background:var(--dot-ready);"></span>
+        </div>
+        <div style="display:flex; align-items:center; gap:13px; padding:13px 14px; border-radius:var(--r-row); border:1.5px solid var(--border); background:var(--surface); box-shadow:0 4px 12px rgba(58,40,80,0.04);">
+          <span style="width:50px; height:50px; border-radius:50%; background:linear-gradient(150deg,#5FB389,#9FD8B1); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:1.3rem;">A</span>
+          <span style="flex:1; display:flex; flex-direction:column;"><span style="font-family:var(--font-display); font-weight:700; font-size:1.1rem;">Ava</span><span style="font-size:0.82rem; color:var(--text-soft); font-weight:700;">Big sister · “Sissy”</span></span>
+          <span style="width:9px; height:9px; border-radius:50%; background:var(--dot-training);"></span>
+        </div>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--r-detail); box-shadow:var(--sh-detail); overflow:hidden;">
+        <div style="padding:26px; background:linear-gradient(135deg,#E78AA0,#C77FA6); display:flex; align-items:center; gap:18px;">
+          <span style="width:78px; height:78px; border-radius:50%; background:linear-gradient(150deg,#E78AA0,#C77FA6); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:2rem; box-shadow:0 8px 20px rgba(0,0,0,0.18); border:4px solid rgba(255,255,255,0.55);">R</span>
+          <div><h2 style="margin:0; font-weight:800; font-size:1.7rem; color:#fff;">Grandma Rose</h2>
+            <div style="display:flex; gap:8px; margin-top:8px;"><span style="padding:5px 12px; border-radius:999px; background:rgba(255,255,255,0.25); color:#fff; font-weight:800; font-size:0.8rem;">Grandmother to Maya</span><span style="padding:5px 12px; border-radius:999px; background:rgba(255,255,255,0.95); color:var(--amber-dark-text); font-weight:800; font-size:0.8rem;">✓ Illustrated &amp; voiced</span></div>
+          </div>
+        </div>
+        <div style="padding:24px; display:flex; flex-direction:column; gap:24px;">
+          <div style="display:grid; gap:16px; grid-template-columns:1fr 1fr;">
+            <div style="background:var(--bg); border:1px solid var(--border-soft); border-radius:16px; padding:16px;"><p style="margin:0 0 8px; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.12em; font-weight:800; color:var(--text-soft);">What Maya calls them</p><p style="margin:0; font-family:var(--font-display); font-weight:700; font-size:1.4rem; color:var(--purple);">“Nani”</p></div>
+            <div style="background:var(--bg); border:1px solid var(--border-soft); border-radius:16px; padding:16px;"><p style="margin:0 0 8px; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.12em; font-weight:800; color:var(--text-soft);">What they call Maya</p><p style="margin:0; font-family:var(--font-display); font-weight:700; font-size:1.4rem; color:var(--amber);">“moonbeam”</p></div>
+          </div>
+          <!-- photo grid w/ stripe fill -->
+          <div style="display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(92px,1fr));">
+            <div style="aspect-ratio:1; border-radius:var(--r-slot); border:1px solid rgba(255,255,255,0.35); background:repeating-linear-gradient(45deg, rgba(255,255,255,0.18) 0 6px, rgba(255,255,255,0) 6px 12px), linear-gradient(150deg,#E78AA0,#C77FA6); display:flex; align-items:center; justify-content:center; color:#fff; font-family:var(--font-display); font-weight:700;">R</div>
+            <div style="aspect-ratio:1; border-radius:var(--r-slot); border:2px dashed var(--border-dashed); background:var(--bg); display:flex; align-items:center; justify-content:center; color:#B7A992; font-size:1.4rem;">＋</div>
+          </div>
+          <!-- voice panel w/ waveform -->
+          <div style="background:var(--g-voice); border-radius:20px; padding:22px; color:var(--voice-cream);">
+            <h3 style="margin:0 0 6px; font-weight:700; font-size:1.25rem; color:#fff;">🎙️ Their real voice</h3>
+            <p style="margin:0 0 16px; color:var(--voice-muted); font-size:0.92rem;">Record a few lines and Maya will hear Grandma Rose read to her.</p>
+            <div style="display:flex; align-items:center; gap:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:12px 14px;">
+              <span style="width:42px; height:42px; border-radius:50%; background:var(--g-cta-amber); color:var(--amber-dark-text); display:flex; align-items:center; justify-content:center;">▶</span>
+              <div style="flex:1;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;"><span style="font-weight:800; font-size:0.92rem; color:#fff;">Twinkle twinkle</span><span style="font-size:0.78rem; color:var(--voice-duration);">0:06</span></div>
+                <div style="display:flex; align-items:center; gap:2px; height:22px; margin:2px 0;">
+                  <span style="width:3px;height:10px;border-radius:2px;background:var(--waveform);"></span><span style="width:3px;height:18px;border-radius:2px;background:var(--waveform);"></span><span style="width:3px;height:7px;border-radius:2px;background:var(--waveform);"></span><span style="width:3px;height:22px;border-radius:2px;background:var(--waveform);"></span><span style="width:3px;height:14px;border-radius:2px;background:var(--waveform);"></span><span style="width:3px;height:9px;border-radius:2px;background:var(--waveform);"></span><span style="width:3px;height:16px;border-radius:2px;background:var(--waveform);"></span><span style="width:3px;height:6px;border-radius:2px;background:var(--waveform);"></span><span style="width:3px;height:20px;border-radius:2px;background:var(--waveform);"></span>
+                </div>
+                <p style="margin:2px 0 0; font-style:italic; color:var(--voice-quote); font-size:0.86rem;">“Twinkle, twinkle, little moonbeam.”</p>
+              </div>
+            </div>
+            <span style="display:inline-flex; align-items:center; gap:8px; margin-top:12px; background:var(--voice-cream); color:var(--night); padding:11px 18px; border-radius:999px; font-size:0.9rem; font-weight:800;">🔴 Record a new message</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================= CHARACTERS ========================= -->
+  <section class="screen">
+    <span class="label">Characters · /characters</span>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:18px;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:22px; padding:20px; box-shadow:0 8px 22px rgba(58,40,80,0.07); display:flex; flex-direction:column; gap:14px;">
+        <div style="display:flex; align-items:center; gap:14px;"><span style="width:62px; height:62px; border-radius:20px; background:linear-gradient(150deg,#8B6DF0,#6A55C9); display:flex; align-items:center; justify-content:center; font-size:1.7rem;">🐱</span><div><h3 style="margin:0; font-family:var(--font-display); font-weight:700; font-size:1.2rem;">Coco the Cat</h3><span style="color:var(--text-soft); font-size:0.82rem; font-weight:700;">In 3 stories</span></div></div>
+        <p style="margin:0; color:var(--text-muted); font-size:0.9rem; line-height:1.4; min-height:38px;">A curious, cuddly cat who follows Maya everywhere and naps in the sunniest spot.</p>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;"><span style="padding:4px 11px; border-radius:999px; background:var(--purple-bg); color:var(--purple); font-size:0.76rem; font-weight:700;">Curious</span><span style="padding:4px 11px; border-radius:999px; background:var(--purple-bg); color:var(--purple); font-size:0.76rem; font-weight:700;">Cuddly</span></div>
+        <div style="height:1px; background:var(--border-soft);"></div>
+        <a href="#" style="width:100%; text-align:center; padding:10px; border-radius:12px; border:1px solid var(--border); background:var(--surface-warm); color:var(--purple); font-weight:800; font-size:0.88rem; text-decoration:none;">Edit character →</a>
+      </div>
+      <a href="#" style="min-height:230px; border:2px dashed var(--border-dashed); border-radius:22px; background:var(--surface-warm); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--text-soft); font-weight:800; text-decoration:none; text-align:center;"><span style="width:54px; height:54px; border-radius:50%; background:#fff; display:flex; align-items:center; justify-content:center; font-size:1.6rem; box-shadow:0 6px 16px rgba(58,40,80,0.1);">＋</span>Invent a new<br/>made-up friend</a>
+    </div>
+  </section>
+
+  <!-- ========================= READER (design target) ========================= -->
+  <section class="screen">
+    <span class="label">Reader · /storybooks/[id]/read · DESIGN TARGET (not yet built)</span>
+    <div style="border-radius:var(--r-banner); background:var(--surface); border:1px solid var(--border); box-shadow:0 24px 56px rgba(58,40,80,0.14); overflow:hidden; display:grid; grid-template-columns:1fr 1fr; min-height:360px;">
+      <div style="position:relative; min-height:360px; background:linear-gradient(160deg,#9BC4E2,#F6D9A0);">
+        <span style="position:absolute; top:40px; right:46px; width:78px; height:78px; border-radius:50%; background:#F6C177; box-shadow:0 0 50px rgba(246,193,119,0.7);"></span>
+        <span style="position:absolute; bottom:-40px; left:-30px; width:200px; height:130px; border-radius:50%; background:#5FB389;"></span>
+      </div>
+      <div style="padding:48px 44px; display:flex; flex-direction:column; gap:24px; justify-content:center;">
+        <span style="font-weight:800; font-size:0.74rem; text-transform:uppercase; color:var(--amber); letter-spacing:0.18em;">Page 1 of 12</span>
+        <p style="font-family:var(--font-display); font-weight:500; font-size:1.55rem; line-height:1.55; margin:0;">In Nani’s garden, the morning sun peeked over the wall, and Maya wiggled her toes in the cool grass.</p>
+        <div style="display:flex; gap:10px;"><span style="padding:9px 15px; border-radius:999px; border:1px solid var(--border); font-size:0.85rem; font-weight:700;">✍️ Re-roll text</span><span style="padding:9px 15px; border-radius:999px; border:1px solid var(--border); font-size:0.85rem; font-weight:700;">🎨 Re-roll art</span></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

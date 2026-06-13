@@ -1,9 +1,15 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { requireAuthedContext } from "@/lib/auth";
-import { V2BookCover } from "@/components/v2/book-card";
+import { bookHref, resumeHref } from "@/lib/book-nav";
+import { castLabel } from "@/lib/cast-label";
+import { StoriesShelf, type ShelfBook, type ContinueReading } from "@/components/v2/stories-shelf";
 
 export const metadata: Metadata = { title: "Stories" };
+
+function formatBookDate(date: Date): string {
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 export default async function StoriesPage() {
   const { ctx, member } = await requireAuthedContext();
@@ -12,6 +18,31 @@ export default async function StoriesPage() {
     .listStorybooksForBaby(baby.id, member.id)
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
+  const readyCast =
+    ctx.store
+      .getPersonasByFamily(member.familyId, member.id)
+      .filter((p) => p.status === "ready").length +
+    ctx.store.getCharactersByFamily(member.familyId, member.id).length;
+
+  const shelfBooks: ShelfBook[] = books.map((b) => ({
+    id: b.id,
+    title: b.brief.theme || "Untitled story",
+    status: b.status,
+    cast: castLabel(ctx, b, member.id),
+    date: formatBookDate(b.createdAt),
+    href: bookHref(b.status, b.id),
+  }));
+
+  const mostRecentFinalized = books.find((b) => b.status === "finalized");
+  const continueReading: ContinueReading | null = mostRecentFinalized
+    ? {
+        id: mostRecentFinalized.id,
+        title: mostRecentFinalized.brief.theme || "Untitled story",
+        cast: castLabel(ctx, mostRecentFinalized, member.id),
+        resumeHref: resumeHref(mostRecentFinalized.id),
+      }
+    : null;
+
   return (
     <div className="v2-stack">
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 20 }}>
@@ -19,11 +50,12 @@ export default async function StoriesPage() {
           <p className="v2-page-eyebrow">📚 {baby.displayName}&apos;s shelf</p>
           <h1 className="v2-page-title">Stories</h1>
           <p style={{ margin: "6px 0 0", color: "#6E6076" }}>
-            {books.length} storybook{books.length === 1 ? "" : "s"} in {baby.displayName}&apos;s world
+            {books.length} storybook{books.length === 1 ? "" : "s"}
+            {readyCast > 0 && ` · ${readyCast} of ${baby.displayName}'s cast ready to star`}
           </p>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <Link href="/storybooks/classics" className="v2-btn-primary" style={{ padding: "12px 18px", fontSize: "0.95rem" }}>
+          <Link href="/storybooks/classics" className="v2-btn v2-btn--outline" style={{ padding: "12px 18px", fontSize: "0.95rem" }}>
             📖 Classics
           </Link>
           <Link href="/storybooks/new" className="v2-btn-accent">
@@ -42,15 +74,7 @@ export default async function StoriesPage() {
           </Link>
         </div>
       ) : (
-        <div className="v2-book-grid">
-          {books.map((book, i) => (
-            <V2BookCover key={book.id} book={book} href={`/storybooks/${book.id}/read`} index={i} />
-          ))}
-          <Link href="/storybooks/new" className="v2-book-cover" style={{ border: "2px dashed #D8C9B0", background: "#FFF8EC", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "#9A8A78", fontWeight: 800, textDecoration: "none", aspectRatio: "4/5" }}>
-            <span style={{ width: 48, height: 48, borderRadius: "50%", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", boxShadow: "0 6px 16px rgba(58,40,80,0.1)" }}>＋</span>
-            New Story
-          </Link>
-        </div>
+        <StoriesShelf books={shelfBooks} continueReading={continueReading} />
       )}
     </div>
   );

@@ -1,6 +1,8 @@
 import { v4 as uuid } from "uuid";
+import type { AnthropicAdapter } from "@/adapters/types";
 import type { DataStore } from "@/db/store";
 import type { Character, Persona, PersonaKind, TraitQuestionnaire } from "@/domain/types";
+import type { ChildSafetyService } from "@/services/child-safety";
 
 export interface CreateCharacterInput {
   memberId: string;
@@ -21,8 +23,18 @@ export interface DeleteCharacterInput {
   memberId: string;
 }
 
+export interface UpdateCharacterInput {
+  characterId: string;
+  memberId: string;
+  questionnaire: TraitQuestionnaire;
+}
+
 export class CharacterService {
-  constructor(private readonly store: DataStore) {}
+  constructor(
+    private readonly store: DataStore,
+    private readonly anthropic: AnthropicAdapter,
+    private readonly childSafety: ChildSafetyService
+  ) {}
 
   async create(input: CreateCharacterInput): Promise<Character> {
     const member = this.store.members.get(input.memberId);
@@ -34,13 +46,50 @@ export class CharacterService {
       );
     }
 
+    const characterId = uuid();
+    // Engine-generated blurb (issue 46), moderated before it is persisted so
+    // no unsafe text ever lands in the store (same seam as Story text).
+    const { description } = await this.anthropic.generateCharacterDescription(
+      input.questionnaire
+    );
+    await this.childSafety.checkText(description, characterId);
+
     const character: Character = {
-      id: uuid(),
+      id: characterId,
       familyId: member.familyId,
       createdByMemberId: member.id,
       displayName: input.questionnaire.name,
+      description,
       questionnaire: input.questionnaire,
       createdAt: new Date(),
+    };
+    this.store.saveCharacter(character);
+    return character;
+  }
+
+  /**
+   * Edit a Character's Trait Questionnaire and regenerate its description
+   * (issue 46). RLS is enforced by `getCharacter`; fictional-only is preserved.
+   */
+  async update(input: UpdateCharacterInput): Promise<Character> {
+    const existing = this.store.getCharacter(input.characterId, input.memberId);
+    if (!existing) throw new Error("Character not found");
+    if (!input.questionnaire.isFictional) {
+      throw new Error(
+        "Characters must be fictional. Add real people via the Family roster."
+      );
+    }
+
+    const { description } = await this.anthropic.generateCharacterDescription(
+      input.questionnaire
+    );
+    await this.childSafety.checkText(description, existing.id);
+
+    const character: Character = {
+      ...existing,
+      displayName: input.questionnaire.name,
+      description,
+      questionnaire: input.questionnaire,
     };
     this.store.saveCharacter(character);
     return character;
