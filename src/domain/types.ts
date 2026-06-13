@@ -119,6 +119,8 @@ export interface Character {
   familyId: string;
   createdByMemberId: string;
   displayName: string;
+  /** Engine-generated 1–2 sentence blurb from the Trait Questionnaire (issue 46). */
+  description: string;
   questionnaire: TraitQuestionnaire;
   promotedPersonaId?: string;
   createdAt: Date;

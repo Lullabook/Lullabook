@@ -1,16 +1,15 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { BookCover } from "@/components/v2/book-cover";
+import { DevSeedButton } from "@/components/v2/dev-seed-button";
 import { requireAuthedContext } from "@/lib/auth";
+import { bookHref } from "@/lib/book-nav";
+import { castLabel } from "@/lib/cast-label";
 
 export const metadata: Metadata = { title: "World" };
 
 function formatBookDate(date: Date): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function bookHref(status: string, id: string): string {
-  return status === "finalized" ? `/storybooks/${id}/read` : `/storybooks/${id}`;
 }
 
 export default async function WorldPage() {
@@ -19,6 +18,8 @@ export default async function WorldPage() {
   const home = ctx.world.getHome(member.id);
   const { baby, familyCount, characterCount, storyCount, avatars, recentBooks } = home;
   const babyInitial = baby.displayName.charAt(0).toUpperCase();
+  const devSeedEnabled =
+    process.env.NODE_ENV === "development" && process.env.DEV_DEMO_SEED === "true";
 
   return (
     <div className="v2-stack">
@@ -128,7 +129,7 @@ export default async function WorldPage() {
                 title={book.brief.theme}
                 status={book.status}
                 href={bookHref(book.status, book.id)}
-                cast={book.brief.storyType.replace("_", " ")}
+                cast={castLabel(ctx, book, member.id)}
                 date={formatBookDate(book.createdAt)}
                 seed={book.id}
               />
@@ -136,6 +137,12 @@ export default async function WorldPage() {
           </div>
         )}
       </section>
+
+      {devSeedEnabled && (
+        <section style={{ opacity: 0.8 }}>
+          <DevSeedButton />
+        </section>
+      )}
     </div>
   );
 }

@@ -56,7 +56,7 @@ export function createTestContext() {
     subscriptions,
     childSafety
   );
-  const characters = new CharacterService(store);
+  const characters = new CharacterService(store, anthropic, childSafety);
   const babies = new BabyService(store);
   const familyRoster = new FamilyRosterService(store);
   const voiceClips = new VoiceClipService(store, blobs);
@@ -183,4 +183,202 @@ export async function createReadyAdult(
     photos: [goodPhoto(), goodPhoto(), goodPhoto()],
     selfie: Buffer.from("selfie"),
   });
+}
+
+// ---------------------------------------------------------------------------
+// "Maya's World" demo seed (issue 47 / PRD v5)
+// ---------------------------------------------------------------------------
+
+interface SeedAdultSpec {
+  displayName: string;
+  relationship: string;
+  babyCallsThem: string;
+  theyCallBaby: string;
+  /** Final display status after the books are generated. */
+  finalStatus: "ready" | "training" | "needs-photos";
+  voiceClips: { label: string; transcript: string; durationSecs: number }[];
+}
+
+const MAYA_ADULTS: SeedAdultSpec[] = [
+  {
+    displayName: "Priya",
+    relationship: "Mom",
+    babyCallsThem: "Mama",
+    theyCallBaby: "my little star",
+    finalStatus: "ready",
+    voiceClips: [
+      { label: "Goodnight, my star", transcript: "Goodnight, my little star.", durationSecs: 4 },
+      { label: "I love you to the moon", transcript: "I love you to the moon and back.", durationSecs: 5 },
+    ],
+  },
+  {
+    displayName: "Sam",
+    relationship: "Dad",
+    babyCallsThem: "Dada",
+    theyCallBaby: "peanut",
+    finalStatus: "ready",
+    voiceClips: [{ label: "Sweet dreams, peanut", transcript: "Sweet dreams, peanut.", durationSecs: 3 }],
+  },
+  {
+    displayName: "Grandma Rose",
+    relationship: "Grandmother",
+    babyCallsThem: "Nani",
+    theyCallBaby: "moonbeam",
+    finalStatus: "ready",
+    voiceClips: [
+      { label: "Twinkle twinkle", transcript: "Twinkle, twinkle, little moonbeam.", durationSecs: 6 },
+      { label: "Once upon a time", transcript: "Once upon a time, in Nani's garden…", durationSecs: 5 },
+    ],
+  },
+  {
+    displayName: "Ava",
+    relationship: "Big sister",
+    babyCallsThem: "Sissy",
+    theyCallBaby: "baby sis",
+    finalStatus: "training",
+    voiceClips: [{ label: "Night night, baby sis", transcript: "Night night, baby sis!", durationSecs: 3 }],
+  },
+  {
+    displayName: "Uncle Leo",
+    relationship: "Uncle",
+    babyCallsThem: "Uncle Lee",
+    theyCallBaby: "little buddy",
+    finalStatus: "needs-photos",
+    voiceClips: [],
+  },
+];
+
+const MAYA_CHARACTERS: { name: string; topics: string[]; favoriteAnimals?: string[] }[] = [
+  { name: "Coco the Cat", topics: ["Curious", "Cuddly"], favoriteAnimals: ["cats"] },
+  { name: "Pip the Dragon", topics: ["Brave", "Silly"], favoriteAnimals: ["dragons"] },
+  { name: "Mr. Moon", topics: ["Wise", "Gentle"] },
+  { name: "Bramble Bear", topics: ["Kind", "Strong"], favoriteAnimals: ["bears"] },
+];
+
+export interface SeededMayaWorld {
+  baby: import("@/domain/types").Baby;
+  babyPersona: import("@/domain/types").Persona;
+  personas: import("@/domain/types").Persona[];
+  characters: import("@/domain/types").Character[];
+  books: import("@/domain/types").Storybook[];
+}
+
+/**
+ * Build the "Maya's World" demo dataset for an existing guardian Member, all
+ * writes routed through the family-scoped services (RLS-safe). Used by tests
+ * and mirrored by the dev runtime seed. Idempotency is the caller's concern.
+ */
+export async function seedMayaWorld(
+  ctx: ReturnType<typeof createTestContext>,
+  memberId: string
+): Promise<SeededMayaWorld> {
+  const member = ctx.store.members.get(memberId);
+  if (!member) throw new Error("Member not found");
+
+  // Subscription + consent so Baby Persona + illustrated generation are allowed.
+  if (!ctx.subscriptions.isActive(member.familyId)) {
+    withActiveSubscription(ctx, member);
+  }
+  ctx.subscriptions.recordConsent(member.familyId, member.id, member.jurisdiction);
+
+  const babyPersona = await ctx.personas.createBaby({
+    memberId,
+    displayName: "Maya",
+    photos: [goodPhoto(), goodPhoto(), goodPhoto()],
+  });
+  const baby = ctx.babies.addBaby({ memberId, displayName: "Maya" });
+
+  // All adults created ready first so storybook generation can star any of
+  // them; statuses are downgraded for display variety afterwards.
+  const personaByName = new Map<string, import("@/domain/types").Persona>();
+  for (const spec of MAYA_ADULTS) {
+    const persona = await createReadyAdult(ctx, { id: memberId }, spec.displayName);
+    personaByName.set(spec.displayName, persona);
+    ctx.familyRoster.updateBond({
+      memberId,
+      babyId: baby.id,
+      personaId: persona.id,
+      relationship: spec.relationship,
+      babyCallsThem: spec.babyCallsThem,
+      theyCallBaby: spec.theyCallBaby,
+    });
+    for (const clip of spec.voiceClips) {
+      ctx.voiceClips.recordConsent(memberId, persona.id);
+      await ctx.voiceClips.uploadClip({
+        memberId,
+        personaId: persona.id,
+        label: clip.label,
+        transcript: clip.transcript,
+        durationSecs: clip.durationSecs,
+        audioBytes: Buffer.from(`${spec.displayName}-${clip.label}`),
+      });
+    }
+  }
+
+  const characterByName = new Map<string, import("@/domain/types").Character>();
+  for (const spec of MAYA_CHARACTERS) {
+    const character = await ctx.characters.create({
+      memberId,
+      questionnaire: {
+        name: spec.name,
+        topics: spec.topics,
+        favoriteAnimals: spec.favoriteAnimals,
+        isFictional: true,
+      },
+    });
+    characterByName.set(spec.name, character);
+  }
+
+  const p = (name: string) => personaByName.get(name)!.id;
+  const c = (name: string) => characterByName.get(name)!.id;
+
+  // Generated while every adult is still ready. Status changes below do not
+  // rewrite already-captured briefs.
+  const finalizedAndDrafts: { theme: string; storyType: import("@/domain/types").StoryType; personas: string[]; characters?: string[]; finalize: boolean }[] = [
+    { theme: "A Morning in Nani's Garden", storyType: "everyday", personas: [p("Grandma Rose")], finalize: true },
+    { theme: "Maya's Very First Snow", storyType: "milestone", personas: [p("Sam")], finalize: true },
+    { theme: "Maya's Big Beach Day", storyType: "adventure", personas: [p("Priya"), p("Sam"), p("Grandma Rose"), p("Ava")], finalize: false },
+    { theme: "The Day Dada Was a Dragon", storyType: "silly", personas: [p("Sam")], characters: [c("Pip the Dragon")], finalize: true },
+    { theme: "Maya & the Brave Bunnies", storyType: "lesson", personas: [p("Ava")], finalize: true },
+  ];
+
+  const books: import("@/domain/types").Storybook[] = [];
+  for (const spec of finalizedAndDrafts) {
+    const book = await generateAndWait(ctx, memberId, {
+      starringPersonaIds: spec.personas,
+      starringCharacterIds: spec.characters,
+      babyId: baby.id,
+      storyType: spec.storyType,
+      theme: spec.theme,
+    });
+    if (spec.finalize) {
+      ctx.storybooks.finalize(memberId, book.id);
+    }
+    books.push(ctx.store.getStorybook(book.id, memberId)!);
+  }
+
+  // Generating book created LAST and left undrained so it stays "generating".
+  const generating = await ctx.storybooks.generate(memberId, {
+    starringPersonaIds: [p("Grandma Rose")],
+    babyId: baby.id,
+    storyType: "learning",
+    theme: "Counting Stars with Nani",
+  });
+  books.push(ctx.store.getStorybook(generating.id, memberId)!);
+
+  // Downgrade statuses for display variety (Ava training, Leo needs photos).
+  for (const spec of MAYA_ADULTS) {
+    if (spec.finalStatus === "ready") continue;
+    const persona = personaByName.get(spec.displayName)!;
+    persona.status = spec.finalStatus === "training" ? "training" : "failed";
+    ctx.store.savePersona(persona);
+  }
+
+  return {
+    baby,
+    babyPersona,
+    personas: MAYA_ADULTS.map((s) => personaByName.get(s.displayName)!),
+    characters: MAYA_CHARACTERS.map((s) => characterByName.get(s.name)!),
+    books,
+  };
 }

@@ -4,7 +4,7 @@ import type {
   ClassicSourceTale,
   TextStoryGenerationInput,
 } from "@/adapters/types";
-import type { GeneratedStory, StoryType } from "@/domain/types";
+import type { GeneratedStory, StoryType, TraitQuestionnaire } from "@/domain/types";
 import { requireEnv } from "@/adapters/env";
 
 // Story text generation model — locked by stack.md ("Claude Sonnet 4.6").
@@ -273,6 +273,53 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
       throw new Error("Text Story generation returned no content");
     }
     return { text: block.text };
+  }
+
+  async generateCharacterDescription(
+    questionnaire: TraitQuestionnaire
+  ): Promise<{ description: string }> {
+    const client = buildClient();
+    const traits = [
+      questionnaire.topics?.length ? `traits: ${questionnaire.topics.join(", ")}` : null,
+      questionnaire.nickname ? `nickname "${questionnaire.nickname}"` : null,
+      questionnaire.favoriteAnimals?.length
+        ? `favorite animals: ${questionnaire.favoriteAnimals.join(", ")}`
+        : null,
+      questionnaire.favoriteToys?.length
+        ? `favorite toys: ${questionnaire.favoriteToys.join(", ")}`
+        : null,
+      questionnaire.songs?.length ? `favorite songs: ${questionnaire.songs.join(", ")}` : null,
+    ]
+      .filter(Boolean)
+      .join("; ");
+
+    const message = await client.messages.create({
+      model: STORY_MODEL,
+      max_tokens: 256,
+      system: [
+        "You write a single warm, whimsical 1–2 sentence description of a made-up,",
+        "fictional Character for a child's storybook app, in the third person.",
+        SAFETY_CONSTRAINTS,
+        "Return ONLY the description text — no quotes, no preamble, no markdown.",
+      ].join(" "),
+      messages: [
+        {
+          role: "user",
+          content: `Describe this fictional Character named "${questionnaire.name}"${
+            traits ? ` (${traits})` : ""
+          }.`,
+        },
+      ],
+    });
+
+    if (message.stop_reason === "refusal") {
+      throw new Error("Character description was refused by the model's safety system");
+    }
+    const block = message.content.find((b) => b.type === "text");
+    if (!block || block.type !== "text") {
+      throw new Error("Character description generation returned no content");
+    }
+    return { description: block.text.trim() };
   }
 
   async adaptStory(input: {

@@ -47,6 +47,14 @@ export interface AnthropicAdapter {
     storyType: StoryType;
     twist?: string;
   }): Promise<GeneratedStory>;
+  /**
+   * Produce a short (1–2 sentence) blurb describing a fictional Character
+   * from its Trait Questionnaire (issue 46). Internal/engine-facing — the
+   * parent never writes it directly.
+   */
+  generateCharacterDescription(
+    questionnaire: TraitQuestionnaire
+  ): Promise<{ description: string }>;
 }
 
 export interface FalTrainResult {

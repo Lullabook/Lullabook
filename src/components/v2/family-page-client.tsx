@@ -7,6 +7,7 @@ import {
   HEADER_GRADIENTS,
   familyMemberStatus,
 } from "@/lib/v2-theme";
+import { V2_COLORS, V2_GRADIENT, V2_RADIUS, V2_SHADOW } from "@/components/v2/tokens";
 
 export interface FamilyMemberViewData {
   id: string;
@@ -31,6 +32,29 @@ function formatDuration(secs: number): string {
   const m = Math.floor(secs / 60);
   const s = Math.floor(secs % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/** Decorative 28-bar waveform (visual spec §2D). Heights are deterministic. */
+function Waveform({ seed }: { seed: string }) {
+  const bars = Array.from({ length: 28 }, (_, i) => {
+    const code = seed.charCodeAt(i % seed.length) + i * 7;
+    return 4 + (code % 19); // 4–22px
+  });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 2, height: 22, margin: "2px 0" }} aria-hidden="true">
+      {bars.map((h, i) => (
+        <span
+          key={i}
+          style={{
+            width: 3,
+            height: h,
+            borderRadius: 2,
+            background: V2_COLORS.waveformBar,
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
@@ -90,11 +114,12 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 12,
-                    padding: 14,
-                    borderRadius: 18,
-                    border: active ? "2px solid #8B6DF0" : "1px solid #ECE1CE",
-                    background: active ? "#F6F1FF" : "#FFFDF9",
+                    gap: 13,
+                    padding: "13px 14px",
+                    borderRadius: V2_RADIUS.row,
+                    border: `1.5px solid ${active ? V2_COLORS.primaryLight : V2_COLORS.border}`,
+                    background: active ? V2_COLORS.hoverTint : V2_COLORS.surface,
+                    boxShadow: active ? V2_SHADOW.familyRowActive : V2_SHADOW.familyRow,
                     cursor: "pointer",
                     textAlign: "left",
                     fontFamily: "inherit",
@@ -201,10 +226,10 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
           {detail && (
             <div
               style={{
-                background: "#FFFDF9",
-                border: "1px solid #ECE1CE",
-                borderRadius: 26,
-                boxShadow: "0 12px 32px rgba(58,40,80,0.08)",
+                background: V2_COLORS.surface,
+                border: `1px solid ${V2_COLORS.border}`,
+                borderRadius: V2_RADIUS.detail,
+                boxShadow: V2_SHADOW.familyDetail,
                 overflow: "hidden",
               }}
             >
@@ -406,35 +431,43 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                     }}
                   >
                     {Array.from({ length: Math.max(6, detail.photoCount) }).map(
-                      (_, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            aspectRatio: "1",
-                            borderRadius: 14,
-                            border: "1px dashed #D8C9B0",
-                            background: idx < detail.photoCount ? "#EDE7FE" : "#FFF8EC",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "#9A8A78",
-                            fontSize: "0.8rem",
-                            fontWeight: 700,
-                          }}
-                        >
-                          {idx < detail.photoCount ? "📷" : "＋"}
-                        </div>
-                      )
+                      (_, idx) => {
+                        const filled = idx < detail.photoCount;
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              aspectRatio: "1",
+                              borderRadius: V2_RADIUS.slot,
+                              border: filled
+                                ? "1px solid rgba(255,255,255,0.35)"
+                                : `2px dashed ${V2_COLORS.borderDashed}`,
+                              background: filled
+                                ? `repeating-linear-gradient(45deg, rgba(255,255,255,0.18) 0 6px, rgba(255,255,255,0) 6px 12px), ${detail.avBg}`
+                                : V2_COLORS.background,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: filled ? "#fff" : V2_COLORS.photoPlaceholderText,
+                              fontSize: filled ? "0.8rem" : "1.4rem",
+                              fontWeight: 700,
+                              fontFamily: filled ? "var(--v2-font-display)" : "var(--font-mono, monospace)",
+                            }}
+                          >
+                            {filled ? detail.initial : "＋"}
+                          </div>
+                        );
+                      }
                     )}
                   </div>
                 </div>
 
                 <div
                   style={{
-                    background: "linear-gradient(160deg,#2A2452,#3E2F63)",
-                    borderRadius: 20,
+                    background: V2_GRADIENT.voicePanel,
+                    borderRadius: V2_RADIUS.voicePanel,
                     padding: 22,
-                    color: "#FAF4E6",
+                    color: V2_COLORS.voiceCream,
                   }}
                 >
                   <div
@@ -460,7 +493,7 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                     </h3>
                     <span className="v2-badge-illustrated">✨ Illustrated plan</span>
                   </div>
-                  <p style={{ margin: "0 0 16px", color: "#C9BDE8", fontSize: "0.92rem" }}>
+                  <p style={{ margin: "0 0 16px", color: V2_COLORS.voiceMuted, fontSize: "0.92rem" }}>
                     Record a few lines and {babyName} will hear {detail.name} read to
                     them — in their own voice, on every page.
                   </p>
@@ -470,7 +503,7 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                         style={{
                           margin: 0,
                           fontStyle: "italic",
-                          color: "#D7CBEE",
+                          color: V2_COLORS.voiceQuote,
                           fontSize: "0.9rem",
                         }}
                       >
@@ -486,7 +519,7 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                             gap: 14,
                             background: "rgba(255,255,255,0.06)",
                             border: "1px solid rgba(255,255,255,0.12)",
-                            borderRadius: 14,
+                            borderRadius: V2_RADIUS.audio,
                             padding: "12px 14px",
                           }}
                         >
@@ -495,8 +528,8 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                               width: 42,
                               height: 42,
                               borderRadius: "50%",
-                              background: "linear-gradient(135deg,#F6C177,#E79A3C)",
-                              color: "#3a2410",
+                              background: V2_GRADIENT.ctaAmber,
+                              color: V2_COLORS.accentDarkText,
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "center",
@@ -519,15 +552,16 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                               <span style={{ fontWeight: 800, fontSize: "0.92rem", color: "#fff" }}>
                                 {clip.label}
                               </span>
-                              <span style={{ fontSize: "0.78rem", color: "#9F92C4" }}>
+                              <span style={{ fontSize: "0.78rem", color: V2_COLORS.voiceDuration }}>
                                 {formatDuration(clip.durationSecs)}
                               </span>
                             </div>
+                            <Waveform seed={clip.label} />
                             <p
                               style={{
-                                margin: 0,
+                                margin: "2px 0 0",
                                 fontStyle: "italic",
-                                color: "#D7CBEE",
+                                color: V2_COLORS.voiceQuote,
                                 fontSize: "0.86rem",
                               }}
                             >
@@ -543,16 +577,16 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 8,
-                        background: "rgba(255,255,255,0.1)",
-                        border: "1px dashed rgba(255,255,255,0.3)",
-                        color: "#C9BDE8",
+                        background: V2_COLORS.voiceCream,
+                        color: V2_COLORS.nightPanel,
                         padding: "11px 18px",
-                        borderRadius: 999,
+                        borderRadius: V2_RADIUS.pill,
                         fontSize: "0.9rem",
                         fontWeight: 800,
                       }}
+                      title="Voice recording is coming soon"
                     >
-                      🔴 Record a new message · coming soon
+                      🔴 Record a new message
                     </span>
                   </div>
                 </div>

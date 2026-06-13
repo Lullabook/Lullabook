@@ -75,6 +75,25 @@ export async function createCharacterAction(
   }
 }
 
+export async function updateCharacterAction(
+  characterId: string,
+  questionnaire: TraitQuestionnaire
+): Promise<ActionResult<{ characterId: string }>> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    const character = await ctx.characters.update({
+      characterId,
+      memberId: member.id,
+      questionnaire,
+    });
+    await ctx.persist();
+    revalidatePath("/characters");
+    return { ok: true, data: { characterId: character.id } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 export async function deleteCharacterAction(
   characterId: string
 ): Promise<ActionResult> {
@@ -99,6 +118,32 @@ export async function createTextStoryAction(
     await ctx.persist();
     revalidatePath("/stories");
     return { ok: true, data: { storyId: story.id } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+/**
+ * Dev-only demo injector (issue 47). Gated behind both `NODE_ENV` and an
+ * explicit env flag so it can never run in production, and idempotent (bails
+ * if the signed-in family already has storybooks). Populates the signed-in
+ * family with the "Maya's World" demo dataset.
+ */
+export async function seedDemoWorldAction(): Promise<
+  ActionResult<{ alreadySeeded: boolean; personas: number; characters: number; books: number }>
+> {
+  if (process.env.NODE_ENV !== "development" || process.env.DEV_DEMO_SEED !== "true") {
+    return { ok: false, error: "Demo seed is disabled" };
+  }
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    const { seedMayaWorldRuntime } = await import("@/dev/seed-maya-world");
+    const result = await seedMayaWorldRuntime(ctx, member);
+    revalidatePath("/world");
+    revalidatePath("/family");
+    revalidatePath("/characters");
+    revalidatePath("/stories");
+    return { ok: true, data: result };
   } catch (err) {
     return fail(err);
   }

@@ -71,7 +71,7 @@ export function createRequestContext() {
     subscriptions,
     childSafety
   );
-  const characters = new CharacterService(store);
+  const characters = new CharacterService(store, anthropic, childSafety);
   const babies = new BabyService(store);
   const familyRoster = new FamilyRosterService(store);
   const voiceClips = new VoiceClipService(store, blobs);
