@@ -3,16 +3,15 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-issue-32.md`** — issue **32**
-> complete: migration `003`, `SupabaseDataStore` push/VPC hydrate+sync, simulated
-> RLS reads, hard-delete via `sync()`, CI migration smoke (127 tests). **Next:
-> run `/part2` → issue `33`** (Email-Plus VPC revoke withdraws consent). Earlier:
-> `SESSION-HANDOFF-2026-06-13-persistence.md` (PRD v4 planning).
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-issue-33.md`** — issue **33**
+> complete: Email-Plus VPC revoke withdraws consent, purge scheduling, revoke API
+> (132 tests). **PRD v4 (issues 32–33) is done.** No further unblocked persistence
+> slices. Earlier: `SESSION-HANDOFF-2026-06-13-issue-32.md`.
 
 ## Session handoffs (newest first)
 
-- `SESSION-HANDOFF-2026-06-13-issue-32.md` — issue 32 DONE: migration 003, Supabase push/VPC persist, CI smoke; next issue 33
-- `SESSION-HANDOFF-2026-06-13-persistence.md` — PRD v4 + issues 32–33 (persist push/VPC tables), global /part1+/part2 skills, Antigravity bug-fix prompt
+- `SESSION-HANDOFF-2026-06-13-issue-33.md` — issue 33 DONE: VPC revoke withdraws consent; PRD v4 complete
+- `SESSION-HANDOFF-2026-06-13-issue-32.md` — issue 32 DONE: migration 003, Supabase push/VPC persist, CI smoke
 - `SESSION-HANDOFF-2026-06-13-native-ios.md` — Cursor BUILT the native iOS app (commit c2750d9, 116 tests); honest follow-ups (screens/migrations)
 - `SESSION-HANDOFF-2026-06-13.md` — native iOS one-shot → PRD v3 + issues 23–31 (Cursor), grill decisions, glossary updates
 - `SESSION-HANDOFF-2026-06-12_2.md` — native iOS planning, code review, ADR-0018, native one-shot prompt
