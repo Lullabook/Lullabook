@@ -59,6 +59,32 @@ parallel; 55 needs 51+52+54; 56 needs 53.
 - Whether aged-out ordinary Moments are gone vs offered as Brief picks (lean: gone).
 - Native push scheduling / quiet-hours for the daily nudge.
 
+## UI drop-in applied this session (from `~/Downloads/Lullabook (1)`)
+
+The "Maya's World" v2 redesign + Daily-Life screens were dropped in 1:1 from the
+design handoff. **These are UI shells** — the Daily page renders demo Moments and a
+default routine; real persistence is exactly what issues 50–56 wire up.
+
+**Web (`src/`):** replaced `app/(app)/account/page.tsx`, `components/persona-form.tsx`,
+`components/questionnaire-form.tsx`; new `app/(app)/daily/page.tsx`,
+`components/v2/daily-life-client.tsx`, `domain/daily-types.ts`. Added a **Daily** nav
+item to `V2_NAV` in `components/v2/tokens.ts`. Typecheck of these files is clean (the
+only `tsc` errors are pre-existing test-harness drift in `tests/03,06,23`, unrelated).
+
+**Mobile (`mobile/`, production):** new `constants/theme.ts`, `components/maya-ui.tsx`,
+`components/character-form.tsx`, `app/account.tsx`, `app/daily.tsx`, `app/family/new.tsx`,
+`app/characters/new.tsx`, `app/characters/[id].tsx`.
+
+**Still-open wiring (`// TODO:` in the dropped files), folds into the issues:**
+- Daily persistence: add a `DayMoment`/Moment store + `createDayMomentAction` and pass
+  real rows into `<DailyLifeClient />` → **issue 50**. ("Turn into a story" button →
+  prefilled Brief → **issue 55**.)
+- Mobile submit handlers are stubbed against `@/lib/api`; mobile needs
+  `expo-image-picker` + iOS photo/camera Info.plist strings (see `handoff-mobile/README.md`).
+- The drop-in's `domain/daily-types.ts` (`DayMoment`) is the design's shape; reconcile
+  with the **Moment** model in issue 50 (light structure: text + date + linked people +
+  `significant` flag).
+
 ## Notes for the implementer (Cursor Composer)
 - Build against the existing v2 design system; **do not** author new visual design.
 - Every slice is test-first per the repo's TDD convention; migrations additive +

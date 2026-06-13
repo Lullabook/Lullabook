@@ -111,6 +111,7 @@ export const V2_NAV = [
   { href: "/storybooks/new", icon: "✨", label: "Create" },
   { href: "/family", icon: "💛", label: "Family" },
   { href: "/characters", icon: "🐻", label: "Characters" },
+  { href: "/daily", icon: "📔", label: "Daily" },
 ] as const;
 
 export const AVATAR_GRADIENTS = [
