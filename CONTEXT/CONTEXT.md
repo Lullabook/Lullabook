@@ -313,7 +313,26 @@ machine-facing wording.
 
 ---
 
-_Last updated 2026-06-13: added Journal & Moments language (Moment, Significant
-Moment, Journal, Auto-context layer, Daily nudge, Weekly Story suggestion; PRD v6,
-ADR-0019). Prior update same day: v5 "Maya's World" revamp language (Household,
-World, multi-Baby, Family-roster, Voice clip, Video page)._
+## Roster avatar — incoming language (PRD v7)
+
+> Grilled 2026-06-14. A display/privacy layer over the existing
+> [Persona](#persona)/Family-roster photos. Does **not** change how likeness is
+> trained. See [ADR-0020](docs/adr/0020-roster-avatar-generated-not-raw-photo.md).
+
+- **Roster avatar** — the picture shown for a roster member (Baby or adult)
+  everywhere in the app. It is a clean illustration **generated from that member's
+  trained likeness LoRA**, never their raw uploaded photo. The raw reference photos
+  are still stored and still train the likeness model (Story + video generation);
+  they are simply **never rendered on any display surface** (roster cards, story
+  credits, member pickers). A member can update their reference photos, which
+  retrains the LoRA and regenerates the avatar. Until training reaches `ready`, a
+  neutral placeholder stands in.
+  _Avoid_: "profile picture" / "thumbnail" (both imply the raw selfie this replaces).
+
+---
+
+_Last updated 2026-06-14: added Roster avatar language (display generated avatars,
+never raw photos; PRD v7, ADR-0020). Prior update 2026-06-13: added Journal &
+Moments language (Moment, Significant Moment, Journal, Auto-context layer, Daily
+nudge, Weekly Story suggestion; PRD v6, ADR-0019), and v5 "Maya's World" revamp
+language (Household, World, multi-Baby, Family-roster, Voice clip, Video page)._
