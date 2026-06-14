@@ -640,7 +640,7 @@ function UpdateReferencePhotos({
           <input ref={selfieRef} type="file" accept="image/*" capture="user" style={{ display: "none" }} />
           <button
             type="button"
-            className="v2-btn v2-btn--secondary"
+            className="v2-btn v2-btn--ghost-surface"
             disabled={pending}
             onClick={() => selfieRef.current?.click()}
           >

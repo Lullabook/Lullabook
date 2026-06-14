@@ -297,10 +297,11 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
 
     const message = await client.messages.create({
       model: STORY_MODEL,
-      max_tokens: 256,
+      max_tokens: 80,
       system: [
-        "You write a single warm, whimsical 1–2 sentence description of a made-up,",
-        "fictional Character for a child's storybook app, in the third person.",
+        "You write ONE short, warm, whimsical sentence (max ~20 words) describing a",
+        "made-up, fictional Character for a child's storybook app, in the third person.",
+        "Keep it simple and concrete — a single sentence, never two.",
         SAFETY_CONSTRAINTS,
         "Return ONLY the description text — no quotes, no preamble, no markdown.",
       ].join(" "),

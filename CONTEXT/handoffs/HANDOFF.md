@@ -3,11 +3,16 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-issue-50.md`** —
-> issue 50 DONE: Moment capture + Daily page wired to real persistence. **172 tests green.**
-> Next: issue 51–54 (53 daily nudge suggested).
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-14-prd-v8-photo-stories.md`** —
+> `/part1` planning: PRD v8 (Photo Stories, Firsts, Birthday) + ADR-0021 + issues 64–73.
+> Planning only, no code. Next: `/part2` from issue 64.
 
 ## Session handoffs (newest first)
+
+- `SESSION-HANDOFF-2026-06-14-prd-v8-photo-stories.md` — `/part1` PRD v8: photo-to-story (write-only Moment photo, ADR-0021), Firsts view + instant offer, birthday auto-story, lullaby HITL runbook; issues 64–73
+- `SESSION-HANDOFF-2026-06-14-issues-58-63.md` — issues 58–62 + 63 runbook: roster avatars, two-mode dev, web polish, mobile parity; 212 tests
+- `SESSION-HANDOFF-2026-06-14-issue-57.md` — issue 57: local disk blob-store dev fallback
+- `SESSION-HANDOFF-2026-06-14-roster-avatars-and-testflight.md` — `/part1` PRD v7 + ADR-0020 + issues 57–63
 
 - `SESSION-HANDOFF-2026-06-13-issue-50.md` — issue 50: moments DB/service, Daily persistence, Supabase babies+moments sync; 172 tests
 - `SESSION-HANDOFF-2026-06-13-maya-world-part2.md` — issues 46–47 + v2 UI (composer, stories shelf, tokenize, edit-character, HTML deliverable); 168 tests

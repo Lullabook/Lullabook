@@ -84,25 +84,32 @@ export function BriefComposer({ personas, classic }: BriefComposerProps) {
     });
   }
 
+  const fieldset: React.CSSProperties = { border: "1px solid #ECE1CE", borderRadius: 16, padding: 16, margin: 0 };
+  const legend: React.CSSProperties = { fontFamily: "var(--v2-font-display)", fontWeight: 700, color: "#2E2438", padding: "0 8px" };
+  const labelText: React.CSSProperties = { fontFamily: "var(--v2-font-display)", fontWeight: 700, color: "#2E2438" };
+  const inputStyle: React.CSSProperties = { fontFamily: "var(--v2-font-body)", fontSize: "1rem", color: "#2E2438", background: "#FBF4E7", border: "1px solid #ECE1CE", borderRadius: 14, padding: "13px 15px", boxSizing: "border-box" };
+  const chipStyle = (active: boolean): React.CSSProperties => ({ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 999, border: "1px solid #ECE1CE", background: active ? "#EDE7FE" : "#FFFDF9", fontFamily: "var(--v2-font-body)", fontSize: "0.9rem", color: "#2E2438", cursor: "pointer" });
+  const hintStyle: React.CSSProperties = { fontSize: "0.82rem", color: "#9A8A78" };
+
   return (
-    <form action={submit} className="stack">
+    <form action={submit} className="v2-stack" style={{ gap: 16, fontFamily: "var(--v2-font-body)" }}>
       {error && (
-        <div className="alert alert-error" role="alert">
+        <div role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48", fontSize: "0.92rem" }}>
           {error}
         </div>
       )}
 
-      <fieldset>
-        <legend>Starring</legend>
+      <fieldset style={fieldset}>
+        <legend style={legend}>Starring</legend>
         {personas.length === 0 ? (
-          <p className="subtle">
+          <p style={hintStyle}>
             No personas yet — create one first, or start with a free text
             Character story instead.
           </p>
         ) : (
-          <div className="chips">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
             {ready.map((p) => (
-              <label key={p.id} className="chip">
+              <label key={p.id} style={chipStyle(starring.includes(p.id))}>
                 <input
                   type="checkbox"
                   checked={starring.includes(p.id)}
@@ -112,29 +119,29 @@ export function BriefComposer({ personas, classic }: BriefComposerProps) {
               </label>
             ))}
             {training.map((p) => (
-              <label key={p.id} className="chip">
+              <label key={p.id} style={chipStyle(starring.includes(p.id))}>
                 <input
                   type="checkbox"
                   checked={starring.includes(p.id)}
                   onChange={() => togglePersona(p.id)}
                 />
-                {p.displayName} <span className="subtle">(training…)</span>
+                {p.displayName} <span style={hintStyle}>(training…)</span>
               </label>
             ))}
           </div>
         )}
         {training.some((t) => starring.includes(t.id)) && (
-          <p className="hint" style={{ marginTop: 8 }}>
+          <p style={{ ...hintStyle, marginTop: 8 }}>
             This persona is still training (~5 minutes). We&apos;ll start the
             book automatically the moment it&apos;s ready.
           </p>
         )}
       </fieldset>
 
-      <fieldset>
-        <legend>Story type</legend>
-        <div className="chips" role="radiogroup" aria-label="Story type">
-          <label className="chip">
+      <fieldset style={fieldset}>
+        <legend style={legend}>Story type</legend>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }} role="radiogroup" aria-label="Story type">
+          <label style={chipStyle(storyType === "bedtime")}>
             <input
               type="radio"
               name="storyType"
@@ -143,7 +150,7 @@ export function BriefComposer({ personas, classic }: BriefComposerProps) {
             />
             🌙 Bedtime — gentle and sleepy
           </label>
-          <label className="chip">
+          <label style={chipStyle(storyType === "learning")}>
             <input
               type="radio"
               name="storyType"
@@ -156,35 +163,37 @@ export function BriefComposer({ personas, classic }: BriefComposerProps) {
       </fieldset>
 
       {classic ? (
-        <div className="alert alert-info">
+        <div style={{ borderRadius: 16, padding: "14px 16px", background: "#EDE7FE", border: "1px solid #d9cdfa", color: "#4A3C7A", fontSize: "0.92rem" }}>
           Recasting <strong>{classic.title}</strong> with your family. Add an
           optional twist below.
         </div>
       ) : (
-        <div className="field">
-          <label htmlFor="theme">Theme</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label htmlFor="theme" style={labelText}>Theme</label>
           <input
             id="theme"
             name="theme"
             type="text"
             placeholder="A trip to the moon, learning to share, the first snow…"
             required
+            style={inputStyle}
           />
         </div>
       )}
 
-      <div className="field">
-        <label htmlFor="setting">Setting or occasion (optional)</label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <label htmlFor="setting" style={labelText}>Setting or occasion (optional)</label>
         <input
           id="setting"
           name="setting"
           type="text"
           placeholder="Grandma's garden, a rainy Sunday, baby's first birthday…"
+          style={inputStyle}
         />
       </div>
 
-      <div className="field">
-        <label htmlFor="note">{classic ? "Twist (optional)" : "Note (optional)"}</label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <label htmlFor="note" style={labelText}>{classic ? "Twist (optional)" : "Note (optional)"}</label>
         <textarea
           id="note"
           name="note"
@@ -193,15 +202,16 @@ export function BriefComposer({ personas, classic }: BriefComposerProps) {
               ? "What if the rabbit hole led to the bath instead?"
               : "Anything the story should include — a lovey, a song, a phrase…"
           }
+          style={{ ...inputStyle, minHeight: 88, resize: "vertical" }}
         />
-        <span className="hint">Notes are moderated before generation.</span>
+        <span style={hintStyle}>Notes are moderated before generation.</span>
       </div>
 
-      <fieldset>
-        <legend>Art style</legend>
-        <div className="chips">
+      <fieldset style={fieldset}>
+        <legend style={legend}>Art style</legend>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
           {ART_STYLES.map((style) => (
-            <label key={style} className="chip">
+            <label key={style} style={chipStyle(artStyle === style)}>
               <input
                 type="radio"
                 name="artStyle"
@@ -211,7 +221,7 @@ export function BriefComposer({ personas, classic }: BriefComposerProps) {
               {style}
             </label>
           ))}
-          <label className="chip">
+          <label style={chipStyle(artStyle === null)}>
             <input
               type="radio"
               name="artStyle"
@@ -221,19 +231,20 @@ export function BriefComposer({ personas, classic }: BriefComposerProps) {
             Let Lullabook choose
           </label>
         </div>
-        <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
-          <label htmlFor="customStyle">Custom style note (optional)</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 12 }}>
+          <label htmlFor="customStyle" style={labelText}>Custom style note (optional)</label>
           <input
             id="customStyle"
             name="customStyle"
             type="text"
             placeholder="Like our nursery wallpaper: stars and sage green"
+            style={inputStyle}
           />
         </div>
       </fieldset>
 
-      <button className="btn btn-primary" type="submit" disabled={pending}>
-        {pending ? "Tucking the story in…" : "Generate Storybook"}
+      <button className="v2-btn v2-btn--primary" type="submit" disabled={pending}>
+        {pending ? "Tucking the story in…" : "✨ Generate Storybook"}
       </button>
     </form>
   );

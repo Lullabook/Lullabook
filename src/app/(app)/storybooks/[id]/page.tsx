@@ -35,9 +35,11 @@ export default async function StorybookPage({
 
   if (book.status === "generating") {
     return (
-      <>
-        <p className="eyebrow">Storybook</p>
-        <h1>{book.brief.theme}</h1>
+      <div className="v2-stack" style={{ gap: 18 }}>
+        <div>
+          <p className="v2-eyebrow">✨ Generating your storybook</p>
+          <h1 className="v2-page-title">{book.brief.theme}</h1>
+        </div>
         <GenerationProgress
           storybookId={book.id}
           expectedPageCount={EXPECTED_PAGE_COUNT}
@@ -47,29 +49,31 @@ export default async function StorybookPage({
             generationStatus: p.generationStatus,
           }))}
         />
-      </>
+      </div>
     );
   }
 
   if (book.status === "failed") {
     return (
-      <>
-        <p className="eyebrow">Storybook</p>
-        <h1>{book.brief.theme}</h1>
-        <div className="card empty-state">
-          <span className="moon" aria-hidden="true">
+      <div className="v2-stack" style={{ gap: 18 }}>
+        <div>
+          <p className="v2-eyebrow">📚 Storybook</p>
+          <h1 className="v2-page-title">{book.brief.theme}</h1>
+        </div>
+        <div className="v2-empty">
+          <span className="v2-empty__icon" aria-hidden="true">
             🌧️
           </span>
-          <h2>This one didn&apos;t come together</h2>
-          <p className="muted">
-            Too few pages made it through generation, so we stopped rather
-            than hand you half a book. This never costs you anything.
+          <h2 className="v2-section-title">This one didn&apos;t come together</h2>
+          <p className="v2-page-lead" style={{ marginBottom: 20 }}>
+            Too few pages made it through generation, so we stopped rather than
+            hand you half a book. This never costs you anything.
           </p>
-          <Link className="btn btn-primary" href="/storybooks/new">
-            Try a fresh Brief
+          <Link className="v2-btn v2-btn--primary" href="/storybooks/new">
+            Try a fresh story
           </Link>
         </div>
-      </>
+      </div>
     );
   }
 
@@ -92,12 +96,10 @@ export default async function StorybookPage({
     }));
 
     return (
-      <>
-        <div className="row between">
-          <div>
-            <p className="eyebrow">Draft — only you can see this</p>
-            <h1>{book.brief.theme}</h1>
-          </div>
+      <div className="v2-stack" style={{ gap: 18 }}>
+        <div>
+          <p className="v2-eyebrow">✏️ Draft — only you can see this</p>
+          <h1 className="v2-page-title">{book.brief.theme}</h1>
         </div>
         <CurationBoard
           storybookId={book.id}
@@ -105,7 +107,7 @@ export default async function StorybookPage({
           rerollBudgetRemaining={book.rerollBudgetRemaining}
           rerollCredits={book.rerollCredits}
         />
-      </>
+      </div>
     );
   }
 
@@ -121,29 +123,32 @@ export default async function StorybookPage({
     }));
 
   return (
-    <>
-      <p className="eyebrow">Finalized keepsake</p>
-      <h1>{book.brief.theme}</h1>
-      <div className="card">
-        <div className="row">
-          <Link className="btn btn-primary" href={`/storybooks/${book.id}/read`}>
-            Read together
+    <div className="v2-stack" style={{ gap: 18 }}>
+      <div>
+        <p className="v2-eyebrow">💛 Finalized keepsake</p>
+        <h1 className="v2-page-title">{book.brief.theme}</h1>
+      </div>
+      <div className="v2-card">
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <Link className="v2-btn v2-btn--primary" href={`/storybooks/${book.id}/read`}>
+            📖 Read together
           </Link>
-          <a className="btn btn-secondary" href={`/api/storybooks/${book.id}/export`}>
-            Download PDF
+          <a className="v2-btn v2-btn--ghost-surface" href={`/api/storybooks/${book.id}/export`}>
+            ⬇️ Download PDF
           </a>
         </div>
       </div>
-      <div className="card">
-        <h2>Sharing</h2>
-        <p className="subtle">
-          Storybooks are private to your Family by default. A share link
-          exposes your child&apos;s likeness and name to anyone who has it —
-          links are never indexed by search engines, and you can revoke them
-          anytime.
+      <div className="v2-card">
+        <h2 style={{ margin: "0 0 8px", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.3rem", color: "#2E2438" }}>
+          Sharing
+        </h2>
+        <p style={{ margin: "0 0 16px", color: "#6E6076", fontSize: "0.92rem", lineHeight: 1.5 }}>
+          Storybooks are private to your family by default. A share link exposes
+          your child&apos;s likeness and name to anyone who has it — links are
+          never indexed by search engines, and you can revoke them anytime.
         </p>
         <ShareControls storybookId={book.id} links={links} />
       </div>
-    </>
+    </div>
   );
 }

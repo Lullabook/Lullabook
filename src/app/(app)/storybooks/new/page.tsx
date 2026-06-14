@@ -55,7 +55,7 @@ export default async function NewStorybookPage({
       </div>
 
       {!subscribed && (
-        <div className="alert alert-warning" style={{ marginBottom: 8 }}>
+        <div className="v2-notice" style={{ marginBottom: 8 }}>
           Illustrated Storybooks need an active subscription.{" "}
           <Link href="/billing">See plans</Link> — or create a{" "}
           <Link href="/stories/new">free text Story</Link> with no photos at all.

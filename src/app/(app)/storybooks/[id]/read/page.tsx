@@ -31,14 +31,17 @@ export default async function ReadStorybookPage({
   }));
 
   return (
-    <>
-      <div className="row between" style={{ marginBottom: "1rem" }}>
-        <h1 style={{ margin: 0 }}>{book.brief.theme}</h1>
-        <Link className="btn btn-ghost btn-sm" href={`/storybooks/${book.id}`}>
+    <div className="v2-stack" style={{ gap: 18 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <p className="v2-eyebrow">📖 Read together</p>
+          <h1 className="v2-page-title">{book.brief.theme}</h1>
+        </div>
+        <Link className="v2-btn v2-btn--ghost-surface" href={`/storybooks/${book.id}`}>
           Details
         </Link>
       </div>
       <Reader title={book.brief.theme} pages={pages} />
-    </>
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RosterAvatar } from "@/components/v2/roster-avatar";
-import type { PersonaStatus } from "@/domain/types";
+import type { Brief, PersonaStatus, StoryType } from "@/domain/types";
 import { AVATAR_GRADIENTS } from "@/lib/v2-theme";
 import {
   generateStorybookAction,
@@ -137,7 +137,7 @@ export function V2Composer({
     <div className="v2-composer">
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {error && (
-          <div className="alert alert-error" role="alert">
+          <div role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48", fontSize: "0.92rem" }}>
             {error}
           </div>
         )}
