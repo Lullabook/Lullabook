@@ -57,19 +57,25 @@ export function V2Composer({
   babyPersona,
   adults,
   characters,
+  initialTheme = "",
+  initialAdultIds = [],
+  initialCharacterIds = [],
 }: {
   babyName: string;
   babyPersona: CastPersona | null;
   adults: CastPersona[];
   characters: CastCharacter[];
+  initialTheme?: string;
+  initialAdultIds?: string[];
+  initialCharacterIds?: string[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const [theme, setTheme] = useState("");
-  const [selectedAdults, setSelectedAdults] = useState<string[]>([]);
-  const [selectedChars, setSelectedChars] = useState<string[]>([]);
+  const [theme, setTheme] = useState(initialTheme);
+  const [selectedAdults, setSelectedAdults] = useState<string[]>(initialAdultIds);
+  const [selectedChars, setSelectedChars] = useState<string[]>(initialCharacterIds);
   const [storyType, setStoryType] = useState<StoryType>("bedtime");
   const [artStyle, setArtStyle] = useState<string>("Soft watercolor");
   const [pageCount, setPageCount] = useState<number>(12);

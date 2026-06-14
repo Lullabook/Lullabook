@@ -21,6 +21,10 @@ import type {
   EmailPlusVpcRequest,
   VoiceClip,
   VoiceConsentReceipt,
+  Moment,
+  MomentPersonLink,
+  BabyAutoContextWatermark,
+  JournalNudgeState,
 } from "@/domain/types";
 
 export class DataStore {
@@ -48,6 +52,10 @@ export class DataStore {
   babyPersonBonds = new Map<string, BabyPersonBond>();
   voiceClips = new Map<string, VoiceClip>();
   voiceConsentReceipts = new Map<string, VoiceConsentReceipt>();
+  moments = new Map<string, Moment>();
+  momentPeople = new Map<string, MomentPersonLink>();
+  autoContextWatermarks = new Map<string, BabyAutoContextWatermark>();
+  journalNudgeStates = new Map<string, JournalNudgeState>();
 
   createFamily(): Family {
     const family: Family = { id: uuid(), createdAt: new Date() };
@@ -132,6 +140,67 @@ export class DataStore {
     this.voiceConsentReceipts.set(receipt.id, receipt);
   }
 
+  getMomentsForBaby(babyId: string, actorMemberId: string): Moment[] {
+    const baby = this.getBaby(babyId, actorMemberId);
+    if (!baby) throw new RlsViolationError("Cannot read moments for another family");
+    return [...this.moments.values()]
+      .filter((m) => m.babyId === babyId)
+      .sort((a, b) => {
+        const dateCmp = b.occurredOn.localeCompare(a.occurredOn);
+        if (dateCmp !== 0) return dateCmp;
+        return b.createdAt.getTime() - a.createdAt.getTime();
+      });
+  }
+
+  saveMoment(moment: Moment): void {
+    this.moments.set(moment.id, moment);
+  }
+
+  deleteMoment(id: string): void {
+    this.moments.delete(id);
+    for (const [linkId, link] of this.momentPeople) {
+      if (link.momentId === id) this.momentPeople.delete(linkId);
+    }
+  }
+
+  getMomentPeople(momentId: string): MomentPersonLink[] {
+    return [...this.momentPeople.values()].filter((l) => l.momentId === momentId);
+  }
+
+  saveMomentPersonLink(link: MomentPersonLink): void {
+    this.momentPeople.set(link.id, link);
+  }
+
+  deleteMomentPeopleForPersona(personaId: string): void {
+    for (const [id, link] of this.momentPeople) {
+      if (link.personaId === personaId) this.momentPeople.delete(id);
+    }
+  }
+
+  deleteMomentPeopleForCharacter(characterId: string): void {
+    for (const [id, link] of this.momentPeople) {
+      if (link.characterId === characterId) this.momentPeople.delete(id);
+    }
+  }
+
+  getAutoContextWatermark(babyId: string): BabyAutoContextWatermark | undefined {
+    return this.autoContextWatermarks.get(babyId);
+  }
+
+  saveAutoContextWatermark(watermark: BabyAutoContextWatermark): void {
+    this.autoContextWatermarks.set(watermark.babyId, watermark);
+  }
+
+  getJournalNudgeStates(memberId: string, babyId: string): JournalNudgeState[] {
+    return [...this.journalNudgeStates.values()].filter(
+      (s) => s.memberId === memberId && s.babyId === babyId
+    );
+  }
+
+  saveJournalNudgeState(state: JournalNudgeState): void {
+    this.journalNudgeStates.set(state.id, state);
+  }
+
   getPersonasByRosterGroup(rosterGroupId: string, actorMemberId: string): Persona[] {
     const actor = this.members.get(actorMemberId);
     if (!actor) throw new RlsViolationError("Member not found");
@@ -201,6 +270,7 @@ export class DataStore {
   }
 
   deleteCharacter(id: string): void {
+    this.deleteMomentPeopleForCharacter(id);
     this.characters.delete(id);
   }
 
@@ -442,6 +512,19 @@ export class DataStore {
     }
     for (const [id, r] of this.voiceConsentReceipts) {
       if (r.familyId === familyId) this.voiceConsentReceipts.delete(id);
+    }
+    for (const [id, link] of this.momentPeople) {
+      const moment = this.moments.get(link.momentId);
+      if (moment && moment.familyId === familyId) this.momentPeople.delete(id);
+    }
+    for (const [id, m] of this.moments) {
+      if (m.familyId === familyId) this.moments.delete(id);
+    }
+    for (const babyId of babyIds) {
+      this.autoContextWatermarks.delete(babyId);
+    }
+    for (const [id, s] of this.journalNudgeStates) {
+      if (memberIds.has(s.memberId)) this.journalNudgeStates.delete(id);
     }
 
     this.subscriptions.delete(familyId);

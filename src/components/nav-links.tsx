@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/storybooks/new", label: "Create", icon: "✨" },
   { href: "/family", label: "Family", icon: "💛" },
   { href: "/characters", label: "Characters", icon: "🐻" },
+  { href: "/daily", label: "Daily", icon: "📔" },
 ];
 
 function isActive(pathname: string, href: string): boolean {

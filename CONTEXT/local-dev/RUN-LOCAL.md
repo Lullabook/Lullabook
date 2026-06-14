@@ -25,6 +25,12 @@ specific action that calls one will fail until its key is set.
 2. Open `CONTEXT/local-dev/schema.sql`, paste the whole thing, **Run.**
    (It's migrations 001–003 concatenated. Run once on the fresh project.)
 
+**Already ran `schema.sql` before June 2026?** Your project is missing newer
+tables (`babies`, `moments`, etc.). Run the incremental script once:
+
+1. SQL Editor → New query.
+2. Paste `CONTEXT/local-dev/schema-incremental-004-007.sql` → **Run.**
+
 ## 3. Turn OFF email confirmation (so sign-up logs you straight in)
 
 Supabase defaults to requiring an email-confirmation click. Sign-up redirects to

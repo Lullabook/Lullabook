@@ -72,6 +72,7 @@ export class FakeAnthropic implements AnthropicAdapter {
     storyType: import("@/domain/types").StoryType;
     lullabyPhrase?: string;
     lullabyTranscript?: string;
+    momentContext?: string;
   }): Promise<GeneratedStory> {
     this.calls.push(input);
     if (this.response.pages.length === 0) {

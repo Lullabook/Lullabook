@@ -136,6 +136,9 @@ export class SupabaseDataStore extends DataStore {
       purgeRows,
       banned,
       emailPlusVpcRequests,
+      babiesRes,
+      bondsRes,
+      momentsRes,
     ] = await Promise.all([
       this.client.from("families").select("*").eq("id", familyId),
       q("members"),
@@ -154,6 +157,9 @@ export class SupabaseDataStore extends DataStore {
       q("purge_schedule"),
       this.client.from("banned_accounts").select("account_id"),
       q("email_plus_vpc_requests"),
+      q("babies"),
+      this.client.from("baby_person_bonds").select("*, babies!inner(family_id)").eq("babies.family_id", familyId),
+      q("moments"),
     ]);
 
     for (const res of [
@@ -171,8 +177,19 @@ export class SupabaseDataStore extends DataStore {
       purgeRows,
       banned,
       emailPlusVpcRequests,
+      babiesRes,
+      bondsRes,
+      momentsRes,
     ]) {
-      if (res.error) throw new Error(`hydrateFamily failed: ${res.error.message}`);
+      if (res.error) {
+        const msg = res.error.message;
+        if (msg.includes("Could not find the table")) {
+          throw new Error(
+            `${msg} — your Supabase project is missing newer tables. Open Supabase Dashboard → SQL Editor, paste and run CONTEXT/local-dev/schema-incremental-004-007.sql, then refresh.`
+          );
+        }
+        throw new Error(`hydrateFamily failed: ${msg}`);
+      }
     }
 
     for (const r of (families.data ?? []) as Row[]) {
@@ -319,6 +336,86 @@ export class SupabaseDataStore extends DataStore {
       this.emailPlusVpcRequests.set(request.id, request);
       this.snap("email_plus_vpc_requests", request.id);
     }
+    for (const r of babiesRes.data ?? []) {
+      const baby: import("@/domain/types").Baby = {
+        id: r.id,
+        familyId: r.family_id,
+        displayName: r.display_name,
+        rosterGroupId: r.roster_group_id,
+        rosterScope: r.roster_scope,
+        isDefault: r.is_default,
+        createdAt: new Date(r.created_at),
+      };
+      this.babies.set(baby.id, baby);
+      this.snap("babies", baby.id);
+    }
+    for (const r of bondsRes.data ?? []) {
+      const bond: import("@/domain/types").BabyPersonBond = {
+        id: r.id,
+        babyId: r.baby_id,
+        personaId: r.persona_id,
+        relationship: r.relationship,
+        babyCallsThem: r.baby_calls_them,
+        theyCallBaby: r.they_call_baby,
+      };
+      this.babyPersonBonds.set(bond.id, bond);
+      this.snap("baby_person_bonds", bond.id);
+    }
+    for (const r of momentsRes.data ?? []) {
+      const moment: import("@/domain/types").Moment = {
+        id: r.id,
+        familyId: r.family_id,
+        babyId: r.baby_id,
+        createdByMemberId: r.created_by_member_id,
+        body: r.body,
+        occurredOn: String(r.occurred_on).slice(0, 10),
+        isSignificant: r.is_significant,
+        momentType: r.moment_type,
+        createdAt: new Date(r.created_at),
+      };
+      this.moments.set(moment.id, moment);
+      this.snap("moments", moment.id);
+    }
+
+    const familyMomentIds = [...this.moments.values()]
+      .filter((m) => m.familyId === familyId)
+      .map((m) => m.id);
+    if (familyMomentIds.length > 0) {
+      const mpRes = await this.client
+        .from("moment_people")
+        .select("*")
+        .in("moment_id", familyMomentIds);
+      if (mpRes.error) throw new Error(`hydrateFamily failed: ${mpRes.error.message}`);
+      for (const r of (mpRes.data ?? []) as Row[]) {
+        const link: import("@/domain/types").MomentPersonLink = {
+          id: r.id,
+          momentId: r.moment_id,
+          personaId: r.persona_id ?? undefined,
+          characterId: r.character_id ?? undefined,
+        };
+        this.momentPeople.set(link.id, link);
+        this.snap("moment_people", link.id);
+      }
+    }
+
+    const familyBabyIds = [...this.babies.values()]
+      .filter((b) => b.familyId === familyId)
+      .map((b) => b.id);
+    if (familyBabyIds.length > 0) {
+      const wmRes = await this.client
+        .from("baby_auto_context_watermarks")
+        .select("*")
+        .in("baby_id", familyBabyIds);
+      if (wmRes.error) throw new Error(`hydrateFamily failed: ${wmRes.error.message}`);
+      for (const r of (wmRes.data ?? []) as Row[]) {
+        const wm: import("@/domain/types").BabyAutoContextWatermark = {
+          babyId: r.baby_id,
+          lastStoryAt: r.last_story_at ? new Date(r.last_story_at) : null,
+        };
+        this.autoContextWatermarks.set(wm.babyId, wm);
+        this.snap("baby_auto_context_watermarks", wm.babyId);
+      }
+    }
 
     const memberIds = (members.data ?? []).map((r) => r.id as string);
     if (memberIds.length > 0) {
@@ -336,6 +433,27 @@ export class SupabaseDataStore extends DataStore {
         };
         this.pushSubscriptions.set(sub.id, sub);
         this.snap("push_subscriptions", sub.id);
+      }
+
+      if (familyBabyIds.length > 0) {
+        const nudgeRes = await this.client
+          .from("journal_nudge_state")
+          .select("*")
+          .in("member_id", memberIds)
+          .in("baby_id", familyBabyIds);
+        if (nudgeRes.error) throw new Error(`hydrateFamily failed: ${nudgeRes.error.message}`);
+        for (const r of (nudgeRes.data ?? []) as Row[]) {
+          const state: import("@/domain/types").JournalNudgeState = {
+            id: r.id,
+            memberId: r.member_id,
+            babyId: r.baby_id,
+            kind: r.kind,
+            suppressedOn: String(r.suppressed_on).slice(0, 10),
+            createdAt: new Date(r.created_at),
+          };
+          this.journalNudgeStates.set(state.id, state);
+          this.snap("journal_nudge_state", state.id);
+        }
       }
     }
 
@@ -478,6 +596,7 @@ export class SupabaseDataStore extends DataStore {
           email: m.email,
           role: m.role,
           self_persona_id: m.selfPersonaId,
+          selected_baby_id: m.selectedBabyId,
           jurisdiction: m.jurisdiction,
           created_at: m.createdAt.toISOString(),
         }))
@@ -543,6 +662,71 @@ export class SupabaseDataStore extends DataStore {
           notice_version: r.noticeVersion,
           attestation: r.attestation,
           consented_at: r.consentedAt.toISOString(),
+        }))
+      ),
+      () => upsert(
+        "babies",
+        [...this.babies.values()].map((b) => ({
+          id: b.id,
+          family_id: b.familyId,
+          display_name: b.displayName,
+          roster_group_id: b.rosterGroupId,
+          roster_scope: b.rosterScope,
+          is_default: b.isDefault,
+          created_at: b.createdAt.toISOString(),
+        }))
+      ),
+      () => upsert(
+        "baby_person_bonds",
+        [...this.babyPersonBonds.values()].map((b) => ({
+          id: b.id,
+          baby_id: b.babyId,
+          persona_id: b.personaId,
+          relationship: b.relationship,
+          baby_calls_them: b.babyCallsThem,
+          they_call_baby: b.theyCallBaby,
+        }))
+      ),
+      () => upsert(
+        "moments",
+        [...this.moments.values()].map((m) => ({
+          id: m.id,
+          family_id: m.familyId,
+          baby_id: m.babyId,
+          created_by_member_id: m.createdByMemberId,
+          body: m.body,
+          occurred_on: m.occurredOn,
+          is_significant: m.isSignificant,
+          moment_type: m.momentType,
+          created_at: m.createdAt.toISOString(),
+        }))
+      ),
+      () => upsert(
+        "moment_people",
+        [...this.momentPeople.values()].map((l) => ({
+          id: l.id,
+          moment_id: l.momentId,
+          persona_id: l.personaId ?? null,
+          character_id: l.characterId ?? null,
+        }))
+      ),
+      () => upsert(
+        "baby_auto_context_watermarks",
+        [...this.autoContextWatermarks.values()].map((w) => ({
+          baby_id: w.babyId,
+          last_story_at: w.lastStoryAt?.toISOString() ?? null,
+        })),
+        "baby_id"
+      ),
+      () => upsert(
+        "journal_nudge_state",
+        [...this.journalNudgeStates.values()].map((s) => ({
+          id: s.id,
+          member_id: s.memberId,
+          baby_id: s.babyId,
+          kind: s.kind,
+          suppressed_on: s.suppressedOn,
+          created_at: s.createdAt.toISOString(),
         }))
       ),
       () => upsert(
@@ -691,6 +875,14 @@ export class SupabaseDataStore extends DataStore {
     const deleteOps: Array<() => Promise<void>> = [
       () => deleteMissing("page_candidates", new Set(this.pageCandidates.keys())),
       () => deleteMissing("pages", new Set(this.pages.keys())),
+      () => deleteMissing("moments", new Set(this.moments.keys())),
+      () => deleteMissing("moment_people", new Set(this.momentPeople.keys())),
+      () => deleteMissing(
+        "baby_auto_context_watermarks",
+        new Set(this.autoContextWatermarks.keys()),
+        "baby_id"
+      ),
+      () => deleteMissing("journal_nudge_state", new Set(this.journalNudgeStates.keys())),
       () => deleteMissing(
         "persisted_generations",
         new Set(this.persistedGenerations.keys()),
@@ -699,6 +891,8 @@ export class SupabaseDataStore extends DataStore {
       () => deleteMissing("share_links", new Set(this.shareLinks.keys())),
       () => deleteMissing("text_stories", new Set(this.textStories.keys())),
       () => deleteMissing("storybooks", new Set(this.storybooks.keys())),
+      () => deleteMissing("baby_person_bonds", new Set(this.babyPersonBonds.keys())),
+      () => deleteMissing("babies", new Set(this.babies.keys())),
       () => deleteMissing("light_consent_receipts", new Set(this.lightConsentReceipts.keys())),
       () => deleteMissing("consent_receipts", new Set(this.consentReceipts.keys())),
       () => deleteMissing("invites", new Set(this.invites.keys())),

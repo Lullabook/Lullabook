@@ -12,6 +12,7 @@ import type { DataStore } from "@/db/store";
 import type { Brief, GeneratedStory, PageGenerationStatus, Storybook } from "@/domain/types";
 import { readyPageFloor, resolvePageCount } from "@/domain/story-type";
 import { ChildSafetyService } from "@/services/child-safety";
+import { AutoContextService } from "@/services/auto-context";
 import type { SubscriptionService } from "@/services/subscription";
 
 const FREE_REROLL_BUDGET = 5;
@@ -188,6 +189,13 @@ export class StorybookService {
     const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
     const artNote = brief.artStyle ? `Art style: ${brief.artStyle}.` : "";
 
+    let momentContext: string | undefined;
+    if (brief.babyId) {
+      const autoContext = new AutoContextService(this.store);
+      const ctxSet = autoContext.buildSet(memberId, brief.babyId);
+      momentContext = ctxSet.promptBlock || undefined;
+    }
+
     const generateStory = storybook.classicId
       ? async () => {
           const sourceTale = this.classicCatalog.getById(storybook.classicId!);
@@ -208,6 +216,7 @@ export class StorybookService {
             pageCount,
             storyType: brief.storyType,
             lullabyPhrase,
+            momentContext,
           });
 
     await this.runGeneration(memberId, storybookId, brief, personas, generateStory);
@@ -293,6 +302,11 @@ export class StorybookService {
         },
       },
     ]);
+
+    const persistedAfterText = this.store.getPersistedGeneration(storybookId);
+    if (persistedAfterText?.story.pages?.length && brief.babyId) {
+      new AutoContextService(this.store).advanceWatermark(brief.babyId);
+    }
 
     // Read back the persisted pass, never an in-process variable: on an
     // at-least-once replay the memoized claude-pass step does not re-execute,

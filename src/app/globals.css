@@ -952,6 +952,8 @@ table.plain th {
   font-family: var(--v2-font-display);
   font-weight: 700;
   font-size: 1.05rem;
+  text-decoration: none;
+  flex-shrink: 0;
 }
 
 .v2-main {

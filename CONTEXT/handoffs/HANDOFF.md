@@ -3,14 +3,13 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-session-wrap.md`** —
-> session arc + open PR/auth state on top of the maya-world-part2 build. PR is
-> ready-to-send (`.git/PR_BODY_maya_world.md`); needs `gh auth login`. **168 tests green.**
-> Next: issue 49 (v2 two-pane Reader).
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-13-issue-50.md`** —
+> issue 50 DONE: Moment capture + Daily page wired to real persistence. **172 tests green.**
+> Next: issue 51–54 (53 daily nudge suggested).
 
 ## Session handoffs (newest first)
 
-- `SESSION-HANDOFF-2026-06-13-session-wrap.md` — session wrap: upload fix, design-research subagents, the /part2 build, and the pending PR (gh auth needed)
+- `SESSION-HANDOFF-2026-06-13-issue-50.md` — issue 50: moments DB/service, Daily persistence, Supabase babies+moments sync; 172 tests
 - `SESSION-HANDOFF-2026-06-13-maya-world-part2.md` — issues 46–47 + v2 UI (composer, stories shelf, tokenize, edit-character, HTML deliverable); 168 tests
 - `SESSION-HANDOFF-2026-06-13-delete-and-ui-polish.md` — delete Character + UI/perf polish (156 tests)
 - `SESSION-HANDOFF-2026-06-13-issues-34-44.md` — issues 34–44 DONE: multi-baby, roster, voice, video, v2 UI

@@ -172,6 +172,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
     pageCount: number;
     storyType: StoryType;
     lullabyPhrase?: string;
+    momentContext?: string;
   }): Promise<GeneratedStory> {
     const client = buildClient();
     const castLine = [
@@ -206,6 +207,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
             storyTypeInstructions(input.storyType),
             castLine,
             lullabyLine,
+            input.momentContext,
             `PAGE COUNT: exactly ${input.pageCount} pages, indexes 0 through ${input.pageCount - 1}.`,
             `BRIEF: ${input.brief}`,
           ]

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { EVENTS, inngest } from "@/adapters/inngest";
 import type { Brief, TextStoryBrief, TraitQuestionnaire } from "@/domain/types";
+import type { MomentType } from "@/domain/daily-types";
 import { requireAuthedContext } from "@/lib/auth";
 import { createAuthClient } from "@/lib/supabase";
 
@@ -546,6 +547,64 @@ export async function startCheckoutFormAction(): Promise<void> {
 
 export async function cancelSubscriptionFormAction(): Promise<void> {
   await cancelSubscriptionAction();
+}
+
+// ---------------------------------------------------------------------------
+// Moments / Daily Journal (issue 50)
+// ---------------------------------------------------------------------------
+
+export async function createMomentAction(input: {
+  babyId: string;
+  body: string;
+  momentType: MomentType;
+  occurredOn?: string;
+  isSignificant?: boolean;
+  linkedPersonaIds?: string[];
+  linkedCharacterIds?: string[];
+}): Promise<ActionResult<{ momentId: string }>> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    const moment = ctx.moments.create({
+      memberId: member.id,
+      babyId: input.babyId,
+      body: input.body,
+      momentType: input.momentType,
+      occurredOn: input.occurredOn,
+      isSignificant: input.isSignificant,
+      linkedPersonaIds: input.linkedPersonaIds,
+      linkedCharacterIds: input.linkedCharacterIds,
+    });
+    await ctx.persist();
+    revalidatePath("/daily");
+    revalidatePath("/world");
+    return { ok: true, data: { momentId: moment.id } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function dismissDailyNudgeAction(babyId: string): Promise<ActionResult> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    ctx.journalNudges.dismissDailyNudge(member.id, babyId);
+    await ctx.persist();
+    revalidatePath("/world");
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function markWeeklySuggestionSeenAction(babyId: string): Promise<ActionResult> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    ctx.journalNudges.markWeeklySuggestionSeen(member.id, babyId);
+    await ctx.persist();
+    revalidatePath("/world");
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
 }
 
 // ---------------------------------------------------------------------------

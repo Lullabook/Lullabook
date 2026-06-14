@@ -81,6 +81,49 @@ export interface VoiceConsentReceipt {
   revokedAt?: Date;
 }
 
+/** Parent-logged Moment about a Baby (issue 50 / ADR-0019). */
+export interface Moment {
+  id: string;
+  familyId: string;
+  babyId: string;
+  createdByMemberId: string;
+  body: string;
+  /** Calendar date YYYY-MM-DD. */
+  occurredOn: string;
+  isSignificant: boolean;
+  /** UI category from the Daily capture form (design drop-in). */
+  momentType: import("@/domain/daily-types").MomentType;
+  createdAt: Date;
+}
+
+/** Who was present for a Moment (issue 51). */
+export interface MomentPersonLink {
+  id: string;
+  momentId: string;
+  personaId?: string;
+  characterId?: string;
+}
+
+/** Per-Baby watermark for auto-context "since last Story" (ADR-0019). */
+export interface BabyAutoContextWatermark {
+  babyId: string;
+  /** Null until the first successful Story text generation. */
+  lastStoryAt: Date | null;
+}
+
+export type JournalNudgeKind = "daily_dismiss" | "weekly_seen";
+
+/** Per-member per-Baby nudge suppression (issues 53, 55). */
+export interface JournalNudgeState {
+  id: string;
+  memberId: string;
+  babyId: string;
+  kind: JournalNudgeKind;
+  /** Calendar date or week-start Monday YYYY-MM-DD. */
+  suppressedOn: string;
+  createdAt: Date;
+}
+
 export interface Persona {
   id: string;
   familyId: string;
