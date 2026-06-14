@@ -331,8 +331,38 @@ machine-facing wording.
 
 ---
 
-_Last updated 2026-06-14: added Roster avatar language (display generated avatars,
-never raw photos; PRD v7, ADR-0020). Prior update 2026-06-13: added Journal &
-Moments language (Moment, Significant Moment, Journal, Auto-context layer, Daily
-nudge, Weekly Story suggestion; PRD v6, ADR-0019), and v5 "Maya's World" revamp
+## Photo-to-story & calendar stories — incoming language (PRD v8)
+
+> Grilled 2026-06-14. A feature wave on the v6 [Moment](#journal--moments--incoming-language-prd-v6)/[Journal](#journal)
+> loop plus the already-shipped lullaby weave, web **and** native iOS. Monetization
+> and TestFlight stay deferred. See `planning/prd-v8-photo-stories-and-calendar.md`
+> and [ADR-0021](docs/adr/0021-moment-photos-write-only-vision-to-text.md).
+
+- **Moment photo** — an optional photo attached to a [Moment](#moment) (the
+  rich-structure pass v6 deferred). It is **write-only**: stored Family-scoped,
+  **never rendered on any surface** (extends [ADR-0020](docs/adr/0020-roster-avatar-generated-not-raw-photo.md)),
+  retained and hard-deletable (ADR-0007). A vision model reads it into a **scene
+  description** that seeds the [Brief](#brief) / [auto-context layer](#auto-context-layer);
+  its pixels **never** condition the illustration and it **never** trains likeness.
+  Rides the Baby's existing consent — no new gate. (ADR-0021)
+  _Avoid_: "attachment" (generic), "snapshot/gallery" (imply it's displayed).
+
+- **Firsts** — a filtered [Journal](#journal) view of the Baby's milestone/`first`
+  [Moments](#moment) (the `momentType` already in code). Logging a "first" surfaces
+  an **immediate** "Make this a Story" offer inline — distinct from the once-a-week
+  [Weekly Story suggestion](#weekly-story-suggestion). Still an offer that confirms
+  [Story Type](#story-type) before any generation spend; never silent.
+
+- **Birthday Story** — a calendar-triggered Story offer fired from a Baby's
+  **`birthDate`** (a new field on Baby). Same suggestion contract (offer → confirm →
+  generate; never silent). Holiday/jurisdiction-aware calendar stories are
+  **deferred** to a later wave.
+
+---
+
+_Last updated 2026-06-14: added PRD v8 language (Moment photo write-only + vision→text,
+Firsts, Birthday Story; ADR-0021). Prior update 2026-06-14: added Roster avatar language
+(display generated avatars, never raw photos; PRD v7, ADR-0020). Prior update 2026-06-13:
+added Journal & Moments language (Moment, Significant Moment, Journal, Auto-context layer,
+Daily nudge, Weekly Story suggestion; PRD v6, ADR-0019), and v5 "Maya's World" revamp
 language (Household, World, multi-Baby, Family-roster, Voice clip, Video page)._
