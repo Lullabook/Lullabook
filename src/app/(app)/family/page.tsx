@@ -33,6 +33,8 @@ export default async function FamilyPage() {
       headerBg: HEADER_GRADIENTS[(i + 1) % HEADER_GRADIENTS.length]!,
       photoCount: entry.photoCount,
       personaStatus: entry.persona.status,
+      avatarKey: entry.persona.avatarKey,
+      kind: entry.persona.kind,
       voiceClips,
     };
   });

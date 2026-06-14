@@ -77,6 +77,7 @@ describe("23 — native auth bearer backend", () => {
       displayName: "Baby B",
       status: "ready",
       loraWeightKey: "lora/b",
+      avatarKey: null,
       createdAt: new Date(),
     });
 

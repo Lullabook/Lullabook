@@ -4,6 +4,14 @@ import type { DataStore } from "@/db/store";
 import type { ConsentReceipt } from "@/domain/types";
 import { ConsentEngine } from "@/services/consent-engine";
 
+function devForcedSubscription(): "active" | "inactive" | undefined {
+  if (process.env.NODE_ENV === "production") return undefined;
+  const value = process.env.DEV_FORCE_SUBSCRIPTION;
+  if (value === "active") return "active";
+  if (value === "inactive") return "inactive";
+  return undefined;
+}
+
 export class SubscriptionService {
   private readonly consentEngine = new ConsentEngine();
 
@@ -51,6 +59,8 @@ export class SubscriptionService {
   }
 
   isActive(familyId: string): boolean {
+    const forced = devForcedSubscription();
+    if (forced !== undefined) return forced === "active";
     return this.store.getSubscription(familyId)?.status === "active";
   }
 

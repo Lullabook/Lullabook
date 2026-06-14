@@ -23,8 +23,12 @@ export class HardDeleteService {
     for (const persona of personas) {
       await this.blobs.deletePrefix(`photos/${persona.id}`);
       await this.blobs.deletePrefix(`voice/${persona.id}`);
+      await this.blobs.deletePrefix(`avatars/${familyId}/${persona.id}`);
       if (persona.loraWeightKey) {
         await this.blobs.delete(persona.loraWeightKey);
+      }
+      if (persona.avatarKey) {
+        await this.blobs.delete(persona.avatarKey);
       }
     }
     await this.blobs.deletePrefix(`photos/${familyId}`);

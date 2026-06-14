@@ -83,6 +83,7 @@ describe("03 — adult persona creation", () => {
         displayName: "Failing",
         status: "training",
         loraWeightKey: null,
+        avatarKey: null,
         createdAt: new Date(),
       });
       throw new Error("Validation failure");

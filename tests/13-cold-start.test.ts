@@ -21,6 +21,7 @@ describe("13 — cold-start UX", () => {
       displayName: "Nova",
       status: "training" as const,
       loraWeightKey: null,
+      avatarKey: null,
       createdAt: new Date(),
     };
     ctx.store.savePersona(trainingPersona);

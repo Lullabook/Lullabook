@@ -12,29 +12,41 @@ export default async function NewStoryPage() {
     .map((c) => ({ id: c.id, displayName: c.displayName }));
 
   return (
-    <>
-      <p className="eyebrow">Free — ready in seconds</p>
-      <h1>Write tonight&apos;s story</h1>
+    <div className="v2-stack" style={{ gap: 22 }}>
+      <div>
+        <p className="v2-page-eyebrow">Free — ready in seconds</p>
+        <h1 className="v2-page-title">Write tonight&apos;s story</h1>
+        <p className="v2-page-lead" style={{ maxWidth: 580 }}>
+          Stories star your characters. Describe someone in a minute — no photos needed.
+        </p>
+      </div>
 
       {characters.length === 0 ? (
-        <div className="card empty-state">
-          <span className="moon" aria-hidden="true">
+        <div className="v2-empty">
+          <span className="v2-empty__icon" aria-hidden="true">
             🧸
           </span>
-          <h2>First, a character</h2>
-          <p className="muted">
-            Stories star your characters. Describe someone in a minute — no
-            photos needed.
+          <h2 className="v2-section-title">First, a character</h2>
+          <p className="v2-page-lead" style={{ marginBottom: 20 }}>
+            Stories star your characters. Describe someone in a minute — no photos needed.
           </p>
-          <Link className="btn btn-primary" href="/characters/new">
+          <Link className="v2-btn v2-btn--primary" href="/characters/new">
             Create a character
           </Link>
         </div>
       ) : (
-        <div className="card">
+        <div
+          style={{
+            background: "#FFFDF9",
+            border: "1px solid #ECE1CE",
+            borderRadius: 22,
+            padding: 22,
+            boxShadow: "0 8px 24px rgba(58,40,80,0.06)",
+          }}
+        >
           <TextStoryForm characters={characters} />
         </div>
       )}
-    </>
+    </div>
   );
 }

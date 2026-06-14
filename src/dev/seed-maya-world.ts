@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
 import type { RequestContext } from "@/lib/context";
+import { rosterAvatarBlobKey } from "@/lib/roster-avatar";
 import type {
   Baby,
   Character,
@@ -87,7 +88,10 @@ export async function seedMayaWorldRuntime(
   }
 
   if (!ctx.subscriptions.isActive(familyId)) {
-    ctx.subscriptions.handleCheckoutCompleted(familyId, `cus_demo_${member.id}`, `sub_demo_${member.id}`);
+    const forced = process.env.NODE_ENV !== "production" ? process.env.DEV_FORCE_SUBSCRIPTION : undefined;
+    if (forced !== "inactive") {
+      ctx.subscriptions.handleCheckoutCompleted(familyId, `cus_demo_${member.id}`, `sub_demo_${member.id}`);
+    }
   }
   ctx.subscriptions.recordConsent(familyId, member.id, member.jurisdiction);
 
@@ -101,8 +105,13 @@ export async function seedMayaWorldRuntime(
     displayName: "Maya",
     status: "ready",
     loraWeightKey: `demo-lora/${uuid()}`,
+    avatarKey: null,
     createdAt: now,
   };
+  ctx.store.savePersona(babyPersona);
+  const babyAvatarKey = rosterAvatarBlobKey(familyId, babyPersona.id);
+  await ctx.blobs.put(babyAvatarKey, Buffer.from("demo-roster-avatar"));
+  babyPersona.avatarKey = babyAvatarKey;
   ctx.store.savePersona(babyPersona);
 
   const personaByName = new Map<string, Persona>();
@@ -115,9 +124,16 @@ export async function seedMayaWorldRuntime(
       displayName: spec.displayName,
       status: spec.status === "training" ? "training" : spec.status === "needs-photos" ? "failed" : "ready",
       loraWeightKey: spec.status === "ready" ? `demo-lora/${uuid()}` : null,
+      avatarKey: null,
       createdAt: now,
     };
     ctx.store.savePersona(persona);
+    if (spec.status === "ready") {
+      const avatarKey = rosterAvatarBlobKey(familyId, persona.id);
+      await ctx.blobs.put(avatarKey, Buffer.from(`demo-avatar-${spec.displayName}`));
+      persona.avatarKey = avatarKey;
+      ctx.store.savePersona(persona);
+    }
     personaByName.set(spec.displayName, persona);
 
     ctx.familyRoster.updateBond({

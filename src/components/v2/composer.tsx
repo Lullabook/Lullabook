@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { Brief, StoryType } from "@/domain/types";
+import { RosterAvatar } from "@/components/v2/roster-avatar";
+import type { PersonaStatus } from "@/domain/types";
 import { AVATAR_GRADIENTS } from "@/lib/v2-theme";
 import {
   generateStorybookAction,
@@ -12,7 +13,8 @@ import {
 interface CastPersona {
   id: string;
   displayName: string;
-  status: string;
+  status: PersonaStatus;
+  avatarKey?: string | null;
 }
 
 interface CastCharacter {
@@ -196,7 +198,16 @@ export function V2Composer({
             {babyName} always stars. Add family and made-up friends.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <CastChip label={babyName} kind="Baby" selected disabled avatarIndex={0} initial={babyName[0]} />
+            <CastChip
+              label={babyName}
+              kind="Baby"
+              selected
+              disabled
+              avatarIndex={0}
+              initial={babyName[0]}
+              personaStatus={babyPersona?.status}
+              avatarKey={babyPersona?.avatarKey}
+            />
             {adults.map((a, i) => (
               <CastChip
                 key={a.id}
@@ -206,6 +217,8 @@ export function V2Composer({
                 onClick={() => toggle(a.id, selectedAdults, setSelectedAdults)}
                 avatarIndex={i + 1}
                 initial={a.displayName[0]}
+                personaStatus={a.status}
+                avatarKey={a.avatarKey}
               />
             ))}
             {characters.map((c, i) => (
@@ -394,6 +407,8 @@ function CastChip({
   onClick,
   avatarIndex,
   initial,
+  personaStatus,
+  avatarKey,
 }: {
   label: string;
   kind: string;
@@ -402,6 +417,8 @@ function CastChip({
   onClick?: () => void;
   avatarIndex: number;
   initial?: string;
+  personaStatus?: PersonaStatus;
+  avatarKey?: string | null;
 }) {
   return (
     <button
@@ -421,23 +438,34 @@ function CastChip({
         cursor: disabled ? "default" : "pointer",
       }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          width: 34,
-          height: 34,
-          borderRadius: "50%",
-          background: AVATAR_GRADIENTS[avatarIndex % AVATAR_GRADIENTS.length],
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#fff",
-          fontWeight: 800,
-          fontSize: "0.9rem",
-        }}
-      >
-        {(initial ?? "?").toUpperCase()}
-      </span>
+      {personaStatus ? (
+        <RosterAvatar
+          name={label}
+          initial={(initial ?? "?").toUpperCase()}
+          avBg={AVATAR_GRADIENTS[avatarIndex % AVATAR_GRADIENTS.length]!}
+          status={personaStatus}
+          avatarKey={avatarKey}
+          size={34}
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: "50%",
+            background: AVATAR_GRADIENTS[avatarIndex % AVATAR_GRADIENTS.length],
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#fff",
+            fontWeight: 800,
+            fontSize: "0.9rem",
+          }}
+        >
+          {(initial ?? "?").toUpperCase()}
+        </span>
+      )}
       <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.1, textAlign: "left" }}>
         <span style={{ fontSize: "0.92rem", fontWeight: 800 }}>{label}</span>
         <span style={{ fontSize: "0.72rem", opacity: 0.7 }}>

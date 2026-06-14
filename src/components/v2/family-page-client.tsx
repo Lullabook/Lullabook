@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState, useTransition } from "react";
+import { RosterAvatar } from "@/components/v2/roster-avatar";
+import { replacePersonaPhotosAction } from "@/lib/actions";
 import {
   AVATAR_GRADIENTS,
   HEADER_GRADIENTS,
@@ -20,6 +22,8 @@ export interface FamilyMemberViewData {
   headerBg: string;
   photoCount: number;
   personaStatus: "training" | "ready" | "failed";
+  avatarKey: string | null;
+  kind: "baby" | "adult";
   voiceClips: { label: string; durationSecs: number; transcript: string }[];
 }
 
@@ -125,25 +129,14 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                     fontFamily: "inherit",
                   }}
                 >
-                  <span
-                    style={{
-                      width: 50,
-                      height: 50,
-                      borderRadius: "50%",
-                      background: m.avBg,
-                      flexShrink: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#fff",
-                      fontFamily: "var(--v2-font-display)",
-                      fontWeight: 700,
-                      fontSize: "1.3rem",
-                    }}
-                    aria-hidden="true"
-                  >
-                    {m.initial}
-                  </span>
+                  <RosterAvatar
+                    name={m.name}
+                    initial={m.initial}
+                    avBg={m.avBg}
+                    status={m.personaStatus}
+                    avatarKey={m.avatarKey}
+                    size={50}
+                  />
                   <span
                     style={{
                       display: "flex",
@@ -243,25 +236,15 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                   gap: 18,
                 }}
               >
-                <span
-                  style={{
-                    width: 78,
-                    height: 78,
-                    borderRadius: "50%",
-                    background: detail.avBg,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#fff",
-                    fontFamily: "var(--v2-font-display)",
-                    fontWeight: 700,
-                    fontSize: "2rem",
-                    boxShadow: "0 8px 20px rgba(0,0,0,0.18)",
-                    border: "4px solid rgba(255,255,255,0.55)",
-                  }}
-                  aria-hidden="true"
-                >
-                  {detail.initial}
+                <span style={{ boxShadow: "0 8px 20px rgba(58,40,80,0.18)", borderRadius: "50%", border: "4px solid rgba(255,255,255,0.55)" }}>
+                <RosterAvatar
+                  name={detail.name}
+                  initial={detail.initial}
+                  avBg={detail.avBg}
+                  status={detail.personaStatus}
+                  avatarKey={detail.avatarKey}
+                  size={78}
+                />
                 </span>
                 <div style={{ flex: 1 }}>
                   <h2
@@ -392,75 +375,12 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                   </div>
                 </div>
 
-                <div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: 12,
-                    }}
-                  >
-                    <h3
-                      style={{
-                        margin: 0,
-                        fontFamily: "var(--v2-font-display)",
-                        fontWeight: 700,
-                        fontSize: "1.2rem",
-                      }}
-                    >
-                      📸 How they look
-                    </h3>
-                    <span
-                      style={{
-                        fontSize: "0.85rem",
-                        color: "#9A8A78",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {detail.photoCount > 0
-                        ? `${detail.photoCount} photos`
-                        : "No photos yet"}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 10,
-                      gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))",
-                    }}
-                  >
-                    {Array.from({ length: Math.max(6, detail.photoCount) }).map(
-                      (_, idx) => {
-                        const filled = idx < detail.photoCount;
-                        return (
-                          <div
-                            key={idx}
-                            style={{
-                              aspectRatio: "1",
-                              borderRadius: V2_RADIUS.slot,
-                              border: filled
-                                ? "1px solid rgba(255,255,255,0.35)"
-                                : `2px dashed ${V2_COLORS.borderDashed}`,
-                              background: filled
-                                ? `repeating-linear-gradient(45deg, rgba(255,255,255,0.18) 0 6px, rgba(255,255,255,0) 6px 12px), ${detail.avBg}`
-                                : V2_COLORS.background,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: filled ? "#fff" : V2_COLORS.photoPlaceholderText,
-                              fontSize: filled ? "0.8rem" : "1.4rem",
-                              fontWeight: 700,
-                              fontFamily: filled ? "var(--v2-font-display)" : "var(--font-mono, monospace)",
-                            }}
-                          >
-                            {filled ? detail.initial : "＋"}
-                          </div>
-                        );
-                      }
-                    )}
-                  </div>
-                </div>
+                <UpdateReferencePhotos
+                  personaId={detail.id}
+                  photoCount={detail.photoCount}
+                  personaStatus={detail.personaStatus}
+                  kind={detail.kind}
+                />
 
                 <div
                   style={{
@@ -614,6 +534,135 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function UpdateReferencePhotos({
+  personaId,
+  photoCount,
+  personaStatus,
+  kind,
+}: {
+  personaId: string;
+  photoCount: number;
+  personaStatus: "training" | "ready" | "failed";
+  kind: "baby" | "adult";
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const selfieRef = useRef<HTMLInputElement>(null);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [needsSelfie, setNeedsSelfie] = useState(false);
+  const [queuedFiles, setQueuedFiles] = useState<File[]>([]);
+
+  function submit(files: File[], selfie: File | null) {
+    setError(null);
+    const fd = new FormData();
+    fd.set("personaId", personaId);
+    for (const f of files) fd.append("photos", f);
+    if (selfie) fd.set("selfie", selfie);
+    startTransition(async () => {
+      const res = await replacePersonaPhotosAction(fd);
+      if (!res.ok) setError(res.error);
+    });
+  }
+
+  function onFilesPicked(files: File[]) {
+    if (files.length < 3) {
+      setError("Pick at least 3 photos");
+      return;
+    }
+    if (kind === "adult") {
+      setQueuedFiles(files);
+      setNeedsSelfie(true);
+      return;
+    }
+    submit(files, null);
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.2rem" }}>
+          📸 Reference photos
+        </h3>
+        <span style={{ fontSize: "0.85rem", color: "#6E6076", fontWeight: 700 }}>
+          {photoCount > 0 ? `${photoCount} photos on file · Replace` : "No photos yet"}
+        </span>
+      </div>
+      {personaStatus === "training" ? (
+        <p style={{ margin: "0 0 12px", color: "#6E6076", fontSize: "0.9rem" }}>
+          Likeness training in progress — your roster avatar will update when ready.
+        </p>
+      ) : null}
+      {error ? <p style={{ color: "#B23A48", fontSize: "0.88rem" }}>{error}</p> : null}
+      <label
+        htmlFor={`replace-photos-${personaId}`}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 8,
+          padding: "24px 20px",
+          borderRadius: 18,
+          border: `2px dashed ${V2_COLORS.borderDashed}`,
+          background: V2_COLORS.surfaceAlt,
+          cursor: pending ? "wait" : "pointer",
+          textAlign: "center",
+        }}
+      >
+        <span style={{ fontSize: "1.5rem" }} aria-hidden="true">⬆️</span>
+        <span style={{ fontFamily: "var(--v2-font-display)", fontWeight: 700, color: V2_COLORS.primary }}>
+          {pending ? "Uploading…" : "Replace reference photos"}
+        </span>
+        <span style={{ fontSize: "0.82rem", color: "#6E6076" }}>
+          Raw photos are never shown — only the generated roster avatar appears.
+        </span>
+        <input
+          ref={inputRef}
+          id={`replace-photos-${personaId}`}
+          type="file"
+          accept="image/*"
+          multiple
+          disabled={pending}
+          style={{ display: "none" }}
+          onChange={(e) => {
+            onFilesPicked([...(e.target.files ?? [])]);
+          }}
+        />
+      </label>
+      {needsSelfie ? (
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+          <p style={{ margin: 0, color: "#6E6076", fontSize: "0.88rem" }}>
+            {queuedFiles.length} new photos selected — add a fresh selfie to confirm consent.
+          </p>
+          <input ref={selfieRef} type="file" accept="image/*" capture="user" style={{ display: "none" }} />
+          <button
+            type="button"
+            className="v2-btn v2-btn--secondary"
+            disabled={pending}
+            onClick={() => selfieRef.current?.click()}
+          >
+            🤳 Take selfie
+          </button>
+          <button
+            type="button"
+            className="v2-btn v2-btn--primary"
+            disabled={pending}
+            onClick={() => {
+              const selfie = selfieRef.current?.files?.[0] ?? null;
+              if (!selfie) {
+                setError("Selfie required");
+                return;
+              }
+              submit(queuedFiles, selfie);
+            }}
+          >
+            Start retraining
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

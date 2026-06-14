@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { RosterAvatar } from "@/components/v2/roster-avatar";
 import { BookCover } from "@/components/v2/book-cover";
 import { DevSeedButton } from "@/components/v2/dev-seed-button";
 import { WorldJournalCards } from "@/components/v2/world-journal-cards";
@@ -151,14 +152,16 @@ export default async function WorldPage() {
           <div className="v2-avatar-row">
             {avatars.map((a) => (
               <div key={a.personaId} className="v2-avatar-chip">
-                <div
+                <RosterAvatar
+                  name={a.name}
+                  initial={a.initial}
+                  avBg={a.avBg}
+                  status={a.personaStatus ?? "ready"}
+                  avatarKey={a.avatarKey}
+                  size={68}
                   className="v2-avatar-chip__circle"
-                  style={{ background: a.avBg }}
-                  aria-hidden="true"
-                >
-                  {a.initial}
-                  <span className="v2-avatar-chip__badge">{a.badge}</span>
-                </div>
+                  badge={<span className="v2-avatar-chip__badge">{a.badge}</span>}
+                />
                 <span className="v2-avatar-chip__name">{a.name}</span>
                 <span className="v2-avatar-chip__role">{a.role}</span>
               </div>

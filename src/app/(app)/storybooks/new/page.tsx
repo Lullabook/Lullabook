@@ -24,7 +24,12 @@ export default async function NewStorybookPage({
   const babyPersona = personas.find((p) => p.kind === "baby");
   const adults = personas
     .filter((p) => p.kind === "adult")
-    .map((p) => ({ id: p.id, displayName: p.displayName, status: p.status }));
+    .map((p) => ({
+      id: p.id,
+      displayName: p.displayName,
+      status: p.status,
+      avatarKey: p.avatarKey,
+    }));
   const characters = ctx.store
     .getCharactersByFamily(member.familyId, member.id)
     .map((c) => ({ id: c.id, displayName: c.displayName }));
@@ -61,7 +66,12 @@ export default async function NewStorybookPage({
         babyName={baby.displayName}
         babyPersona={
           babyPersona
-            ? { id: babyPersona.id, displayName: babyPersona.displayName, status: babyPersona.status }
+            ? {
+                id: babyPersona.id,
+                displayName: babyPersona.displayName,
+                status: babyPersona.status,
+                avatarKey: babyPersona.avatarKey,
+              }
             : null
         }
         adults={adults}
