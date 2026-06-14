@@ -94,7 +94,7 @@ describe("16 — idempotency & money-safety", () => {
     });
     await ctx.workflow.drain();
 
-    expect(ctx.fal.idempotencyKeys.length).toBe(12);
+    expect(ctx.fal.idempotencyKeys.filter((k) => !k.startsWith("roster-avatar/")).length).toBe(12);
     for (let i = 0; i < 12; i++) {
       expect(ctx.fal.idempotencyKeys).toContain(`${book.id}/${i}/0/fal-generate`);
     }

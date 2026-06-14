@@ -39,6 +39,7 @@ describe("01 — walking skeleton", () => {
       displayName: "Grandma",
       status: "ready",
       loraWeightKey: "lora/b",
+      avatarKey: null,
       createdAt: new Date(),
     });
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { fetchHome, type HomeResponse } from "@/lib/api";
+import { RosterAvatar } from "@/components/roster-avatar";
 import { supabase } from "@/lib/supabase";
 
 export default function HomeScreen() {
@@ -67,11 +68,21 @@ export default function HomeScreen() {
             ))}
           </View>
           <View style={styles.card} accessibilityLabel="Personas roster">
-            <Text style={styles.cardTitle}>Personas ({home.personas.length})</Text>
+            <Text style={styles.cardTitle}>Family ({home.personas.length})</Text>
             {home.personas.map((p) => (
-              <Text key={p.id} style={styles.item}>
-                {p.displayName} · {p.status}
-              </Text>
+              <View key={p.id} style={styles.personaRow}>
+                <RosterAvatar
+                  name={p.displayName}
+                  initial={p.displayName.charAt(0)}
+                  status={p.status}
+                  avatarKey={p.avatarKey}
+                  size={40}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.item}>{p.displayName}</Text>
+                  <Text style={styles.metaInline}>{p.status}</Text>
+                </View>
+              </View>
             ))}
           </View>
           <Text style={styles.meta}>
@@ -104,7 +115,9 @@ const styles = StyleSheet.create({
     borderColor: "#E8D5C4",
   },
   cardTitle: { fontSize: 18, fontWeight: "600", marginBottom: 8, color: "#2B1B10" },
-  item: { fontSize: 16, color: "#4A3728", marginBottom: 4 },
+  item: { fontSize: 16, color: "#4A3728", marginBottom: 0, fontWeight: "600" },
+  personaRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
+  metaInline: { fontSize: 13, color: "#6B4F3A" },
   meta: { fontSize: 14, color: "#6B4F3A", marginVertical: 12 },
   button: {
     backgroundColor: "#6B4F3A",

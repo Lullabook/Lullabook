@@ -272,6 +272,42 @@ export async function acceptLikenessAction(
   }
 }
 
+export async function replacePersonaPhotosAction(
+  formData: FormData
+): Promise<ActionResult> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    const personaId = String(formData.get("personaId") ?? "");
+    const photos = formData.getAll("photos").filter((f): f is File => f instanceof File);
+    const selfie = formData.get("selfie");
+    if (photos.length < 3) {
+      return { ok: false, error: "At least 3 photos required" };
+    }
+    const persona = ctx.store.getPersona(personaId, member.id);
+    if (!persona) return { ok: false, error: "Persona not found" };
+    if (persona.kind === "adult" && !(selfie instanceof File)) {
+      return { ok: false, error: "A selfie is required to verify your own likeness" };
+    }
+    const buffers = await Promise.all(photos.map((f) => f.arrayBuffer().then((b) => Buffer.from(b))));
+    const selfieBuf =
+      persona.kind === "adult" && selfie instanceof File
+        ? Buffer.from(await selfie.arrayBuffer())
+        : undefined;
+    await ctx.personas.replacePhotos({
+      personaId,
+      memberId: member.id,
+      photos: buffers,
+      selfie: selfieBuf,
+    });
+    await ctx.persist();
+    revalidatePath("/family");
+    revalidatePath("/world");
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Storybooks
 // ---------------------------------------------------------------------------

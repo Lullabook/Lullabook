@@ -11,6 +11,8 @@ export interface WorldAvatar {
   badge: string;
   avBg: string;
   kind: "baby" | "adult" | "character";
+  personaStatus?: "training" | "ready" | "failed";
+  avatarKey?: string | null;
 }
 
 export interface WorldHome {
@@ -60,6 +62,8 @@ export class WorldService {
         badge: "⭐",
         avBg: AVATAR_GRADIENTS[0]!,
         kind: "baby",
+        personaStatus: babyPersona.status,
+        avatarKey: babyPersona.avatarKey,
       });
     }
 
@@ -72,6 +76,8 @@ export class WorldService {
         badge: "💛",
         avBg: AVATAR_GRADIENTS[(i + 1) % AVATAR_GRADIENTS.length]!,
         kind: "adult",
+        personaStatus: m.persona.status,
+        avatarKey: m.persona.avatarKey,
       });
     });
 

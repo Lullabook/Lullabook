@@ -210,12 +210,11 @@ export function PersonaForm({
           </label>
 
           {photos.length > 0 && (
-            <ul style={{ listStyle: "none", margin: "14px 0 0", padding: 0, display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))" }}>
+            <ul style={{ listStyle: "none", margin: "14px 0 0", padding: 0, display: "grid", gap: 10 }}>
               {photos.map((file, i) => (
-                <li key={`${file.name}:${file.size}:${file.lastModified}`} style={{ position: "relative", aspectRatio: "1", borderRadius: 12, overflow: "hidden", border: "1px solid #ECE1CE" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={previews[i]} alt={file.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  <button type="button" aria-label={`Remove ${file.name}`} onClick={() => removePhoto(i)} style={{ position: "absolute", top: 5, right: 5, width: 24, height: 24, borderRadius: "50%", border: "none", background: "rgba(46,36,56,0.72)", color: "#fff", cursor: "pointer", fontSize: "0.9rem", lineHeight: 1 }}>×</button>
+                <li key={`${file.name}:${file.size}:${file.lastModified}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 12, border: "1px solid #ECE1CE", background: "#FFF8EC" }}>
+                  <span style={{ fontSize: "0.88rem", color: "#6E6076", fontFamily: "var(--v2-font-body)" }}>Photo {i + 1}: {file.name}</span>
+                  <button type="button" aria-label={`Remove ${file.name}`} onClick={() => removePhoto(i)} style={{ width: 24, height: 24, borderRadius: "50%", border: "none", background: "rgba(46,36,56,0.72)", color: "#fff", cursor: "pointer", fontSize: "0.9rem", lineHeight: 1 }}>×</button>
                 </li>
               ))}
             </ul>
@@ -237,12 +236,14 @@ export function PersonaForm({
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
               <div
-                style={selfiePreview
-                  ? { width: 64, height: 64, borderRadius: 16, backgroundImage: `url(${selfiePreview})`, backgroundSize: "cover", backgroundPosition: "center", border: "2px solid #5FB389" }
-                  : { width: 64, height: 64, borderRadius: 16, background: "#FBF4E7", border: "2px dashed #D8C9B0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", color: "#B7A992" }}
+                style={
+                  selfie
+                    ? { width: 64, height: 64, borderRadius: 16, background: "#E1F1E8", border: "2px solid #5FB389", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem" }
+                    : { width: 64, height: 64, borderRadius: 16, background: "#FBF4E7", border: "2px dashed #D8C9B0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", color: "#B7A992" }
+                }
                 aria-hidden="true"
               >
-                {selfiePreview ? "" : "🤳"}
+                {selfie ? "✓" : "🤳"}
               </div>
               <label htmlFor="selfie" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 20px", borderRadius: 999, border: "1px solid #ECE1CE", background: "#FFF8EC", color: "#6A55C9", fontWeight: 800, fontSize: "0.92rem", cursor: "pointer" }}>
                 {selfie ? "↻ Retake selfie" : "🤳 Take a selfie"}
@@ -277,12 +278,10 @@ export function PersonaForm({
         <div style={{ background: "#FFFDF9", border: "1px solid #ECE1CE", borderRadius: 24, overflow: "hidden", boxShadow: "0 12px 32px rgba(58,40,80,0.08)" }}>
           <div style={{ padding: 22, background: "linear-gradient(135deg,#8B6DF0,#6A55C9)", display: "flex", alignItems: "center", gap: 14 }}>
             <span
-              style={previews[0]
-                ? { width: 62, height: 62, borderRadius: "50%", backgroundImage: `url(${previews[0]})`, backgroundSize: "cover", backgroundPosition: "center", border: "4px solid rgba(255,255,255,0.5)" }
-                : { width: 62, height: 62, borderRadius: "50%", background: "linear-gradient(150deg,#E79A3C,#F6C177)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.6rem", border: "4px solid rgba(255,255,255,0.5)" }}
+              style={{ width: 62, height: 62, borderRadius: "50%", background: "linear-gradient(150deg,#E79A3C,#F6C177)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.6rem", border: "4px solid rgba(255,255,255,0.5)" }}
               aria-hidden="true"
             >
-              {previews[0] ? "" : previewInitial}
+              {previewInitial}
             </span>
             <div>
               <p style={{ margin: 0, fontFamily: "var(--v2-font-display)", fontWeight: 800, fontSize: "1.4rem", color: "#fff" }}>{name.trim() || "New member"}</p>

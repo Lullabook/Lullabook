@@ -1,5 +1,5 @@
 import { RealAnthropicAdapter } from "@/adapters/anthropic";
-import { R2BlobStore } from "@/adapters/blob-store";
+import { createBlobStore } from "@/lib/create-blob-store";
 import { CuratedClassicCatalog } from "@/adapters/classic-catalog";
 import { optionalEnv } from "@/adapters/env";
 import { RealFalAdapter } from "@/adapters/fal";
@@ -54,7 +54,7 @@ export function createRequestContext() {
       ? new RealModerationAdapter()
       : new PermissiveDevModeration();
   const liveness = new RekognitionLivenessAdapter();
-  const blobs = new R2BlobStore();
+  const blobs = createBlobStore();
   const workflow = new InngestWorkflowAdapter();
   const notifications = new RealNotificationAdapter();
   const stripe = new RealStripeAdapter();

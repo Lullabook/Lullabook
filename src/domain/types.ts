@@ -132,6 +132,8 @@ export interface Persona {
   displayName: string;
   status: PersonaStatus;
   loraWeightKey: string | null;
+  /** Generated roster portrait blob key; null ⇒ placeholder (ADR-0020). */
+  avatarKey: string | null;
   promotedFromCharacterId?: string;
   questionnaire?: TraitQuestionnaire;
   createdAt: Date;

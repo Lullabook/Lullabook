@@ -128,6 +128,7 @@ export class FakeAnthropic implements AnthropicAdapter {
 export class FakeFal implements FalAdapter {
   public trainCalls = 0;
   public imageCalls = 0;
+  public avatarImageCalls = 0;
   public imagePrompts: string[] = [];
   public idempotencyKeys: string[] = [];
   public failImageOnPage: number | null = null;
@@ -162,20 +163,29 @@ export class FakeFal implements FalAdapter {
       return this.imageResultsByKey.get(idempotencyKey)!;
     }
 
-    this.imageCalls++;
+    const isRosterAvatar = idempotencyKey?.startsWith("roster-avatar/");
+    if (isRosterAvatar) {
+      this.avatarImageCalls++;
+    } else {
+      this.imageCalls++;
+    }
     this.imagePrompts.push(prompt);
     if (idempotencyKey) {
       this.idempotencyKeys.push(idempotencyKey);
     }
-    this.currentPage++;
+    if (!isRosterAvatar) {
+      this.currentPage++;
+    }
+    const pageNum = isRosterAvatar ? this.avatarImageCalls : this.currentPage;
     if (
-      this.failImageOnPage === this.currentPage ||
-      this.failPages.has(this.currentPage)
+      !isRosterAvatar &&
+      (this.failImageOnPage === this.currentPage ||
+        this.failPages.has(this.currentPage))
     ) {
       throw new Error("Image generation failed");
     }
-    const imageUrl = `https://example.com/${loraKey}/${this.currentPage}.png`;
-    const result = { imageUrl, bytes: Buffer.from(`image-${this.currentPage}`) };
+    const imageUrl = `https://example.com/${loraKey}/${pageNum}.png`;
+    const result = { imageUrl, bytes: Buffer.from(`image-${pageNum}-${idempotencyKey ?? "none"}`) };
     if (idempotencyKey) {
       this.imageResultsByKey.set(idempotencyKey, result);
     }

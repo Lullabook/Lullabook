@@ -42,18 +42,18 @@ export function TextStoryForm({ characters }: TextStoryFormProps) {
   }
 
   return (
-    <form action={submit} className="stack">
+    <form action={submit} className="v2-stack" style={{ gap: 16, fontFamily: "var(--v2-font-body)" }}>
       {error && (
         <div className="alert alert-error" role="alert">
           {error}
         </div>
       )}
 
-      <fieldset>
-        <legend>Starring</legend>
-        <div className="chips">
+      <fieldset style={{ border: "1px solid #ECE1CE", borderRadius: 16, padding: 16, margin: 0 }}>
+        <legend style={{ fontFamily: "var(--v2-font-display)", fontWeight: 700, color: "#2E2438", padding: "0 8px" }}>Starring</legend>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
           {characters.map((c) => (
-            <label key={c.id} className="chip">
+            <label key={c.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 999, border: "1px solid #ECE1CE", background: starring.includes(c.id) ? "#EDE7FE" : "#FFFDF9", fontFamily: "var(--v2-font-body)", fontSize: "0.9rem", color: "#2E2438" }}>
               <input
                 type="checkbox"
                 checked={starring.includes(c.id)}
@@ -65,10 +65,10 @@ export function TextStoryForm({ characters }: TextStoryFormProps) {
         </div>
       </fieldset>
 
-      <fieldset>
-        <legend>Story type</legend>
-        <div className="chips" role="radiogroup" aria-label="Story type">
-          <label className="chip">
+      <fieldset style={{ border: "1px solid #ECE1CE", borderRadius: 16, padding: 16, margin: 0 }}>
+        <legend style={{ fontFamily: "var(--v2-font-display)", fontWeight: 700, color: "#2E2438", padding: "0 8px" }}>Story type</legend>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }} role="radiogroup" aria-label="Story type">
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 999, border: "1px solid #ECE1CE", background: storyType === "bedtime" ? "#EDE7FE" : "#FFFDF9", fontFamily: "var(--v2-font-body)", fontSize: "0.9rem" }}>
             <input
               type="radio"
               name="storyType"
@@ -77,7 +77,7 @@ export function TextStoryForm({ characters }: TextStoryFormProps) {
             />
             🌙 Bedtime
           </label>
-          <label className="chip">
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 999, border: "1px solid #ECE1CE", background: storyType === "learning" ? "#EDE7FE" : "#FFFDF9", fontFamily: "var(--v2-font-body)", fontSize: "0.9rem" }}>
             <input
               type="radio"
               name="storyType"
@@ -89,22 +89,23 @@ export function TextStoryForm({ characters }: TextStoryFormProps) {
         </div>
       </fieldset>
 
-      <div className="field">
-        <label htmlFor="theme">Theme</label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <label htmlFor="theme" style={{ fontFamily: "var(--v2-font-display)", fontWeight: 700, color: "#2E2438" }}>Theme</label>
         <input
           id="theme"
           name="theme"
           type="text"
           required
           placeholder="Saying goodnight to the moon, sharing toys at the park…"
+          style={{ fontFamily: "var(--v2-font-body)", fontSize: "1rem", color: "#2E2438", background: "#FBF4E7", border: "1px solid #ECE1CE", borderRadius: 14, padding: "13px 15px" }}
         />
       </div>
-      <div className="field">
-        <label htmlFor="note">Note (optional)</label>
-        <textarea id="note" name="note" placeholder="Tonight was bath night — maybe bubbles?" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <label htmlFor="note" style={{ fontFamily: "var(--v2-font-display)", fontWeight: 700, color: "#2E2438" }}>Note (optional)</label>
+        <textarea id="note" name="note" placeholder="Tonight was bath night — maybe bubbles?" style={{ fontFamily: "var(--v2-font-body)", fontSize: "1rem", color: "#2E2438", background: "#FBF4E7", border: "1px solid #ECE1CE", borderRadius: 14, padding: "13px 15px", minHeight: 88 }} />
       </div>
 
-      <button className="btn btn-primary" type="submit" disabled={pending}>
+      <button className="v2-btn v2-btn--primary" type="submit" disabled={pending}>
         {pending ? "Writing…" : "Write the story"}
       </button>
     </form>

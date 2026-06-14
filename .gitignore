@@ -4,6 +4,9 @@
 *.pem
 *.key
 
+# Local dev blob store (issue 57)
+.localblob/
+
 # Node / Next.js
 node_modules/
 .next/

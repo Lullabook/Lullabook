@@ -55,7 +55,7 @@ export function WorldJournalCards({
                   await dismissDailyNudgeAction(dailyNudge.babyId);
                 })
               }
-              style={{ background: "none", border: "none", color: "#9A8A78", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "var(--v2-font-body)" }}
+              style={{ background: "none", border: "none", color: "#6E6076", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "var(--v2-font-body)" }}
             >
               Not today
             </button>

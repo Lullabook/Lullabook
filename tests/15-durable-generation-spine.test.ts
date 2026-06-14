@@ -67,9 +67,10 @@ describe("15 — durable generation spine", () => {
     });
     await ctx.workflow.drain();
 
-    expect(ctx.fal.imagePrompts.length).toBeGreaterThan(0);
-    expect(ctx.fal.imagePrompts.every((p) => p.includes("storybook gouache"))).toBe(true);
-    expect(ctx.fal.imagePrompts.every((p) => p.includes("midnight blues"))).toBe(true);
+    const pagePrompts = ctx.fal.imagePrompts.filter((p) => !p.includes("Neutral portrait"));
+    expect(pagePrompts.length).toBeGreaterThan(0);
+    expect(pagePrompts.every((p) => p.includes("storybook gouache"))).toBe(true);
+    expect(pagePrompts.every((p) => p.includes("midnight blues"))).toBe(true);
   });
 
   it("moderates image bytes before BlobStore.put; quarantine skips storage", async () => {

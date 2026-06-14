@@ -31,6 +31,9 @@ tables (`babies`, `moments`, etc.). Run the incremental script once:
 1. SQL Editor → New query.
 2. Paste `CONTEXT/local-dev/schema-incremental-004-007.sql` → **Run.**
 
+**Need roster avatars (issue 58)?** Also run `supabase/migrations/008_avatar_key.sql`
+(or add `avatar_key text` to `personas`).
+
 ## 3. Turn OFF email confirmation (so sign-up logs you straight in)
 
 Supabase defaults to requiring an email-confirmation click. Sign-up redirects to
@@ -52,6 +55,21 @@ npm run dev
 Open http://localhost:3000 → **Create your Family** → sign up with any
 email/password. You land in the Library and can click through Personas,
 Characters, Storybooks, Billing, Account, etc.
+
+**Without `BLOB_S3_*` keys**, uploaded photos and generated roster avatars persist
+under `.localblob/` locally (issue 57) — adding family members works without R2.
+
+### Compare free vs subscribed locally (issue 60)
+
+Run two servers side by side:
+
+```bash
+npm run dev:free   # http://localhost:3000 — DEV_FORCE_SUBSCRIPTION=inactive
+npm run dev:paid   # http://localhost:3001 — DEV_FORCE_SUBSCRIPTION=active
+```
+
+Sign up (or use two browsers) to see paywall-gated vs unlocked flows. The override
+is ignored in production.
 
 ## 5. (Optional) Generate a real text Story
 
