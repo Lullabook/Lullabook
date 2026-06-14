@@ -10,6 +10,8 @@
 # Node / Next.js
 node_modules/
 .next/
+.next-free/
+.next-paid/
 out/
 dist/
 build/

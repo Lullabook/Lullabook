@@ -43,6 +43,8 @@ export interface Baby {
   id: string;
   familyId: string;
   displayName: string;
+  /** Calendar date YYYY-MM-DD for birthday-story offers (issue 64). */
+  birthDate: string | null;
   rosterGroupId: string;
   rosterScope: RosterScope;
   isDefault: boolean;

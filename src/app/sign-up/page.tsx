@@ -1,11 +1,15 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { signUpAction } from "@/lib/actions";
 import { AuthForm } from "@/components/auth-form";
 
 export const metadata: Metadata = { title: "Create your Family" };
 
-export default function SignUpPage() {
+export default async function SignUpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   return (
     <main
       style={{
@@ -41,7 +45,7 @@ export default function SignUpPage() {
           You&apos;ll be the Guardian — the grown-up in charge of family members
           and privacy.
         </p>
-        <AuthForm action={signUpAction} submitLabel="Create account" showJurisdiction />
+        <AuthForm mode="sign-up" submitLabel="Create account" showJurisdiction error={error} />
         <hr style={{ border: "none", borderTop: "1px solid #ECE1CE", margin: "20px 0" }} />
         <p style={{ fontSize: "0.9rem", color: "#6E6076" }}>
           Already have an account? <Link href="/sign-in" style={{ color: "#6A55C9", fontWeight: 700 }}>Sign in</Link>

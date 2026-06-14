@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:free": "DEV_FORCE_SUBSCRIPTION=inactive next dev -p 3000",
-    "dev:paid": "DEV_FORCE_SUBSCRIPTION=active next dev -p 3001",
+    "dev:free": "DEV_FORCE_SUBSCRIPTION=inactive NEXT_DEV_DIST_DIR=.next-free next dev -p 3000",
+    "dev:paid": "DEV_FORCE_SUBSCRIPTION=active NEXT_DEV_DIST_DIR=.next-paid next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

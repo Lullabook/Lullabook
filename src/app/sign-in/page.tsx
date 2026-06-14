@@ -1,11 +1,15 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { signInAction } from "@/lib/actions";
 import { AuthForm } from "@/components/auth-form";
 
 export const metadata: Metadata = { title: "Sign in" };
 
-export default function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const { error } = await searchParams;
   return (
     <main
       style={{
@@ -37,7 +41,7 @@ export default function SignInPage() {
         <h1 style={{ fontFamily: "var(--v2-font-display)", fontWeight: 800, fontSize: "2rem", color: "#2E2438", margin: "0 0 18px" }}>
           Sign in
         </h1>
-        <AuthForm action={signInAction} submitLabel="Sign in" />
+        <AuthForm mode="sign-in" submitLabel="Sign in" error={error} />
         <hr style={{ border: "none", borderTop: "1px solid #ECE1CE", margin: "20px 0" }} />
         <p style={{ fontSize: "0.9rem", color: "#6E6076" }}>
           New here? <Link href="/sign-up" style={{ color: "#6A55C9", fontWeight: 700 }}>Create your Family</Link>

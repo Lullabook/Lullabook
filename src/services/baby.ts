@@ -5,7 +5,23 @@ import type { Baby, RosterScope } from "@/domain/types";
 export interface AddBabyInput {
   memberId: string;
   displayName: string;
+  birthDate?: string | null;
   rosterScope?: RosterScope;
+}
+
+export interface UpdateBabyInput {
+  memberId: string;
+  babyId: string;
+  displayName?: string;
+  birthDate?: string | null;
+}
+
+function normalizeBirthDate(value: string | null | undefined): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("Birthday must be YYYY-MM-DD");
+  }
+  return value;
 }
 
 export class BabyService {
@@ -56,6 +72,7 @@ export class BabyService {
       id: uuid(),
       familyId: member.familyId,
       displayName: input.displayName,
+      birthDate: normalizeBirthDate(input.birthDate),
       rosterGroupId,
       rosterScope,
       isDefault: existing.length === 0,
@@ -68,6 +85,27 @@ export class BabyService {
     }
 
     return baby;
+  }
+
+  updateBaby(input: UpdateBabyInput): Baby {
+    const member = this.store.members.get(input.memberId);
+    if (!member) throw new Error("Member not found");
+    if (member.role !== "guardian") {
+      throw new Error("Only guardians may edit babies");
+    }
+    const baby = this.store.getBaby(input.babyId, input.memberId);
+    if (!baby) throw new Error("Baby not found");
+
+    const updated: Baby = {
+      ...baby,
+      displayName: input.displayName?.trim() || baby.displayName,
+      birthDate:
+        input.birthDate !== undefined
+          ? normalizeBirthDate(input.birthDate)
+          : baby.birthDate,
+    };
+    this.store.saveBaby(updated);
+    return updated;
   }
 
   /** Ensures at least one default Baby exists for the household. */

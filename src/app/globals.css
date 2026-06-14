@@ -785,6 +785,15 @@ table.plain th {
   }
 }
 
+@keyframes v2-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
 @keyframes v2-float {
   0%,
   100% {

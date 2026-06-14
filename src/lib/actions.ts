@@ -6,8 +6,8 @@ import { redirect } from "next/navigation";
 import { EVENTS, inngest } from "@/adapters/inngest";
 import type { Brief, TextStoryBrief, TraitQuestionnaire } from "@/domain/types";
 import type { MomentType } from "@/domain/daily-types";
+import { castLimitError, castSlotInfo } from "@/lib/cast-limits";
 import { requireAuthedContext } from "@/lib/auth";
-import { createAuthClient } from "@/lib/supabase";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
@@ -20,38 +20,7 @@ function fail(err: unknown): { ok: false; error: string } {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-
-export async function signUpAction(formData: FormData): Promise<ActionResult> {
-  const supabase = await createAuthClient();
-  const { error } = await supabase.auth.signUp({
-    email: String(formData.get("email") ?? ""),
-    password: String(formData.get("password") ?? ""),
-    options: {
-      data: { jurisdiction: String(formData.get("jurisdiction") ?? "US") },
-    },
-  });
-  if (error) return { ok: false, error: error.message };
-  redirect("/library");
-}
-
-export async function signInAction(formData: FormData): Promise<ActionResult> {
-  const supabase = await createAuthClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email: String(formData.get("email") ?? ""),
-    password: String(formData.get("password") ?? ""),
-  });
-  if (error) return { ok: false, error: error.message };
-  redirect("/library");
-}
-
-export async function signOutAction(): Promise<void> {
-  const supabase = await createAuthClient();
-  await supabase.auth.signOut();
-  redirect("/sign-in");
-}
+// Auth actions live in `@/lib/auth-actions` (plain form actions, no useActionState).
 
 // ---------------------------------------------------------------------------
 // Characters (text tier) + Text Stories
@@ -63,6 +32,10 @@ export async function createCharacterAction(
 ): Promise<ActionResult<{ characterId: string }>> {
   const { ctx, member } = await requireAuthedContext();
   try {
+    const slots = castSlotInfo(ctx.subscriptions, ctx.store, member.familyId, member.id);
+    if (!slots.canAdd) {
+      return { ok: false, error: castLimitError(slots.subscribed) };
+    }
     const character = await ctx.characters.create({
       memberId: member.id,
       questionnaire,
@@ -185,6 +158,17 @@ export async function createPersonaAction(
 ): Promise<ActionResult> {
   const { ctx, member } = await requireAuthedContext();
   try {
+    if (!ctx.subscriptions.isActive(member.familyId)) {
+      return {
+        ok: false,
+        error:
+          "Illustrated family members need a subscription. Add a character with a questionnaire instead — no photos required.",
+      };
+    }
+    const slots = castSlotInfo(ctx.subscriptions, ctx.store, member.familyId, member.id);
+    if (!slots.canAdd) {
+      return { ok: false, error: castLimitError(slots.subscribed) };
+    }
     const mode = String(formData.get("mode") ?? "adult") as "adult" | "baby";
     const displayName = String(formData.get("displayName") ?? "").trim();
     if (!displayName) return { ok: false, error: "Name is required" };
@@ -617,6 +601,19 @@ export async function createMomentAction(input: {
   } catch (err) {
     return fail(err);
   }
+}
+
+export async function updateBabyBirthDateAction(formData: FormData): Promise<void> {
+  const { ctx, member } = await requireAuthedContext();
+  const babyId = String(formData.get("babyId") ?? "");
+  const raw = String(formData.get("birthDate") ?? "").trim();
+  ctx.babies.updateBaby({
+    memberId: member.id,
+    babyId,
+    birthDate: raw || null,
+  });
+  await ctx.persist();
+  revalidatePath("/account");
 }
 
 export async function dismissDailyNudgeAction(babyId: string): Promise<ActionResult> {

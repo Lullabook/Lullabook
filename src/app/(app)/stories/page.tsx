@@ -13,6 +13,8 @@ function formatBookDate(date: Date): string {
 
 export default async function StoriesPage() {
   const { ctx, member } = await requireAuthedContext();
+  const subscribed = ctx.subscriptions.isActive(member.familyId);
+  const createHref = subscribed ? "/storybooks/new" : "/storybooks/new";
   const baby = ctx.babies.getSelected(member.id) ?? ctx.babies.ensureDefaultBaby(member.id);
   const books = ctx.store
     .listStorybooksForBaby(baby.id, member.id)
@@ -58,7 +60,7 @@ export default async function StoriesPage() {
           <Link href="/storybooks/classics" className="v2-btn v2-btn--outline" style={{ padding: "12px 18px", fontSize: "0.95rem" }}>
             📖 Classics
           </Link>
-          <Link href="/storybooks/new" className="v2-btn-accent">
+          <Link href={createHref} className="v2-btn-accent">
             ✨ New Story
           </Link>
         </div>
@@ -69,7 +71,7 @@ export default async function StoriesPage() {
           <p style={{ fontSize: "2rem", margin: "0 0 1rem" }}>📚</p>
           <h2 style={{ fontFamily: "var(--v2-font-display)" }}>No stories yet</h2>
           <p style={{ color: "#6E6076" }}>Start a new story starring {baby.displayName}.</p>
-          <Link href="/storybooks/new" className="v2-btn-accent" style={{ marginTop: 16, display: "inline-flex" }}>
+          <Link href={createHref} className="v2-btn-accent" style={{ marginTop: 16, display: "inline-flex" }}>
             ✨ New Story
           </Link>
         </div>

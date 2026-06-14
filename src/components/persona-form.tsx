@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition, type CSSProperties } from "
 import { useRouter } from "next/navigation";
 import type { ActionResult } from "@/lib/actions";
 import { createPersonaAction, promoteCharacterAction } from "@/lib/actions";
+import { TrainingStartModal } from "@/components/v2/training-start-modal";
 
 interface PersonaFormProps {
   /** When set, this form promotes an existing Character instead. */
@@ -68,6 +69,7 @@ export function PersonaForm({
   const [previews, setPreviews] = useState<string[]>([]);
   const [selfie, setSelfie] = useState<File | null>(null);
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
+  const [showTrainingModal, setShowTrainingModal] = useState(false);
 
   useEffect(() => {
     if (!photoInputRef.current) return;
@@ -120,10 +122,14 @@ export function PersonaForm({
     formData.set("theyCallBaby", theyCallBaby);
     if (characterId) formData.set("characterId", characterId);
     startTransition(async () => {
+      setShowTrainingModal(true);
       const res: ActionResult = characterId
         ? await promoteCharacterAction(formData)
         : await createPersonaAction(formData);
-      if (!res.ok) return setError(res.error);
+      if (!res.ok) {
+        setShowTrainingModal(false);
+        return setError(res.error);
+      }
       router.push("/family?training=1");
     });
   }
@@ -325,6 +331,14 @@ export function PersonaForm({
           </p>
         </div>
       </aside>
+      <TrainingStartModal
+        open={showTrainingModal}
+        name={name}
+        onDismiss={() => {
+          setShowTrainingModal(false);
+          router.push("/family?training=1");
+        }}
+      />
     </div>
   );
 }

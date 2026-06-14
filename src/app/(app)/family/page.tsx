@@ -3,15 +3,23 @@ import {
   FamilyPageClient,
   type FamilyMemberViewData,
 } from "@/components/v2/family-page-client";
+import { TrainingProgressRail } from "@/components/v2/training-progress-rail";
 import { requireAuthedContext } from "@/lib/auth";
+import { castSlotInfo } from "@/lib/cast-limits";
 import { AVATAR_GRADIENTS, HEADER_GRADIENTS } from "@/lib/v2-theme";
 
 export const metadata: Metadata = { title: "Family" };
 
-export default async function FamilyPage() {
+export default async function FamilyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ training?: string }>;
+}) {
   const { ctx, member } = await requireAuthedContext();
+  const { training } = await searchParams;
   const baby = ctx.babies.ensureDefaultBaby(member.id);
   const roster = ctx.familyRoster.listForBaby(member.id, baby.id);
+  const slots = castSlotInfo(ctx.subscriptions, ctx.store, member.familyId, member.id);
 
   const members: FamilyMemberViewData[] = roster.map((entry, i) => {
     const voiceClips = ctx.store
@@ -39,5 +47,17 @@ export default async function FamilyPage() {
     };
   });
 
-  return <FamilyPageClient babyName={baby.displayName} members={members} />;
+  return (
+    <>
+      <FamilyPageClient
+        babyName={baby.displayName}
+        members={members}
+        subscribed={slots.subscribed}
+        castUsed={slots.used}
+        castLimit={slots.limit}
+        canAddCast={slots.canAdd}
+      />
+      <TrainingProgressRail initiallyOpen={training === "1"} />
+    </>
+  );
 }
