@@ -29,20 +29,52 @@ export default async function SharePage({
 
   if (!book) {
     return (
-      <main className="shell" style={{ maxWidth: 440, paddingTop: "10vh" }}>
-        <div className="card">
-          <p className="eyebrow">Shared storybook</p>
-          <h1>This story is tucked away</h1>
-          <p className="muted">
+      <main
+        style={{
+          minHeight: "100vh",
+          background: "#FBF4E7",
+          fontFamily: "var(--v2-font-body)",
+          color: "#2E2438",
+          display: "flex",
+          justifyContent: "center",
+          padding: "10vh 24px",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 440,
+            background: "#FFFDF9",
+            border: "1px solid #ECE1CE",
+            borderRadius: 22,
+            padding: 28,
+            boxShadow: "0 8px 24px rgba(58,40,80,0.06)",
+            height: "fit-content",
+          }}
+        >
+          <p style={{ textTransform: "uppercase", letterSpacing: "0.16em", fontSize: "0.74rem", fontWeight: 800, color: "#8B6DF0", margin: "0 0 6px" }}>
+            Shared storybook
+          </p>
+          <h1 style={{ fontFamily: "var(--v2-font-display)", fontWeight: 800, fontSize: "1.8rem", color: "#2E2438", margin: "0 0 8px" }}>
+            This story is tucked away
+          </h1>
+          <p style={{ color: "#6E6076", fontSize: "0.95rem", lineHeight: 1.5, margin: "0 0 18px" }}>
             The link may have expired or been revoked — or it may need a
             passcode.
           </p>
-          <form method="get" className="stack">
-            <div className="field">
-              <label htmlFor="passcode">Passcode</label>
-              <input id="passcode" name="passcode" type="text" autoFocus />
+          <form method="get" className="v2-stack" style={{ gap: 14 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label htmlFor="passcode" style={{ fontFamily: "var(--v2-font-display)", fontWeight: 700, color: "#2E2438", fontSize: "0.95rem" }}>Passcode</label>
+              <input
+                id="passcode"
+                name="passcode"
+                type="text"
+                autoFocus
+                style={{ width: "100%", fontFamily: "var(--v2-font-body)", fontSize: "1rem", color: "#2E2438", background: "#FBF4E7", border: "1px solid #ECE1CE", borderRadius: 14, padding: "13px 15px", boxSizing: "border-box" }}
+              />
             </div>
-            <button className="btn btn-primary" type="submit">
+            <button className="v2-btn v2-btn--primary" type="submit">
               Open the book
             </button>
           </form>
@@ -62,11 +94,26 @@ export default async function SharePage({
   );
 
   return (
-    <main className="shell">
-      <p className="eyebrow">A story shared with you</p>
-      <h1>{book.brief.theme}</h1>
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#FBF4E7",
+        fontFamily: "var(--v2-font-body)",
+        color: "#2E2438",
+        maxWidth: 920,
+        margin: "0 auto",
+        padding: "5vh 24px",
+        boxSizing: "border-box",
+      }}
+    >
+      <p style={{ textTransform: "uppercase", letterSpacing: "0.16em", fontSize: "0.74rem", fontWeight: 800, color: "#8B6DF0", margin: "0 0 6px" }}>
+        A story shared with you
+      </p>
+      <h1 style={{ fontFamily: "var(--v2-font-display)", fontWeight: 800, fontSize: "2.2rem", color: "#2E2438", margin: "0 0 20px" }}>
+        {book.brief.theme}
+      </h1>
       <Reader title={book.brief.theme} pages={pages} />
-      <p className="subtle" style={{ marginTop: "2rem", textAlign: "center" }}>
+      <p style={{ marginTop: "2rem", textAlign: "center", fontSize: "0.86rem", color: "#9A8A78" }}>
         Made with Lullabook — storybooks starring the people you love.
       </p>
     </main>

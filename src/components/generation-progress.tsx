@@ -57,25 +57,54 @@ export function GenerationProgress({
   const done = slots.filter((s) => s.status !== "pending").length;
 
   return (
-    <div className="card" aria-live="polite">
-      <p className="eyebrow">Writing &amp; illustrating</p>
-      <h2>
+    <div
+      aria-live="polite"
+      style={{
+        background: "#FFFDF9",
+        border: "1px solid #ECE1CE",
+        borderRadius: 22,
+        padding: 22,
+        boxShadow: "0 8px 24px rgba(58,40,80,0.06)",
+      }}
+    >
+      <p style={{ textTransform: "uppercase", letterSpacing: "0.16em", fontSize: "0.74rem", fontWeight: 800, color: "#8B6DF0", margin: "0 0 6px" }}>
+        ✨ Writing &amp; illustrating
+      </p>
+      <h2 style={{ margin: "0 0 6px", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.4rem", color: "#2E2438" }}>
         {done} of {expectedPageCount} pages tucked in
       </h2>
-      <p className="muted">
+      <p style={{ margin: "0 0 16px", color: "#6E6076", fontSize: "0.95rem", lineHeight: 1.5 }}>
         Your storybook is being written and painted page by page. This takes a
         few minutes — you can leave and come back; we&apos;ll keep going.
       </p>
-      <div className="page-dots">
-        {slots.map((slot) => (
-          <span
-            key={slot.index}
-            className={`page-dot ${slot.status}`}
-            title={`Page ${slot.index + 1}: ${slot.status}`}
-          >
-            {slot.index + 1}
-          </span>
-        ))}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {slots.map((slot) => {
+          const ready = slot.status === "ready";
+          const failed = slot.status === "failed" || slot.status === "quarantined";
+          const pendingDot = slot.status === "pending";
+          return (
+            <span
+              key={slot.index}
+              title={`Page ${slot.index + 1}: ${slot.status}`}
+              style={{
+                width: 34,
+                height: 44,
+                borderRadius: 10,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "0.74rem",
+                fontWeight: 800,
+                border: `1px solid ${ready ? "#5FB389" : failed ? "#E7A6AE" : "#ECE1CE"}`,
+                background: ready ? "#E1F1E8" : failed ? "#FDF1F3" : "#FBF4E7",
+                color: ready ? "#3E7A5A" : failed ? "#B23A48" : "#9A8A78",
+                animation: pendingDot ? "v2-twinkle 1.8s ease-in-out infinite" : undefined,
+              }}
+            >
+              {slot.index + 1}
+            </span>
+          );
+        })}
       </div>
     </div>
   );

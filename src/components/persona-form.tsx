@@ -104,6 +104,7 @@ export function PersonaForm({
   }
 
   const enough = photos.length >= 3;
+  const isBaby = mode === "baby" && !characterId;
   const showSelfie = mode === "adult" || Boolean(characterId);
   const ready = enough && consented && (!showSelfie || Boolean(selfie));
 
@@ -123,7 +124,7 @@ export function PersonaForm({
         ? await promoteCharacterAction(formData)
         : await createPersonaAction(formData);
       if (!res.ok) return setError(res.error);
-      router.push("/personas?training=1");
+      router.push("/family?training=1");
     });
   }
 
@@ -133,7 +134,7 @@ export function PersonaForm({
     <div style={{ display: "grid", gap: 26, gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr)", alignItems: "start" }}>
       <form action={submit} style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {error && (
-          <div className="v2-form alert alert-error" role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48" }}>
+          <div role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48", fontSize: "0.92rem" }}>
             {error}
           </div>
         )}
@@ -164,24 +165,36 @@ export function PersonaForm({
             </div>
           ) : (
             <div>
-              <label htmlFor="displayName" style={label}>Their name</label>
-              <input id="displayName" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nadia" required style={input} />
+              <label htmlFor="displayName" style={label}>
+                {isBaby ? "Baby’s name" : "Their name"}
+              </label>
+              <input id="displayName" value={name} onChange={(e) => setName(e.target.value)} placeholder={isBaby ? "Maya" : "Nadia"} required style={input} />
+              {isBaby && (
+                <p style={{ margin: "8px 0 0", fontSize: "0.85rem", color: "#9A8A78" }}>
+                  This little one is the star of their own world — no relationship or
+                  nicknames needed here.
+                </p>
+              )}
             </div>
           )}
-          <div>
-            <label htmlFor="relationship" style={label}>Their relationship to the baby</label>
-            <input id="relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="Grandma" style={input} />
-          </div>
-          <div style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr 1fr" }}>
-            <div>
-              <label htmlFor="babyCalls" style={label}>What the baby calls them</label>
-              <input id="babyCalls" value={babyCalls} onChange={(e) => setBabyCalls(e.target.value)} placeholder="Nani" style={{ ...input, color: "#6A55C9", fontFamily: "var(--v2-font-display)", fontWeight: 700 }} />
-            </div>
-            <div>
-              <label htmlFor="theyCallBaby" style={label}>What they call the baby</label>
-              <input id="theyCallBaby" value={theyCallBaby} onChange={(e) => setTheyCallBaby(e.target.value)} placeholder="moonbeam" style={{ ...input, color: "#E79A3C", fontFamily: "var(--v2-font-display)", fontWeight: 700 }} />
-            </div>
-          </div>
+          {!isBaby && (
+            <>
+              <div>
+                <label htmlFor="relationship" style={label}>Their relationship to the baby</label>
+                <input id="relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} placeholder="Grandma" style={input} />
+              </div>
+              <div style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr 1fr" }}>
+                <div>
+                  <label htmlFor="babyCalls" style={label}>What the baby calls them</label>
+                  <input id="babyCalls" value={babyCalls} onChange={(e) => setBabyCalls(e.target.value)} placeholder="Nani" style={{ ...input, color: "#6A55C9", fontFamily: "var(--v2-font-display)", fontWeight: 700 }} />
+                </div>
+                <div>
+                  <label htmlFor="theyCallBaby" style={label}>What they call the baby</label>
+                  <input id="theyCallBaby" value={theyCallBaby} onChange={(e) => setTheyCallBaby(e.target.value)} placeholder="moonbeam" style={{ ...input, color: "#E79A3C", fontFamily: "var(--v2-font-display)", fontWeight: 700 }} />
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* photos */}
@@ -266,7 +279,7 @@ export function PersonaForm({
           <button
             type="submit"
             disabled={pending || !ready || (mode === "baby" && (!isGuardian || !canCreateBaby))}
-            style={{ marginTop: 16, width: "100%", padding: 15, borderRadius: 14, border: "none", background: ready ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#E7DCCB", color: ready ? "#fff" : "#9A8A78", fontWeight: 800, fontSize: "1.02rem", cursor: ready && !pending ? "pointer" : "not-allowed", boxShadow: ready ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
+            style={{ marginTop: 16, width: "100%", padding: 15, borderRadius: 14, border: "none", background: ready ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#E7DCCB", color: ready ? "#fff" : "#9A8A78", fontFamily: "var(--v2-font-body)", fontWeight: 800, fontSize: "1.02rem", cursor: ready && !pending ? "pointer" : "not-allowed", boxShadow: ready ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
           >
             {pending ? "Uploading…" : ready ? "✨ Start training (~5 minutes)" : photos.length < 3 ? `Add ${3 - photos.length} more photo${3 - photos.length === 1 ? "" : "s"}` : "Confirm consent to continue"}
           </button>
@@ -278,23 +291,27 @@ export function PersonaForm({
         <div style={{ background: "#FFFDF9", border: "1px solid #ECE1CE", borderRadius: 24, overflow: "hidden", boxShadow: "0 12px 32px rgba(58,40,80,0.08)" }}>
           <div style={{ padding: 22, background: "linear-gradient(135deg,#8B6DF0,#6A55C9)", display: "flex", alignItems: "center", gap: 14 }}>
             <span
-              style={{ width: 62, height: 62, borderRadius: "50%", background: "linear-gradient(150deg,#E79A3C,#F6C177)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.6rem", border: "4px solid rgba(255,255,255,0.5)" }}
+              style={{ width: 62, height: 62, flexShrink: 0, borderRadius: "50%", background: "linear-gradient(150deg,#E79A3C,#F6C177)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.6rem", border: "4px solid rgba(255,255,255,0.5)" }}
               aria-hidden="true"
             >
               {previewInitial}
             </span>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <p style={{ margin: 0, fontFamily: "var(--v2-font-display)", fontWeight: 800, fontSize: "1.4rem", color: "#fff" }}>{name.trim() || "New member"}</p>
               <span style={{ display: "inline-block", marginTop: 4, padding: "4px 11px", borderRadius: 999, background: "rgba(255,255,255,0.25)", color: "#fff", fontWeight: 800, fontSize: "0.74rem" }}>
-                {(relationship.trim() || "Relationship") + " to the baby"}
+                {isBaby ? "⭐ The star" : (relationship.trim() || "Relationship") + " to the baby"}
               </span>
             </div>
           </div>
           <div style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-            <Row k="Baby calls them" v={babyCalls.trim() ? `“${babyCalls.trim()}”` : "—"} color="#6A55C9" />
-            <div style={{ height: 1, background: "#F0E6D2" }} />
-            <Row k="They call the baby" v={theyCallBaby.trim() ? `“${theyCallBaby.trim()}”` : "—"} color="#E79A3C" />
-            <div style={{ height: 1, background: "#F0E6D2" }} />
+            {!isBaby && (
+              <>
+                <Row k="Baby calls them" v={babyCalls.trim() ? `“${babyCalls.trim()}”` : "—"} color="#6A55C9" />
+                <div style={{ height: 1, background: "#F0E6D2" }} />
+                <Row k="They call the baby" v={theyCallBaby.trim() ? `“${theyCallBaby.trim()}”` : "—"} color="#E79A3C" />
+                <div style={{ height: 1, background: "#F0E6D2" }} />
+              </>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.9rem" }}>
               <span style={{ width: 9, height: 9, borderRadius: "50%", background: enough ? "#5FB389" : "#C9A9A9" }} />
               <span style={{ color: "#6E6076", fontWeight: 700 }}>{enough ? "Ready to train likeness" : "Needs photos"}</span>

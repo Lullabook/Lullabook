@@ -17,7 +17,6 @@ export default async function DailyLifePage({
   const baby = ctx.babies.getSelected(member.id) ?? ctx.babies.ensureDefaultBaby(member.id);
   const views = ctx.moments.listViews(member.id, baby.id);
   const roster = ctx.familyRoster.listForBaby(member.id, baby.id);
-  const characters = ctx.store.getCharactersByFamily(member.familyId, member.id);
 
   const today = new Date().toISOString().slice(0, 10);
   const prefillDate = params.date === "today" || !params.date ? today : params.date;
@@ -34,18 +33,13 @@ export default async function DailyLifePage({
     linkedPeople: v.linkedPeople,
   }));
 
-  const castOptions = [
-    ...roster.map((m) => ({
-      id: m.persona.id,
-      name: m.bond?.babyCallsThem ?? m.persona.displayName,
-      kind: "adult" as const,
-    })),
-    ...characters.map((c) => ({
-      id: c.id,
-      name: c.displayName,
-      kind: "character" as const,
-    })),
-  ];
+  // "Who was there?" lists only real family members — made-up Characters are
+  // never present at a real moment in the baby's day.
+  const castOptions = roster.map((m) => ({
+    id: m.persona.id,
+    name: m.bond?.babyCallsThem ?? m.persona.displayName,
+    kind: "adult" as const,
+  }));
 
   const weekDays = week.days.map((d) => ({
     date: d.date,

@@ -1089,6 +1089,49 @@ table.plain th {
   background: #fdf1f3;
 }
 
+/* Native <button> elements don't inherit font-family, so force the body font
+   (Nunito) on every button inside the v2 shell to match link-styled buttons. */
+.v2-shell button {
+  font-family: var(--v2-font-body);
+}
+
+/* The generic `.v2-shell a { color: purple }` rule (specificity 0-1-1) would
+   otherwise beat the single-class button modifiers (0-1-0), rendering
+   link-styled buttons with purple text on a purple/amber background. Re-assert
+   each button's text color at a higher specificity so they stay readable. */
+.v2-shell a.v2-btn,
+.v2-shell .v2-btn {
+  color: var(--v2-text);
+}
+.v2-shell a.v2-btn--primary,
+.v2-shell .v2-btn--primary {
+  color: #fff;
+}
+.v2-shell a.v2-btn--amber,
+.v2-shell .v2-btn--amber {
+  color: #3a2410;
+}
+.v2-shell a.v2-btn--cream,
+.v2-shell .v2-btn--cream,
+.v2-shell a.v2-btn--outline,
+.v2-shell .v2-btn--outline,
+.v2-shell a.v2-btn--ghost-surface,
+.v2-shell .v2-btn--ghost-surface {
+  color: var(--v2-primary);
+}
+.v2-shell a.v2-btn--danger,
+.v2-shell .v2-btn--danger {
+  color: #fff;
+}
+.v2-shell a.v2-btn--danger-ghost,
+.v2-shell .v2-btn--danger-ghost {
+  color: #b23a48;
+}
+.v2-shell a.v2-btn--ghost-light,
+.v2-shell .v2-btn--ghost-light {
+  color: #fff;
+}
+
 .v2-hero {
   position: relative;
   border-radius: 30px;
@@ -1395,8 +1438,10 @@ table.plain th {
 }
 
 .v2-form input[type="text"],
+.v2-form input[type="email"],
 .v2-form input[type="file"],
-.v2-form input:not([type]) {
+.v2-form input:not([type]),
+.v2-form textarea {
   width: 100%;
   font-family: var(--v2-font-body);
   font-size: 1rem;
@@ -1408,8 +1453,21 @@ table.plain th {
   box-sizing: border-box;
 }
 
+.v2-form textarea {
+  min-height: 88px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.v2-form input::placeholder,
+.v2-form textarea::placeholder {
+  color: #b7a992;
+}
+
 .v2-form input[type="text"]:focus,
-.v2-form input:not([type]):focus {
+.v2-form input[type="email"]:focus,
+.v2-form input:not([type]):focus,
+.v2-form textarea:focus {
   outline: none;
   border-color: var(--v2-purple-light);
   box-shadow: 0 0 0 3px rgba(139, 109, 240, 0.14);
@@ -1418,6 +1476,17 @@ table.plain th {
 .v2-form .hint {
   font-size: 0.82rem;
   color: var(--v2-text-subtle);
+}
+
+.v2-form .subtle {
+  font-size: 0.92rem;
+  color: var(--v2-text-muted);
+}
+
+.v2-form .alert-info {
+  background: var(--v2-primary-bg);
+  border-color: #d6cbf6;
+  color: var(--v2-primary);
 }
 
 .v2-form fieldset {

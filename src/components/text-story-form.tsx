@@ -44,7 +44,7 @@ export function TextStoryForm({ characters }: TextStoryFormProps) {
   return (
     <form action={submit} className="v2-stack" style={{ gap: 16, fontFamily: "var(--v2-font-body)" }}>
       {error && (
-        <div className="alert alert-error" role="alert">
+        <div role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48", fontSize: "0.92rem" }}>
           {error}
         </div>
       )}

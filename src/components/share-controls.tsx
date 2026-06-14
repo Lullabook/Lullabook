@@ -1,7 +1,33 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type CSSProperties } from "react";
 import { mintShareLinkAction, revokeShareLinkAction } from "@/lib/actions";
+
+const fieldLabel: CSSProperties = {
+  display: "block",
+  fontFamily: "var(--v2-font-display)",
+  fontWeight: 700,
+  fontSize: "0.95rem",
+  color: "#2E2438",
+  marginBottom: 6,
+};
+const fieldInput: CSSProperties = {
+  width: "100%",
+  fontFamily: "var(--v2-font-body)",
+  fontSize: "1rem",
+  color: "#2E2438",
+  background: "#FBF4E7",
+  border: "1px solid #ECE1CE",
+  borderRadius: 14,
+  padding: "12px 14px",
+  boxSizing: "border-box",
+};
+const noticeBase: CSSProperties = {
+  borderRadius: 16,
+  padding: "14px 16px",
+  fontSize: "0.92rem",
+  border: "1px solid",
+};
 
 export interface ShareLinkView {
   id: string;
@@ -27,46 +53,50 @@ export function ShareControls({ storybookId, links }: ShareControlsProps) {
   const active = links.filter((l) => !l.revoked);
 
   return (
-    <div className="stack">
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {error && (
-        <div className="alert alert-error" role="alert">
+        <div role="alert" style={{ ...noticeBase, background: "#fdf1f3", borderColor: "#eccdd2", color: "#b23a48" }}>
           {error}
         </div>
       )}
       {warning && (
-        <div className="alert alert-warning" role="alert">
+        <div role="alert" style={{ ...noticeBase, background: "#FBEBCE", borderColor: "#f0d9ad", color: "#9a6b1e" }}>
           {warning}
           {mintedUrl && (
             <p style={{ margin: "8px 0 0" }}>
-              Share link: <a href={mintedUrl}>{location.origin + mintedUrl}</a>
+              Share link: <a href={mintedUrl} style={{ color: "#6A55C9", fontWeight: 700 }}>{location.origin + mintedUrl}</a>
             </p>
           )}
         </div>
       )}
 
-      <div className="row">
-        <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 140 }}>
-          <label htmlFor="share-expiry">Expires (optional)</label>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <label htmlFor="share-expiry" style={fieldLabel}>Expires (optional)</label>
           <input
             id="share-expiry"
             type="date"
             value={expiresAt}
             onChange={(e) => setExpiresAt(e.target.value)}
+            style={fieldInput}
           />
         </div>
-        <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 140 }}>
-          <label htmlFor="share-passcode">Passcode (optional)</label>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <label htmlFor="share-passcode" style={fieldLabel}>Passcode (optional)</label>
           <input
             id="share-passcode"
             type="text"
             value={passcode}
             onChange={(e) => setPasscode(e.target.value)}
             placeholder="grandma123"
+            style={fieldInput}
           />
         </div>
       </div>
       <button
-        className="btn btn-secondary"
+        type="button"
+        className="v2-btn v2-btn--ghost-surface"
+        style={{ alignSelf: "flex-start" }}
         disabled={pending}
         onClick={() => {
           setError(null);
@@ -81,46 +111,41 @@ export function ShareControls({ storybookId, links }: ShareControlsProps) {
           });
         }}
       >
-        Create share link
+        🔗 Create share link
       </button>
 
       {active.length > 0 && (
-        <table className="plain">
-          <thead>
-            <tr>
-              <th>Link</th>
-              <th>Expiry</th>
-              <th>Passcode</th>
-              <th aria-label="Actions" />
-            </tr>
-          </thead>
-          <tbody>
-            {active.map((link) => (
-              <tr key={link.id}>
-                <td>
-                  <a href={link.url}>{link.url}</a>
-                </td>
-                <td>{link.expiresAt ? new Date(link.expiresAt).toLocaleDateString() : "Never"}</td>
-                <td>{link.hasPasscode ? "Yes" : "No"}</td>
-                <td>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    disabled={pending}
-                    onClick={() => {
-                      setError(null);
-                      startTransition(async () => {
-                        const res = await revokeShareLinkAction(link.id, storybookId);
-                        if (!res.ok) setError(res.error);
-                      });
-                    }}
-                  >
-                    Revoke
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {active.map((link) => (
+            <div
+              key={link.id}
+              style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 14px", borderRadius: 16, border: "1px solid #ECE1CE", background: "#FBF4E7" }}
+            >
+              <a href={link.url} style={{ flex: 1, minWidth: 160, color: "#6A55C9", fontWeight: 700, fontSize: "0.9rem", wordBreak: "break-all" }}>
+                {link.url}
+              </a>
+              <span style={{ fontSize: "0.82rem", color: "#9A8A78", fontWeight: 700 }}>
+                {link.expiresAt ? `Expires ${new Date(link.expiresAt).toLocaleDateString()}` : "Never expires"}
+                {link.hasPasscode ? " · 🔒 passcode" : ""}
+              </span>
+              <button
+                type="button"
+                className="v2-btn v2-btn--danger-ghost"
+                style={{ padding: "7px 14px", fontSize: "0.82rem" }}
+                disabled={pending}
+                onClick={() => {
+                  setError(null);
+                  startTransition(async () => {
+                    const res = await revokeShareLinkAction(link.id, storybookId);
+                    if (!res.ok) setError(res.error);
+                  });
+                }}
+              >
+                Revoke
+              </button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
