@@ -38,6 +38,7 @@ export interface AnthropicAdapter {
     pageCount: number;
     storyType: StoryType;
     lullabyPhrase?: string;
+    momentContext?: string;
   }): Promise<GeneratedStory>;
   generateTextStory(input: TextStoryGenerationInput): Promise<{ text: string }>;
   adaptStory(input: {

@@ -30,9 +30,13 @@ export function AppShell({ children, userInitial, illustrated }: AppShellProps) 
             {illustrated && (
               <span className="v2-badge-illustrated">✨ Illustrated</span>
             )}
-            <span className="v2-avatar-user" aria-hidden="true">
+            <Link
+              href="/account"
+              className="v2-avatar-user"
+              aria-label="Account"
+            >
               {userInitial}
-            </span>
+            </Link>
           </div>
         </div>
       </header>

@@ -28,6 +28,7 @@ import { SubscriptionService } from "@/services/subscription";
 import { TextStoryService } from "@/services/text-story";
 import { VoiceClipService } from "@/services/voice-clip";
 import { MomentService } from "@/services/moment";
+import { JournalNudgeService } from "@/services/journal-nudge";
 import { WorldService } from "@/services/world";
 
 export type RequestContext = ReturnType<typeof createRequestContext>;
@@ -77,6 +78,7 @@ export function createRequestContext() {
   const familyRoster = new FamilyRosterService(store);
   const voiceClips = new VoiceClipService(store, blobs);
   const moments = new MomentService(store);
+  const journalNudges = new JournalNudgeService(store, moments);
   const world = new WorldService(store, babies, familyRoster);
   // ADR-0005: multi-persona pages go through the Gemini reference-model path
   // only once the composition spike passes; flipped by env, not a deploy.
@@ -114,6 +116,7 @@ export function createRequestContext() {
     familyRoster,
     voiceClips,
     moments,
+    journalNudges,
     world,
     personas,
     storybooks,

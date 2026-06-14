@@ -96,6 +96,34 @@ export interface Moment {
   createdAt: Date;
 }
 
+/** Who was present for a Moment (issue 51). */
+export interface MomentPersonLink {
+  id: string;
+  momentId: string;
+  personaId?: string;
+  characterId?: string;
+}
+
+/** Per-Baby watermark for auto-context "since last Story" (ADR-0019). */
+export interface BabyAutoContextWatermark {
+  babyId: string;
+  /** Null until the first successful Story text generation. */
+  lastStoryAt: Date | null;
+}
+
+export type JournalNudgeKind = "daily_dismiss" | "weekly_seen";
+
+/** Per-member per-Baby nudge suppression (issues 53, 55). */
+export interface JournalNudgeState {
+  id: string;
+  memberId: string;
+  babyId: string;
+  kind: JournalNudgeKind;
+  /** Calendar date or week-start Monday YYYY-MM-DD. */
+  suppressedOn: string;
+  createdAt: Date;
+}
+
 export interface Persona {
   id: string;
   familyId: string;

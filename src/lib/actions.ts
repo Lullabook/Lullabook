@@ -559,6 +559,8 @@ export async function createMomentAction(input: {
   momentType: MomentType;
   occurredOn?: string;
   isSignificant?: boolean;
+  linkedPersonaIds?: string[];
+  linkedCharacterIds?: string[];
 }): Promise<ActionResult<{ momentId: string }>> {
   const { ctx, member } = await requireAuthedContext();
   try {
@@ -569,10 +571,37 @@ export async function createMomentAction(input: {
       momentType: input.momentType,
       occurredOn: input.occurredOn,
       isSignificant: input.isSignificant,
+      linkedPersonaIds: input.linkedPersonaIds,
+      linkedCharacterIds: input.linkedCharacterIds,
     });
     await ctx.persist();
     revalidatePath("/daily");
+    revalidatePath("/world");
     return { ok: true, data: { momentId: moment.id } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function dismissDailyNudgeAction(babyId: string): Promise<ActionResult> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    ctx.journalNudges.dismissDailyNudge(member.id, babyId);
+    await ctx.persist();
+    revalidatePath("/world");
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function markWeeklySuggestionSeenAction(babyId: string): Promise<ActionResult> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    ctx.journalNudges.markWeeklySuggestionSeen(member.id, babyId);
+    await ctx.persist();
+    revalidatePath("/world");
+    return { ok: true, data: undefined };
   } catch (err) {
     return fail(err);
   }

@@ -85,11 +85,46 @@ only `tsc` errors are pre-existing test-harness drift in `tests/03,06,23`, unrel
   with the **Moment** model in issue 50 (light structure: text + date + linked people +
   `significant` flag).
 
+## Part-2 implementation landed (Cursor Composer) — pushed this session
+
+Cursor implemented issues **50–56** against this plan; that work plus the UI wiring
+fixes below are all included in this push.
+
+- **Services:** `services/moment.ts`, `services/moment-week.ts`,
+  `services/auto-context.ts` (ADR-0019 layer), `services/journal-nudge.ts`.
+- **Server actions:** `createMomentAction`, `dismissDailyNudgeAction`,
+  `markWeeklySuggestionSeenAction` (in `lib/actions.ts`); `lib/context.ts` wires
+  `ctx.moments` / nudge state.
+- **Data:** `supabase/migrations/007_journal_moments_extras.sql` (+
+  `CONTEXT/local-dev/schema-incremental-004-007.sql`); `domain/types.ts`,
+  `db/store.ts`, `db/supabase-store.ts`, `test/fixtures.ts` extended for Moments.
+- **UI:** `app/(app)/daily/page.tsx` + `components/v2/daily-life-client.tsx` now
+  read real Moments (timeline + weekly spread); `components/v2/world-journal-cards.tsx`
+  (daily nudge + weekly-story suggestion on World home); `app/(app)/world/page.tsx`,
+  `storybooks/new/page.tsx`, `components/v2/composer.tsx` wired for moment→story.
+- **Tests:** `tests/51–56` added. **Full suite: 50 files, 192 tests passing.**
+  (`tsc --noEmit` shows 7 type-strictness errors in `tests/03,06,23,54` only —
+  pre-existing harness drift, not runtime failures.)
+
+### UI wiring fixes this session (post-drop-in QA)
+- `components/nav-links.tsx` — added the **📔 Daily** item to the **live** nav
+  (the earlier `V2_NAV` edit was on a dead component; the real nav is `nav-links.tsx`).
+- `components/v2/app-shell.tsx` + `globals.css` — the account avatar was a
+  non-clickable `<span>`; made it a `<Link href="/account">` so Account is reachable.
+- `components/v2/world-journal-cards.tsx` — centered the daily-nudge / weekly
+  button rows (`align-items: center`) so the gradient CTA and the borderless
+  secondary button line up.
+
 ## Notes for the implementer (Cursor Composer)
 - Build against the existing v2 design system; **do not** author new visual design.
 - Every slice is test-first per the repo's TDD convention; migrations additive +
   reversible; keep the existing test suite green.
 - Moments carry no new biometric data → ride the Baby's existing consent +
   hard-delete/purge (ADR-0007); no new consent gate.
+
+## Follow-ups (carried)
+- `tsc` strictness in `tests/03,06,23,54` (Inngest private `fn`; roster/persist
+  fixture drift; `momentContext` typing) — green at runtime, worth tidying.
+- Daily-Life "Edit routine" button is still a placeholder (no action wired).
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>

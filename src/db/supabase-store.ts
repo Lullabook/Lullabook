@@ -181,7 +181,15 @@ export class SupabaseDataStore extends DataStore {
       bondsRes,
       momentsRes,
     ]) {
-      if (res.error) throw new Error(`hydrateFamily failed: ${res.error.message}`);
+      if (res.error) {
+        const msg = res.error.message;
+        if (msg.includes("Could not find the table")) {
+          throw new Error(
+            `${msg} — your Supabase project is missing newer tables. Open Supabase Dashboard → SQL Editor, paste and run CONTEXT/local-dev/schema-incremental-004-007.sql, then refresh.`
+          );
+        }
+        throw new Error(`hydrateFamily failed: ${msg}`);
+      }
     }
 
     for (const r of (families.data ?? []) as Row[]) {
@@ -369,6 +377,46 @@ export class SupabaseDataStore extends DataStore {
       this.snap("moments", moment.id);
     }
 
+    const familyMomentIds = [...this.moments.values()]
+      .filter((m) => m.familyId === familyId)
+      .map((m) => m.id);
+    if (familyMomentIds.length > 0) {
+      const mpRes = await this.client
+        .from("moment_people")
+        .select("*")
+        .in("moment_id", familyMomentIds);
+      if (mpRes.error) throw new Error(`hydrateFamily failed: ${mpRes.error.message}`);
+      for (const r of (mpRes.data ?? []) as Row[]) {
+        const link: import("@/domain/types").MomentPersonLink = {
+          id: r.id,
+          momentId: r.moment_id,
+          personaId: r.persona_id ?? undefined,
+          characterId: r.character_id ?? undefined,
+        };
+        this.momentPeople.set(link.id, link);
+        this.snap("moment_people", link.id);
+      }
+    }
+
+    const familyBabyIds = [...this.babies.values()]
+      .filter((b) => b.familyId === familyId)
+      .map((b) => b.id);
+    if (familyBabyIds.length > 0) {
+      const wmRes = await this.client
+        .from("baby_auto_context_watermarks")
+        .select("*")
+        .in("baby_id", familyBabyIds);
+      if (wmRes.error) throw new Error(`hydrateFamily failed: ${wmRes.error.message}`);
+      for (const r of (wmRes.data ?? []) as Row[]) {
+        const wm: import("@/domain/types").BabyAutoContextWatermark = {
+          babyId: r.baby_id,
+          lastStoryAt: r.last_story_at ? new Date(r.last_story_at) : null,
+        };
+        this.autoContextWatermarks.set(wm.babyId, wm);
+        this.snap("baby_auto_context_watermarks", wm.babyId);
+      }
+    }
+
     const memberIds = (members.data ?? []).map((r) => r.id as string);
     if (memberIds.length > 0) {
       const pushRes = await this.client
@@ -385,6 +433,27 @@ export class SupabaseDataStore extends DataStore {
         };
         this.pushSubscriptions.set(sub.id, sub);
         this.snap("push_subscriptions", sub.id);
+      }
+
+      if (familyBabyIds.length > 0) {
+        const nudgeRes = await this.client
+          .from("journal_nudge_state")
+          .select("*")
+          .in("member_id", memberIds)
+          .in("baby_id", familyBabyIds);
+        if (nudgeRes.error) throw new Error(`hydrateFamily failed: ${nudgeRes.error.message}`);
+        for (const r of (nudgeRes.data ?? []) as Row[]) {
+          const state: import("@/domain/types").JournalNudgeState = {
+            id: r.id,
+            memberId: r.member_id,
+            babyId: r.baby_id,
+            kind: r.kind,
+            suppressedOn: String(r.suppressed_on).slice(0, 10),
+            createdAt: new Date(r.created_at),
+          };
+          this.journalNudgeStates.set(state.id, state);
+          this.snap("journal_nudge_state", state.id);
+        }
       }
     }
 
@@ -633,6 +702,34 @@ export class SupabaseDataStore extends DataStore {
         }))
       ),
       () => upsert(
+        "moment_people",
+        [...this.momentPeople.values()].map((l) => ({
+          id: l.id,
+          moment_id: l.momentId,
+          persona_id: l.personaId ?? null,
+          character_id: l.characterId ?? null,
+        }))
+      ),
+      () => upsert(
+        "baby_auto_context_watermarks",
+        [...this.autoContextWatermarks.values()].map((w) => ({
+          baby_id: w.babyId,
+          last_story_at: w.lastStoryAt?.toISOString() ?? null,
+        })),
+        "baby_id"
+      ),
+      () => upsert(
+        "journal_nudge_state",
+        [...this.journalNudgeStates.values()].map((s) => ({
+          id: s.id,
+          member_id: s.memberId,
+          baby_id: s.babyId,
+          kind: s.kind,
+          suppressed_on: s.suppressedOn,
+          created_at: s.createdAt.toISOString(),
+        }))
+      ),
+      () => upsert(
         "storybooks",
         [...this.storybooks.values()].map((b) => ({
           id: b.id,
@@ -779,6 +876,13 @@ export class SupabaseDataStore extends DataStore {
       () => deleteMissing("page_candidates", new Set(this.pageCandidates.keys())),
       () => deleteMissing("pages", new Set(this.pages.keys())),
       () => deleteMissing("moments", new Set(this.moments.keys())),
+      () => deleteMissing("moment_people", new Set(this.momentPeople.keys())),
+      () => deleteMissing(
+        "baby_auto_context_watermarks",
+        new Set(this.autoContextWatermarks.keys()),
+        "baby_id"
+      ),
+      () => deleteMissing("journal_nudge_state", new Set(this.journalNudgeStates.keys())),
       () => deleteMissing(
         "persisted_generations",
         new Set(this.persistedGenerations.keys()),

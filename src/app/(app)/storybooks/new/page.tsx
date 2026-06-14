@@ -5,8 +5,18 @@ import { V2Composer } from "@/components/v2/composer";
 
 export const metadata: Metadata = { title: "Create a story" };
 
-export default async function NewStorybookPage() {
+export default async function NewStorybookPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    theme?: string;
+    personas?: string;
+    characters?: string;
+    weekly?: string;
+  }>;
+}) {
   const { ctx, member } = await requireAuthedContext();
+  const params = await searchParams;
   const subscribed = ctx.subscriptions.isActive(member.familyId);
   const baby = ctx.babies.getSelected(member.id) ?? ctx.babies.ensureDefaultBaby(member.id);
 
@@ -18,6 +28,15 @@ export default async function NewStorybookPage() {
   const characters = ctx.store
     .getCharactersByFamily(member.familyId, member.id)
     .map((c) => ({ id: c.id, displayName: c.displayName }));
+
+  const initialAdultIds = params.personas?.split(",").filter(Boolean) ?? [];
+  const initialCharacterIds = params.characters?.split(",").filter(Boolean) ?? [];
+  const initialTheme = params.theme ? decodeURIComponent(params.theme) : "";
+
+  if (params.weekly === "1") {
+    ctx.journalNudges.markWeeklySuggestionSeen(member.id, baby.id);
+    await ctx.persist();
+  }
 
   return (
     <div className="v2-stack" style={{ gap: 8 }}>
@@ -47,6 +66,9 @@ export default async function NewStorybookPage() {
         }
         adults={adults}
         characters={characters}
+        initialTheme={initialTheme}
+        initialAdultIds={initialAdultIds}
+        initialCharacterIds={initialCharacterIds}
       />
     </div>
   );
