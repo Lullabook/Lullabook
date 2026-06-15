@@ -1,5 +1,6 @@
 import { Image, Text, View, type ViewStyle } from "react-native";
 import { C } from "@/constants/theme";
+import { getApiUrl } from "@/lib/env";
 import type { PersonaStatus } from "@domain/types";
 
 const GRADIENTS = [
@@ -10,8 +11,7 @@ const GRADIENTS = [
 ] as const;
 
 function avatarUrl(avatarKey: string): string {
-  const base = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
-  return `${base}/api/avatars?key=${encodeURIComponent(avatarKey)}`;
+  return `${getApiUrl()}/api/avatars?key=${encodeURIComponent(avatarKey)}`;
 }
 
 export function RosterAvatar({

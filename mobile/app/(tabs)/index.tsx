@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
+import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton } from "@/components/maya-ui";
 import { fetchHome, type HomeResponse } from "@/lib/api";
 import { RosterAvatar } from "@/components/roster-avatar";
+import { C, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 export default function HomeScreen() {
@@ -39,95 +41,101 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center} accessibilityLabel="Loading home">
-        <ActivityIndicator size="large" color="#6B4F3A" />
+      <View style={st.center} accessibilityLabel="Loading home">
+        <ActivityIndicator size="large" color={C.primary} />
       </View>
     );
   }
 
+  const emptyRoster =
+    !!home && home.characters.length === 0 && home.personas.length === 0;
+
   return (
-    <ScrollView contentContainerStyle={styles.container} accessibilityLabel="Home">
-      <Text style={styles.title} accessibilityRole="header">
-        Your Family
-      </Text>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+    <Screen>
+      <View>
+        <Eyebrow>💛 Your family</Eyebrow>
+        <PageTitle>Your Family</PageTitle>
+        {home ? <Lead>{home.member.email}</Lead> : null}
+      </View>
+
+      {error ? (
+        <Card style={st.errorCard}>
+          <Text style={st.errorText}>{error}</Text>
+        </Card>
+      ) : null}
+
       {home ? (
         <>
-          <Text style={styles.subtitle}>{home.member.email}</Text>
-          <Text style={styles.copy} accessibilityLabel="Cold start guidance">
-            {home.characters.length === 0 && home.personas.length === 0
-              ? "Start with a free Character and text Story — no subscription needed."
-              : home.trainingExpectationCopy}
-          </Text>
-          <View style={styles.card} accessibilityLabel="Characters roster">
-            <Text style={styles.cardTitle}>Characters ({home.characters.length})</Text>
-            {home.characters.map((c) => (
-              <Text key={c.id} style={styles.item}>
-                {c.displayName}
-              </Text>
-            ))}
-          </View>
-          <View style={styles.card} accessibilityLabel="Personas roster">
-            <Text style={styles.cardTitle}>Family ({home.personas.length})</Text>
-            {home.personas.map((p) => (
-              <View key={p.id} style={styles.personaRow}>
-                <RosterAvatar
-                  name={p.displayName}
-                  initial={p.displayName.charAt(0)}
-                  status={p.status}
-                  avatarKey={p.avatarKey}
-                  size={40}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.item}>{p.displayName}</Text>
-                  <Text style={styles.metaInline}>{p.status}</Text>
+          <Card>
+            <Text style={st.copy}>
+              {emptyRoster
+                ? "Start with a free Character and text Story — no subscription needed."
+                : home.trainingExpectationCopy}
+            </Text>
+          </Card>
+
+          <Card>
+            <Text style={st.cardTitle}>🐻 Characters ({home.characters.length})</Text>
+            {home.characters.length === 0 ? (
+              <Text style={st.emptyNote}>No characters yet — invent a made-up friend.</Text>
+            ) : (
+              home.characters.map((c) => (
+                <Text key={c.id} style={st.item}>
+                  {c.displayName}
+                </Text>
+              ))
+            )}
+          </Card>
+
+          <Card>
+            <Text style={st.cardTitle}>💛 Family ({home.personas.length})</Text>
+            {home.personas.length === 0 ? (
+              <Text style={st.emptyNote}>Add someone who loves them to draw your family.</Text>
+            ) : (
+              home.personas.map((p) => (
+                <View key={p.id} style={st.personaRow}>
+                  <RosterAvatar
+                    name={p.displayName}
+                    initial={p.displayName.charAt(0)}
+                    status={p.status}
+                    avatarKey={p.avatarKey}
+                    size={44}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={st.item}>{p.displayName}</Text>
+                    <Text style={st.metaInline}>{p.status}</Text>
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))
+            )}
+          </Card>
+
+          <View style={st.planRow}>
+            <View style={[st.planDot, { backgroundColor: home.subscriptionActive ? C.green : C.accent }]} />
+            <Text style={st.meta}>
+              Subscription: {home.subscriptionActive ? "active" : "free tier"}
+            </Text>
           </View>
-          <Text style={styles.meta}>
-            Subscription: {home.subscriptionActive ? "active" : "free tier"}
-          </Text>
         </>
       ) : null}
-      <Pressable style={styles.button} onPress={load} accessibilityRole="button">
-        <Text style={styles.buttonText}>Refresh</Text>
-      </Pressable>
-      <Pressable style={styles.secondaryButton} onPress={signOut} accessibilityRole="button">
-        <Text style={styles.secondaryText}>Sign out</Text>
-      </Pressable>
-    </ScrollView>
+
+      <PrimaryButton title="↻ Refresh" onPress={load} />
+      <GhostButton title="Sign out" onPress={signOut} />
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#FFF8F0" },
-  container: { padding: 24, backgroundColor: "#FFF8F0", flexGrow: 1 },
-  title: { fontSize: 32, fontWeight: "700", color: "#2B1B10", marginBottom: 8 },
-  subtitle: { fontSize: 16, color: "#6B4F3A", marginBottom: 16 },
-  copy: { fontSize: 18, lineHeight: 26, color: "#2B1B10", marginBottom: 20 },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#E8D5C4",
-  },
-  cardTitle: { fontSize: 18, fontWeight: "600", marginBottom: 8, color: "#2B1B10" },
-  item: { fontSize: 16, color: "#4A3728", marginBottom: 0, fontWeight: "600" },
-  personaRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
-  metaInline: { fontSize: 13, color: "#6B4F3A" },
-  meta: { fontSize: 14, color: "#6B4F3A", marginVertical: 12 },
-  button: {
-    backgroundColor: "#6B4F3A",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  secondaryButton: { padding: 16, alignItems: "center" },
-  secondaryText: { color: "#6B4F3A", fontSize: 16 },
-  error: { color: "#B00020", marginBottom: 12 },
+const st = StyleSheet.create({
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: C.bg },
+  copy: { fontSize: 16, lineHeight: 23, color: C.text },
+  cardTitle: { fontSize: 18, fontWeight: "800", color: C.text },
+  item: { fontSize: 16, color: C.text, fontWeight: "700" },
+  emptyNote: { fontSize: 14, color: C.soft, lineHeight: 20 },
+  personaRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  metaInline: { fontSize: 13, color: C.muted, marginTop: 1 },
+  planRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  planDot: { width: 9, height: 9, borderRadius: 5 },
+  meta: { fontSize: 14, color: C.muted, fontWeight: "700" },
+  errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
+  errorText: { color: C.danger, fontWeight: "700" },
 });

@@ -1,7 +1,8 @@
+import { getApiUrl } from "@/lib/env";
 import { getAccessToken } from "@/lib/supabase";
 import type { Character, Persona } from "@domain/types";
 
-const apiBase = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
+const apiBase = getApiUrl();
 
 async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await getAccessToken();

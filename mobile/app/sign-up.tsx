@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Link, router } from "expo-router";
+import { Eyebrow, Field, PageTitle, Lead } from "@/components/maya-ui";
+import { C, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 export default function SignUpScreen() {
@@ -27,51 +29,67 @@ export default function SignUpScreen() {
 
   return (
     <View style={styles.container} accessibilityLabel="Sign up">
-      <Text style={styles.title}>Create your Family</Text>
-      <TextInput
-        style={styles.input}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        accessibilityLabel="Email"
-      />
-      <TextInput
-        style={styles.input}
-        secureTextEntry
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        accessibilityLabel="Password"
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable style={styles.button} onPress={signUp} disabled={loading} accessibilityRole="button">
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign up</Text>}
-      </Pressable>
+      <View style={styles.hero}>
+        <Text style={styles.heroMark}>✨</Text>
+      </View>
+      <Eyebrow>💛 New here</Eyebrow>
+      <PageTitle>Create your Family</PageTitle>
+      <Lead>Start free with text-only stories — no photos, no subscription needed.</Lead>
+
+      <View style={styles.form}>
+        <Field
+          label="Email"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholder="you@example.com"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <Field
+          label="Password"
+          secureTextEntry
+          placeholder="Choose a password"
+          value={password}
+          onChangeText={setPassword}
+        />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Pressable style={styles.button} onPress={signUp} disabled={loading} accessibilityRole="button">
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign up</Text>}
+        </Pressable>
+        <Link href="/sign-in" style={styles.link}>
+          I already have an account
+        </Link>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: "#FFF8F0" },
-  title: { fontSize: 28, fontWeight: "700", marginBottom: 24, color: "#2B1B10" },
-  input: {
-    borderWidth: 1,
-    borderColor: "#E8D5C4",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    backgroundColor: "#fff",
-    fontSize: 16,
-  },
-  button: {
-    backgroundColor: "#6B4F3A",
-    borderRadius: 12,
-    padding: 16,
+  container: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: C.bg, gap: 6 },
+  hero: {
+    alignSelf: "center",
+    width: 76,
+    height: 76,
+    borderRadius: 22,
+    backgroundColor: C.accent,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    marginBottom: 18,
+    shadowColor: "#E79A3C",
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
   },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  error: { color: "#B00020", marginBottom: 8 },
+  heroMark: { fontSize: 36 },
+  form: { marginTop: 18, gap: 14 },
+  button: {
+    backgroundColor: C.primary,
+    borderRadius: R.pill,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  link: { marginTop: 16, textAlign: "center", color: C.primary, fontSize: 15, fontWeight: "800" },
+  error: { color: C.danger, fontWeight: "700" },
 });
