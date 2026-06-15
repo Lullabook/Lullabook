@@ -30,6 +30,10 @@ export interface FamilyMemberViewData {
 interface FamilyPageClientProps {
   babyName: string;
   members: FamilyMemberViewData[];
+  subscribed: boolean;
+  castUsed: number;
+  castLimit: number | null;
+  canAddCast: boolean;
 }
 
 function formatDuration(secs: number): string {
@@ -61,10 +65,23 @@ function Waveform({ seed }: { seed: string }) {
   );
 }
 
-export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
+export function FamilyPageClient({
+  babyName,
+  members,
+  subscribed,
+  castUsed,
+  castLimit,
+  canAddCast,
+}: FamilyPageClientProps) {
   const [selectedId, setSelectedId] = useState(members[0]?.id ?? "");
 
   const detail = members.find((m) => m.id === selectedId) ?? members[0];
+  const addHref = subscribed ? "/personas/new" : "/characters/new";
+  const addLabel = subscribed ? "＋ Add family member" : "＋ Add character";
+  const slotHint =
+    castLimit !== null
+      ? `${castUsed} of ${castLimit} cast slots used on free`
+      : null;
 
   return (
     <div className="v2-stack" style={{ gap: 22 }}>
@@ -81,13 +98,25 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
           <p className="v2-eyebrow">💛 {babyName}&apos;s family</p>
           <h1 className="v2-page-title">The people in their world</h1>
           <p className="v2-page-lead" style={{ maxWidth: 560 }}>
-            Real people who love {babyName}. Add their photos and their voice, and
-            they&apos;ll look and sound like themselves in every story.
+            {subscribed
+              ? `Real people who love ${babyName}. Add their photos and their voice, and they'll look and sound like themselves in every story.`
+              : `Describe up to ${castLimit ?? 3} characters with a quick questionnaire — no photos needed. Upgrade for illustrated family members with photos.`}
           </p>
+          {slotHint && (
+            <p style={{ margin: "8px 0 0", fontSize: "0.88rem", color: "#9A8A78", fontWeight: 700 }}>
+              {slotHint}
+            </p>
+          )}
         </div>
-        <Link className="v2-btn v2-btn--primary" href="/personas/new">
-          ＋ Add family member
-        </Link>
+        {canAddCast ? (
+          <Link className="v2-btn v2-btn--primary" href={addHref}>
+            {addLabel}
+          </Link>
+        ) : (
+          <Link className="v2-btn v2-btn--amber" href="/billing">
+            ✨ Upgrade to add more
+          </Link>
+        )}
       </div>
 
       {members.length === 0 ? (
@@ -97,12 +126,19 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
           </span>
           <h2 className="v2-section-title">No family members yet</h2>
           <p className="v2-page-lead" style={{ marginBottom: 20 }}>
-            Add the people who love {babyName} so they can star in illustrated
-            stories.
+            {subscribed
+              ? `Add the people who love ${babyName} so they can star in illustrated stories.`
+              : `Describe someone in a minute — no photos needed.`}
           </p>
-          <Link className="v2-btn v2-btn--primary" href="/personas/new">
-            ＋ Add family member
-          </Link>
+          {canAddCast ? (
+            <Link className="v2-btn v2-btn--primary" href={addHref}>
+              {addLabel}
+            </Link>
+          ) : (
+            <Link className="v2-btn v2-btn--amber" href="/billing">
+              ✨ Upgrade to add more
+            </Link>
+          )}
         </div>
       ) : (
         <div className="v2-family-layout">
@@ -181,7 +217,7 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
               );
             })}
             <Link
-              href="/personas/new"
+              href={addHref}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -525,7 +561,7 @@ export function FamilyPageClient({ babyName, members }: FamilyPageClientProps) {
                       ? "Ready to star in illustrated stories."
                       : "Add photos and voice to unlock illustrated stories."}
                   </span>
-                  <Link className="v2-btn v2-btn--primary" href="/storybooks/new">
+                  <Link className="v2-btn v2-btn--primary" href={`/storybooks/new?personas=${detail.id}`}>
                     ✨ Cast in a story
                   </Link>
                 </div>

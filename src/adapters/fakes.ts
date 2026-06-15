@@ -13,6 +13,7 @@ import type {
   ModerationResult,
   NotificationAdapter,
   PdfAdapter,
+  PersonaCreatePayload,
   StripeAdapter,
   VideoAdapter,
   VideoClipResult,
@@ -326,10 +327,19 @@ export class FakeStripe implements StripeAdapter {
 
 export class FakeWorkflow implements WorkflowAdapter {
   public steps: string[] = [];
+  public personaCreatePayloads: PersonaCreatePayload[] = [];
   /** When true, drain runs each enqueued job twice to simulate at-least-once delivery. */
   public simulateAtLeastOnceDelivery = false;
   private queue: Array<() => Promise<void>> = [];
   private completedStepKeys = new Set<string>();
+
+  requestPersonaCreate(payload: PersonaCreatePayload): void {
+    this.personaCreatePayloads.push(payload);
+  }
+
+  async flush(): Promise<void> {
+    await this.drain();
+  }
 
   enqueue(_name: string, work: () => Promise<void>): void {
     this.queue.push(work);
@@ -380,6 +390,12 @@ export class FakeWorkflow implements WorkflowAdapter {
   async emitEvent<T>(eventName: string, data: T & { jobId?: string }): Promise<void> {
     const matchId = (data as { jobId?: string }).jobId ?? eventName;
     this.events.set(`${eventName}:${matchId}`, data);
+  }
+
+  onStepCommitted?: () => Promise<void>;
+
+  runWithStepContext<T>(_step: unknown, fn: () => Promise<T>): Promise<T> {
+    return fn();
   }
 }
 

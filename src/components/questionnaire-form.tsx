@@ -6,9 +6,6 @@ import type { TraitQuestionnaire } from "@/domain/types";
 import { createCharacterAction, updateCharacterAction } from "@/lib/actions";
 import { characterEmoji } from "@/lib/v2-theme";
 
-const ATTESTATION_TEXT =
-  "I am this child's parent or guardian, or I have their guardian's permission to describe them in stories.";
-
 function splitList(value: string): string[] {
   return value.split(",").map((s) => s.trim()).filter(Boolean);
 }
@@ -61,8 +58,6 @@ export function QuestionnaireForm({
   const isEdit = Boolean(characterId);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [isFictional, setIsFictional] = useState(initial?.isFictional ?? true);
-  const [attested, setAttested] = useState(false);
 
   const csv = (items?: string[]) => (items ?? []).join(", ");
   const [name, setName] = useState(initial?.name ?? "");
@@ -83,47 +78,53 @@ export function QuestionnaireForm({
       favoriteToys: splitList(favoriteToys).length ? splitList(favoriteToys) : undefined,
       songs: splitList(songs).length ? splitList(songs) : undefined,
       topics: splitList(topics).length ? splitList(topics) : undefined,
-      isFictional,
+      isFictional: true,
     };
-    if (!questionnaire.name) return setError("Every character needs a name.");
-    if (!isFictional && !attested) return setError("Please confirm the consent statement for a real child.");
+    if (!questionnaire.name) {
+      setError("Every character needs a name.");
+      document.getElementById("character-form-error")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     startTransition(async () => {
       const res =
         isEdit && characterId
           ? await updateCharacterAction(characterId, questionnaire)
-          : await createCharacterAction(questionnaire, !isFictional && attested ? ATTESTATION_TEXT : undefined);
-      if (!res.ok) return setError(res.error);
+          : await createCharacterAction(questionnaire);
+      if (!res.ok) {
+        setError(res.error);
+        document.getElementById("character-form-error")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
       router.push("/characters");
     });
   }
 
   const previewTags = splitList(topics).slice(0, 4);
   const previewName = name.trim() || "Your character";
-  const ready = name.trim().length > 0 && (isFictional || attested);
+  const ready = name.trim().length > 0;
 
   return (
-    <div style={{ display: "grid", gap: 26, gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr)", alignItems: "start" }}>
-      <form action={submit} style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+    <div className="v2-character-form">
+      <form
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+        style={{ display: "flex", flexDirection: "column", gap: 22 }}
+      >
         {error && (
-          <div role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48" }}>
+          <div id="character-form-error" role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48" }}>
             {error}
           </div>
         )}
-
-        <div style={cardStyle}>
-          <span style={label}>Who is this character?</span>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }} role="radiogroup" aria-label="Character kind">
-            <KindChip active={isFictional} onClick={() => setIsFictional(true)} icon="🐉" text="Made-up friend" />
-            <KindChip active={!isFictional} onClick={() => setIsFictional(false)} icon="👶" text="A real child" />
-          </div>
-        </div>
 
         <div style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 18 }}>
           <div style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr 1fr" }}>
             <Field id="name" label="Name" value={name} onChange={setName} placeholder="Pip" required />
             <Field id="nickname" label="Nickname" optional value={nickname} onChange={setNickname} placeholder="Pippin" />
           </div>
-          <Field id="relationships" label="Important people" hint="comma separated" value={relationships} onChange={setRelationships} placeholder="Maya, Dada, big brother Theo" />
+          <Field id="relationships" label="People they know in stories" hint="comma separated" value={relationships} onChange={setRelationships} placeholder="Maya, Dada, big brother Theo" />
           <div style={{ display: "grid", gap: 14, gridTemplateColumns: "1fr 1fr" }}>
             <Field id="favoriteAnimals" label="Favorite animals" value={favoriteAnimals} onChange={setFavoriteAnimals} placeholder="dragons, fireflies" />
             <Field id="favoriteToys" label="Favorite toys" value={favoriteToys} onChange={setFavoriteToys} placeholder="a tiny lantern" />
@@ -135,16 +136,12 @@ export function QuestionnaireForm({
           </div>
         </div>
 
-        {!isFictional && (
-          <div style={cardStyle}>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
-              <input type="checkbox" checked={attested} onChange={(e) => setAttested(e.target.checked)} style={{ marginTop: 4, width: 18, height: 18, accentColor: "#6A55C9" }} />
-              <span style={{ fontSize: "0.92rem", color: "#6E6076" }}>{ATTESTATION_TEXT}</span>
-            </label>
-          </div>
-        )}
-
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          {error && (
+            <p role="alert" style={{ margin: 0, flex: "1 1 100%", color: "#b23a48", fontSize: "0.92rem" }}>
+              {error}
+            </p>
+          )}
           <button
             type="submit"
             disabled={pending || !ready}
@@ -160,7 +157,7 @@ export function QuestionnaireForm({
         <p style={{ margin: 0, textTransform: "uppercase", letterSpacing: "0.14em", fontSize: "0.72rem", fontWeight: 800, color: "#9A8A78" }}>Live preview</p>
         <div style={{ background: "#FFFDF9", border: "1px solid #ECE1CE", borderRadius: 22, padding: 20, boxShadow: "0 8px 22px rgba(58,40,80,0.07)", display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 62, height: 62, borderRadius: 20, background: isFictional ? "linear-gradient(150deg,#C9B8F4,#8B6DF0)" : "linear-gradient(150deg,#9FD8B1,#5FB389)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.7rem" }} aria-hidden="true">
+            <div style={{ width: 62, height: 62, borderRadius: 20, background: "linear-gradient(150deg,#C9B8F4,#8B6DF0)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.7rem" }} aria-hidden="true">
               {characterEmoji(name)}
             </div>
             <div>
@@ -202,18 +199,5 @@ function Field({
       </label>
       <input id={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} required={required} style={input} />
     </div>
-  );
-}
-
-function KindChip({ active, onClick, icon, text }: { active: boolean; onClick: () => void; icon: string; text: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{ display: "inline-flex", alignItems: "center", gap: 9, padding: "12px 18px", borderRadius: 999, border: `1.5px solid ${active ? "#8B6DF0" : "#ECE1CE"}`, background: active ? "#EDE7FE" : "#FFFDF9", color: active ? "#6A55C9" : "#6E6076", fontWeight: 800, fontSize: "0.95rem", cursor: "pointer", fontFamily: "var(--v2-font-body)" }}
-    >
-      <span style={{ fontSize: "1.15rem" }} aria-hidden="true">{icon}</span>
-      <span>{text}</span>
-    </button>
   );
 }

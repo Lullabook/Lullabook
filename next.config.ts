@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // dev:free and dev:paid run concurrently; separate dist dirs avoid manifest races.
+  distDir: process.env.NEXT_DEV_DIST_DIR ?? ".next",
   experimental: {
     // Persona creation uploads several photos + a selfie in a single Server
     // Action; the default 1 MB body limit 413s on real phone photos.

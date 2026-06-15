@@ -4,12 +4,13 @@ import { requireAuthedContext } from "@/lib/auth";
 import {
   inviteMemberFormAction,
   removeMemberFormAction,
-  signOutAction,
   startCheckoutFormAction,
   cancelSubscriptionFormAction,
 } from "@/lib/actions";
+import { signOutAction } from "@/lib/auth-actions";
 import { ConsentEngine } from "@/services/consent-engine";
 import { HardDeleteConfirm } from "@/components/hard-delete-confirm";
+import { BabyBirthdateForm } from "@/components/baby-birthdate-form";
 import { SubmitButton } from "@/components/submit-button";
 import { AVATAR_GRADIENTS } from "@/components/v2/tokens";
 
@@ -54,6 +55,8 @@ export default async function AccountPage() {
   const isGuardian = member.role === "guardian";
   const subscribed = ctx.subscriptions.isActive(member.familyId);
   const initial = member.email[0]?.toUpperCase() ?? "?";
+  const baby = ctx.babies.getSelected(member.id) ?? ctx.babies.ensureDefaultBaby(member.id);
+  const babies = ctx.babies.list(member.id);
 
   return (
     <div className="v2-stack" style={{ gap: 22 }}>
@@ -116,6 +119,22 @@ export default async function AccountPage() {
             />
           </form>
         </div>
+      </div>
+
+      {/* little one — birthday for future Birthday Story offers (issue 64) */}
+      <div style={card}>
+        <h3 style={sectionTitle}>👶 Your little one</h3>
+        <p style={{ margin: "0 0 16px", color: "#6E6076", fontSize: "0.92rem", lineHeight: 1.5 }}>
+          {babies.length > 1
+            ? `Editing ${baby.displayName} (selected). Switch babies from World when multi-baby is wired in UI.`
+            : `${baby.displayName} is the star of your world.`}
+        </p>
+        <BabyBirthdateForm
+          babyId={baby.id}
+          babyName={baby.displayName}
+          birthDate={baby.birthDate}
+          canEdit={isGuardian}
+        />
       </div>
 
       {/* plan & billing */}

@@ -3,11 +3,10 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { EVENTS, inngest } from "@/adapters/inngest";
 import type { Brief, TextStoryBrief, TraitQuestionnaire } from "@/domain/types";
 import type { MomentType } from "@/domain/daily-types";
+import { castLimitError, castSlotInfo } from "@/lib/cast-limits";
 import { requireAuthedContext } from "@/lib/auth";
-import { createAuthClient } from "@/lib/supabase";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
@@ -20,38 +19,7 @@ function fail(err: unknown): { ok: false; error: string } {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-
-export async function signUpAction(formData: FormData): Promise<ActionResult> {
-  const supabase = await createAuthClient();
-  const { error } = await supabase.auth.signUp({
-    email: String(formData.get("email") ?? ""),
-    password: String(formData.get("password") ?? ""),
-    options: {
-      data: { jurisdiction: String(formData.get("jurisdiction") ?? "US") },
-    },
-  });
-  if (error) return { ok: false, error: error.message };
-  redirect("/library");
-}
-
-export async function signInAction(formData: FormData): Promise<ActionResult> {
-  const supabase = await createAuthClient();
-  const { error } = await supabase.auth.signInWithPassword({
-    email: String(formData.get("email") ?? ""),
-    password: String(formData.get("password") ?? ""),
-  });
-  if (error) return { ok: false, error: error.message };
-  redirect("/library");
-}
-
-export async function signOutAction(): Promise<void> {
-  const supabase = await createAuthClient();
-  await supabase.auth.signOut();
-  redirect("/sign-in");
-}
+// Auth actions live in `@/lib/auth-actions` (plain form actions, no useActionState).
 
 // ---------------------------------------------------------------------------
 // Characters (text tier) + Text Stories
@@ -63,6 +31,10 @@ export async function createCharacterAction(
 ): Promise<ActionResult<{ characterId: string }>> {
   const { ctx, member } = await requireAuthedContext();
   try {
+    const slots = castSlotInfo(ctx.subscriptions, ctx.store, member.familyId, member.id);
+    if (!slots.canAdd) {
+      return { ok: false, error: castLimitError(slots.subscribed) };
+    }
     const character = await ctx.characters.create({
       memberId: member.id,
       questionnaire,
@@ -185,6 +157,17 @@ export async function createPersonaAction(
 ): Promise<ActionResult> {
   const { ctx, member } = await requireAuthedContext();
   try {
+    if (!ctx.subscriptions.isActive(member.familyId)) {
+      return {
+        ok: false,
+        error:
+          "Illustrated family members need a subscription. Add a character with a questionnaire instead — no photos required.",
+      };
+    }
+    const slots = castSlotInfo(ctx.subscriptions, ctx.store, member.familyId, member.id);
+    if (!slots.canAdd) {
+      return { ok: false, error: castLimitError(slots.subscribed) };
+    }
     const mode = String(formData.get("mode") ?? "adult") as "adult" | "baby";
     const displayName = String(formData.get("displayName") ?? "").trim();
     if (!displayName) return { ok: false, error: "Name is required" };
@@ -207,11 +190,16 @@ export async function createPersonaAction(
       photos,
       mode === "adult" && selfie instanceof File ? selfie : null
     );
-    await inngest.send({
-      name: EVENTS.personaCreateRequested,
-      data: { mode, memberId: member.id, displayName, photoKeys, selfieKey },
+    ctx.workflow.requestPersonaCreate({
+      mode,
+      memberId: member.id,
+      displayName,
+      photoKeys,
+      selfieKey,
     });
+    await ctx.persist();
     revalidatePath("/personas");
+    revalidatePath("/family");
     return { ok: true, data: undefined };
   } catch (err) {
     return fail(err);
@@ -239,19 +227,18 @@ export async function promoteCharacterAction(
       photos,
       selfie instanceof File ? selfie : null
     );
-    await inngest.send({
-      name: EVENTS.personaCreateRequested,
-      data: {
-        mode: "promote-character",
-        memberId: member.id,
-        displayName: character.displayName,
-        characterId,
-        kind: String(formData.get("kind") ?? "baby") as "baby" | "adult",
-        photoKeys,
-        selfieKey,
-      },
+    ctx.workflow.requestPersonaCreate({
+      mode: "promote-character",
+      memberId: member.id,
+      displayName: character.displayName,
+      characterId,
+      kind: String(formData.get("kind") ?? "baby") as "baby" | "adult",
+      photoKeys,
+      selfieKey,
     });
+    await ctx.persist();
     revalidatePath("/personas");
+    revalidatePath("/family");
     return { ok: true, data: undefined };
   } catch (err) {
     return fail(err);
@@ -617,6 +604,53 @@ export async function createMomentAction(input: {
   } catch (err) {
     return fail(err);
   }
+}
+
+export async function updateBabyDailyRoutineAction(
+  babyId: string,
+  routine: import("@/domain/daily-types").RoutineEntry[]
+): Promise<ActionResult> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    if (member.role !== "guardian") {
+      return { ok: false, error: "Only guardians can edit the daily routine." };
+    }
+    for (const entry of routine) {
+      if (!/^\d{2}:\d{2}$/.test(entry.time)) {
+        return { ok: false, error: "Each time must be HH:MM (24-hour)." };
+      }
+      if (!entry.label.trim()) {
+        return { ok: false, error: "Every routine step needs a label." };
+      }
+    }
+    ctx.babies.updateBaby({
+      memberId: member.id,
+      babyId,
+      dailyRoutine: routine.map((r) => ({
+        time: r.time,
+        icon: r.icon.trim() || "🕒",
+        label: r.label.trim(),
+      })),
+    });
+    await ctx.persist();
+    revalidatePath("/daily");
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function updateBabyBirthDateAction(formData: FormData): Promise<void> {
+  const { ctx, member } = await requireAuthedContext();
+  const babyId = String(formData.get("babyId") ?? "");
+  const raw = String(formData.get("birthDate") ?? "").trim();
+  ctx.babies.updateBaby({
+    memberId: member.id,
+    babyId,
+    birthDate: raw || null,
+  });
+  await ctx.persist();
+  revalidatePath("/account");
 }
 
 export async function dismissDailyNudgeAction(babyId: string): Promise<ActionResult> {

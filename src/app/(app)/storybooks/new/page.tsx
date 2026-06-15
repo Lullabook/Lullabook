@@ -64,6 +64,7 @@ export default async function NewStorybookPage({
 
       <V2Composer
         babyName={baby.displayName}
+        subscribed={subscribed}
         babyPersona={
           babyPersona
             ? {

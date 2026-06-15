@@ -342,6 +342,10 @@ export class SupabaseDataStore extends DataStore {
         id: r.id,
         familyId: r.family_id,
         displayName: r.display_name,
+        birthDate: r.birth_date ? String(r.birth_date).slice(0, 10) : null,
+        dailyRoutine: Array.isArray(r.daily_routine)
+          ? (r.daily_routine as import("@/domain/daily-types").RoutineEntry[])
+          : null,
         rosterGroupId: r.roster_group_id,
         rosterScope: r.roster_scope,
         isDefault: r.is_default,
@@ -672,6 +676,8 @@ export class SupabaseDataStore extends DataStore {
           id: b.id,
           family_id: b.familyId,
           display_name: b.displayName,
+          birth_date: b.birthDate,
+          daily_routine: b.dailyRoutine,
           roster_group_id: b.rosterGroupId,
           roster_scope: b.rosterScope,
           is_default: b.isDefault,

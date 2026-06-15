@@ -1,5 +1,7 @@
 import { EVENTS, inngest, type DurableStepTools } from "@/adapters/inngest";
+import type { PersonaCreatePayload } from "@/adapters/types";
 import { createRequestContext } from "@/lib/context";
+import { runPersonaCreateBody } from "@/workflows/persona-create-body";
 
 /**
  * Durable workflow functions (thin request / fat workflow, ADR-0011).
@@ -89,16 +91,7 @@ export const pageRecover = inngest.createFunction(
   }
 );
 
-export interface PersonaCreatePayload {
-  mode: "adult" | "baby" | "promote-character";
-  memberId: string;
-  displayName: string;
-  characterId?: string;
-  kind?: "baby" | "adult";
-  /** Staged upload keys — the request handler stores bytes, events stay small. */
-  photoKeys: string[];
-  selfieKey?: string;
-}
+export type { PersonaCreatePayload };
 
 export const personaCreate = inngest.createFunction(
   {
@@ -111,73 +104,10 @@ export const personaCreate = inngest.createFunction(
     const ctx = createRequestContext();
     await ctx.store.hydrateByMemberId(payload.memberId);
     ctx.workflow.onStepCommitted = () => ctx.store.sync();
-    const member = ctx.store.members.get(payload.memberId);
 
-    const photos: Buffer[] = [];
-    for (const key of payload.photoKeys) {
-      const bytes = await ctx.blobs.get(key);
-      if (!bytes) throw new Error(`Staged photo missing: ${key}`);
-      photos.push(bytes);
-    }
-    const selfie = payload.selfieKey
-      ? ((await ctx.blobs.get(payload.selfieKey)) ?? undefined)
-      : undefined;
-
-    try {
-      await ctx.workflow.runWithStepContext(step as DurableStepTools, async () => {
-        if (payload.mode === "promote-character") {
-          await ctx.characters.promoteToPersona({
-            characterId: payload.characterId!,
-            memberId: payload.memberId,
-            kind: payload.kind ?? "baby",
-            photos,
-            selfie,
-          });
-        } else if (payload.mode === "adult") {
-          await ctx.personas.createAdult({
-            memberId: payload.memberId,
-            displayName: payload.displayName,
-            photos,
-            selfie,
-          });
-        } else {
-          await ctx.personas.createBaby({
-            memberId: payload.memberId,
-            displayName: payload.displayName,
-            photos,
-          });
-        }
-      });
-    } catch (err) {
-      // Validation failures (selfie mismatch, pre-flight, moderation) happen
-      // out-of-band — surface them by email rather than vanish silently.
-      const failedPersona = [...ctx.store.personas.values()].find(
-        (p) =>
-          p.createdByMemberId === payload.memberId &&
-          p.displayName === payload.displayName &&
-          p.status === "training"
-      );
-      if (failedPersona) {
-        failedPersona.status = "failed";
-        ctx.store.savePersona(failedPersona);
-      }
-      if (member) {
-        await ctx.notifications.sendEmail(
-          member.email,
-          "We couldn't create your character",
-          err instanceof Error ? err.message : "Something went wrong."
-        );
-      }
-      await ctx.persist();
-      throw err;
-    }
-
-    // Staged uploads are transient; the service re-stored accepted photos
-    // under the persona's own keys.
-    for (const key of [...payload.photoKeys, payload.selfieKey ?? ""]) {
-      if (key) await ctx.blobs.delete(key);
-    }
-    await ctx.persist();
+    await ctx.workflow.runWithStepContext(step as DurableStepTools, async () => {
+      await runPersonaCreateBody(ctx, payload);
+    });
   }
 );
 

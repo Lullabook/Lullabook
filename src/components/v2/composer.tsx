@@ -6,9 +6,11 @@ import { RosterAvatar } from "@/components/v2/roster-avatar";
 import type { Brief, PersonaStatus, StoryType } from "@/domain/types";
 import { AVATAR_GRADIENTS } from "@/lib/v2-theme";
 import {
+  createTextStoryAction,
   generateStorybookAction,
   submitBriefWhileTrainingAction,
 } from "@/lib/actions";
+import { StoryGenerationOverlay } from "@/components/v2/story-generation-overlay";
 
 interface CastPersona {
   id: string;
@@ -59,6 +61,7 @@ export function V2Composer({
   babyPersona,
   adults,
   characters,
+  subscribed,
   initialTheme = "",
   initialAdultIds = [],
   initialCharacterIds = [],
@@ -67,6 +70,7 @@ export function V2Composer({
   babyPersona: CastPersona | null;
   adults: CastPersona[];
   characters: CastCharacter[];
+  subscribed: boolean;
   initialTheme?: string;
   initialAdultIds?: string[];
   initialCharacterIds?: string[];
@@ -81,6 +85,9 @@ export function V2Composer({
   const [storyType, setStoryType] = useState<StoryType>("bedtime");
   const [artStyle, setArtStyle] = useState<string>("Soft watercolor");
   const [pageCount, setPageCount] = useState<number>(12);
+  const [includeIllustrations, setIncludeIllustrations] = useState(subscribed);
+  const [wantAudio, setWantAudio] = useState(false);
+  const [genOverlay, setGenOverlay] = useState<"text" | "illustrated" | "audio" | null>(null);
 
   const toggle = (id: string, list: string[], set: (v: string[]) => void) =>
     set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -113,6 +120,32 @@ export function V2Composer({
     };
 
     startTransition(async () => {
+      const starringCharacterIds = [
+        ...selectedChars,
+        ...(babyPersona && !includeIllustrations ? [] : []),
+      ];
+      if (!includeIllustrations || !subscribed) {
+        const charIds =
+          selectedChars.length > 0 ? selectedChars : characters.map((c) => c.id).slice(0, 1);
+        if (charIds.length === 0) {
+          setError("Add a character first — describe someone in Family → Add character.");
+          return;
+        }
+        setGenOverlay(wantAudio ? "audio" : "text");
+        const res = await createTextStoryAction({
+          starringCharacterIds: charIds,
+          storyType,
+          theme: theme.trim(),
+        });
+        if (!res.ok) {
+          setGenOverlay(null);
+          return setError(res.error);
+        }
+        router.push(`/stories/${res.data.storyId}`);
+        return;
+      }
+
+      setGenOverlay(wantAudio ? "audio" : "illustrated");
       const readyIds = [
         ...(babyPersona && babyPersona.status === "ready" ? [babyPersona.id] : []),
         ...adults.filter((a) => a.status === "ready" && selectedAdults.includes(a.id)).map((a) => a.id),
@@ -123,18 +156,25 @@ export function V2Composer({
       // Cold start: a single still-training cast member, nobody ready yet.
       if (readyIds.length === 0 && trainingSelected.length === 1) {
         const res = await submitBriefWhileTrainingAction(trainingSelected[0].id, brief);
-        if (!res.ok) return setError(res.error);
+        if (!res.ok) {
+          setGenOverlay(null);
+          return setError(res.error);
+        }
         router.push("/stories?queued=1");
         return;
       }
       const res = await generateStorybookAction(brief);
-      if (!res.ok) return setError(res.error);
+      if (!res.ok) {
+        setGenOverlay(null);
+        return setError(res.error);
+      }
       router.push(`/storybooks/${res.data.storybookId}`);
     });
   }
 
   return (
     <div className="v2-composer">
+      <StoryGenerationOverlay open={genOverlay !== null} mode={genOverlay ?? "text"} />
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         {error && (
           <div role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48", fontSize: "0.92rem" }}>
@@ -269,7 +309,87 @@ export function V2Composer({
           </div>
         </div>
 
-        {/* Art style + length */}
+        {/* Format: illustrations / text / audio */}
+        <div style={cardStyle}>
+          <h2 style={{ fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.15rem", margin: "0 0 12px" }}>
+            Story format
+          </h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "12px 14px",
+                borderRadius: 16,
+                border: `1.5px solid ${includeIllustrations ? "#8B6DF0" : "#ECE1CE"}`,
+                background: includeIllustrations ? "#EDE7FE" : "#FFFDF9",
+                cursor: subscribed ? "pointer" : "not-allowed",
+                opacity: subscribed ? 1 : 0.65,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={includeIllustrations}
+                disabled={!subscribed}
+                onChange={(e) => setIncludeIllustrations(e.target.checked)}
+              />
+              <span>
+                <strong style={{ fontFamily: "var(--v2-font-display)", color: "#2E2438" }}>✨ Illustrated storybook</strong>
+                <span style={{ display: "block", fontSize: "0.85rem", color: "#6E6076" }}>
+                  {subscribed ? "Default — painted pages starring your cast." : "Requires subscription."}
+                </span>
+              </span>
+            </label>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "12px 14px",
+                borderRadius: 16,
+                border: `1.5px solid ${!includeIllustrations ? "#8B6DF0" : "#ECE1CE"}`,
+                background: !includeIllustrations ? "#EDE7FE" : "#FFFDF9",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={!includeIllustrations}
+                onChange={(e) => setIncludeIllustrations(!e.target.checked)}
+              />
+              <span>
+                <strong style={{ fontFamily: "var(--v2-font-display)", color: "#2E2438" }}>✏️ Text-only story</strong>
+                <span style={{ display: "block", fontSize: "0.85rem", color: "#6E6076" }}>
+                  Free — ready in seconds, no illustrations.
+                </span>
+              </span>
+            </label>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "12px 14px",
+                borderRadius: 16,
+                border: `1.5px solid ${wantAudio ? "#8B6DF0" : "#ECE1CE"}`,
+                background: wantAudio ? "#EDE7FE" : "#FFFDF9",
+                cursor: "pointer",
+              }}
+            >
+              <input type="checkbox" checked={wantAudio} onChange={(e) => setWantAudio(e.target.checked)} />
+              <span>
+                <strong style={{ fontFamily: "var(--v2-font-display)", color: "#2E2438" }}>🎙️ Include voice (coming soon)</strong>
+                <span style={{ display: "block", fontSize: "0.85rem", color: "#6E6076" }}>
+                  Record clips in Family or Account — we&apos;ll weave them in when ready.
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        {/* Art style + length — illustrated only */}
+        {includeIllustrations && subscribed && (
         <div style={cardStyle}>
           <h2 style={{ fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.1rem", margin: "0 0 12px" }}>
             Art style
@@ -326,6 +446,7 @@ export function V2Composer({
             })}
           </div>
         </div>
+        )}
       </div>
 
       {/* Right rail: live brief preview */}
@@ -354,8 +475,14 @@ export function V2Composer({
         {[
           { label: "Starring", value: castSummary },
           { label: "Kind", value: STORY_TYPES.find((s) => s.type === storyType)!.label },
-          { label: "Art", value: artStyle },
-          { label: "Length", value: `${pageCount} pages` },
+          { label: "Format", value: includeIllustrations && subscribed ? "Illustrated" : "Text only" },
+          ...(includeIllustrations && subscribed
+            ? [
+                { label: "Art", value: artStyle },
+                { label: "Length", value: `${pageCount} pages` },
+              ]
+            : []),
+          ...(wantAudio ? [{ label: "Voice", value: "When clips are ready" }] : []),
         ].map((row, idx) => (
           <div
             key={row.label}
@@ -372,6 +499,11 @@ export function V2Composer({
             <span style={{ color: "#fff", fontWeight: 800, textAlign: "right" }}>{row.value}</span>
           </div>
         ))}
+        {error && (
+          <p role="alert" style={{ margin: "12px 0 0", padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: "0.88rem", lineHeight: 1.4 }}>
+            {error}
+          </p>
+        )}
         <button
           type="button"
           onClick={submit}
@@ -389,7 +521,7 @@ export function V2Composer({
             cursor: pending ? "default" : "pointer",
           }}
         >
-          {pending ? "Tucking the story in…" : "✨ Generate story"}
+          {pending ? "Tucking the story in…" : includeIllustrations && subscribed ? "✨ Generate storybook" : "✏️ Write the story"}
         </button>
         <p style={{ textAlign: "center", color: "#FBEAF3", fontSize: "0.8rem", margin: "10px 0 0" }}>
           About 4 minutes to your first pages
