@@ -114,13 +114,21 @@ export function PersonaForm({
     setError(null);
     if (!consented) return setError("Please confirm the consent statement first.");
     if (photos.length < 3) return setError(`Please add at least 3 photos (you have ${photos.length}).`);
+    if (mode === "baby" && (!isGuardian || !canCreateBaby)) {
+      return setError(
+        babyBlockedReason ??
+          "Baby personas need an active subscription and Guardian role."
+      );
+    }
     formData.set("mode", mode);
     formData.set("displayName", name);
-    // Extra family fields — persist these in createPersonaAction if/when wired.
     formData.set("relationship", relationship);
     formData.set("babyCalls", babyCalls);
     formData.set("theyCallBaby", theyCallBaby);
     if (characterId) formData.set("characterId", characterId);
+    formData.delete("photos");
+    photos.forEach((f) => formData.append("photos", f));
+    if (selfie) formData.set("selfie", selfie);
     startTransition(async () => {
       setShowTrainingModal(true);
       const res: ActionResult = characterId
@@ -128,19 +136,41 @@ export function PersonaForm({
         : await createPersonaAction(formData);
       if (!res.ok) {
         setShowTrainingModal(false);
-        return setError(res.error);
+        setError(res.error);
+        document.getElementById("persona-form-error")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
       }
       router.push("/family?training=1");
     });
   }
 
+  const submitBlocked =
+    mode === "baby" && (!isGuardian || !canCreateBaby);
+  const submitLabel = pending
+    ? "Uploading…"
+    : !enough
+      ? `Add ${3 - photos.length} more photo${3 - photos.length === 1 ? "" : "s"}`
+      : !consented
+        ? "Confirm consent to continue"
+        : showSelfie && !selfie
+          ? "Add a selfie to continue"
+          : submitBlocked
+            ? "Subscription required for baby persona"
+            : "✨ Start training (~5 minutes)";
+
   const previewInitial = (name.trim()[0] || "?").toUpperCase();
 
   return (
     <div style={{ display: "grid", gap: 26, gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr)", alignItems: "start" }}>
-      <form action={submit} style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit(new FormData(e.currentTarget));
+        }}
+        style={{ display: "flex", flexDirection: "column", gap: 22 }}
+      >
         {error && (
-          <div role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48", fontSize: "0.92rem" }}>
+          <div id="persona-form-error" role="alert" style={{ borderRadius: 16, padding: "14px 16px", background: "#fdf1f3", border: "1px solid #eccdd2", color: "#b23a48", fontSize: "0.92rem" }}>
             {error}
           </div>
         )}
@@ -284,10 +314,10 @@ export function PersonaForm({
           </label>
           <button
             type="submit"
-            disabled={pending || !ready || (mode === "baby" && (!isGuardian || !canCreateBaby))}
-            style={{ marginTop: 16, width: "100%", padding: 15, borderRadius: 14, border: "none", background: ready ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#E7DCCB", color: ready ? "#fff" : "#9A8A78", fontFamily: "var(--v2-font-body)", fontWeight: 800, fontSize: "1.02rem", cursor: ready && !pending ? "pointer" : "not-allowed", boxShadow: ready ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
+            disabled={pending || !ready || submitBlocked}
+            style={{ marginTop: 16, width: "100%", padding: 15, borderRadius: 14, border: "none", background: ready && !submitBlocked ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#E7DCCB", color: ready && !submitBlocked ? "#fff" : "#9A8A78", fontFamily: "var(--v2-font-body)", fontWeight: 800, fontSize: "1.02rem", cursor: ready && !pending && !submitBlocked ? "pointer" : "not-allowed", boxShadow: ready && !submitBlocked ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
           >
-            {pending ? "Uploading…" : ready ? "✨ Start training (~5 minutes)" : photos.length < 3 ? `Add ${3 - photos.length} more photo${3 - photos.length === 1 ? "" : "s"}` : "Confirm consent to continue"}
+            {submitLabel}
           </button>
         </div>
       </form>

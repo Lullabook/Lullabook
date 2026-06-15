@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { requireAuthedContext } from "@/lib/auth";
@@ -12,43 +13,25 @@ export default async function NewPersonaPage() {
   const babyGate = ctx.subscriptions.canCreateBabyPersona(member.id);
   const slots = castSlotInfo(ctx.subscriptions, ctx.store, member.familyId, member.id);
 
+  if (!subscribed) {
+    redirect(slots.canAdd ? "/characters/new" : "/billing");
+  }
+
   return (
-    <div className="v2-stack" style={{ gap: 18, maxWidth: 640 }}>
+    <div className="v2-stack" style={{ gap: 18, maxWidth: 1100 }}>
       <div>
         <p className="v2-eyebrow">💛 Add to the family</p>
-        <h1 className="v2-page-title">
-          {subscribed ? "Add a new family member" : "Illustrated members need a plan"}
-        </h1>
+        <h1 className="v2-page-title">Add a new family member</h1>
         <p className="v2-page-lead" style={{ maxWidth: 540 }}>
-          {subscribed
-            ? "Add someone who loves your little one. We train a private likeness model from their photos so illustrations actually look like them."
-            : "On free, describe characters with a questionnaire — no photos. Upgrade for real family photos and illustrated likeness."}
+          Add someone who loves your little one. We train a private likeness model from their photos so illustrations actually look like them.
         </p>
       </div>
-      {!subscribed && (
-        <div className="v2-notice">
-          {slots.canAdd ? (
-            <>
-              <Link href="/characters/new" style={{ color: "#6A55C9", fontWeight: 700 }}>
-                Add a character
-              </Link>{" "}
-              ({slots.remaining} of {slots.limit} slots left) — or{" "}
-              <Link href="/billing">upgrade for photos</Link>.
-            </>
-          ) : (
-            <>
-              All {slots.limit} free cast slots are full.{" "}
-              <Link href="/billing">Upgrade</Link> for illustrated family members.
-            </>
-          )}
-        </div>
-      )}
-      {subscribed && !slots.canAdd && (
+      {!slots.canAdd && (
         <div className="v2-notice">
           Cast limit reached for your plan. <Link href="/billing">See plans</Link>.
         </div>
       )}
-      {subscribed && slots.canAdd && (
+      {slots.canAdd && (
         <div className="v2-card v2-form">
           <PersonaForm
             isGuardian={member.role === "guardian"}

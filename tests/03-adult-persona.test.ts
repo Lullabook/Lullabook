@@ -74,7 +74,7 @@ describe("03 — adult persona creation", () => {
     (ctx.store as any).hydrateByMemberId = async () => {};
     (ctx.store as any).sync = async () => {};
     (ctx as any).persist = async () => {};
-    (ctx.workflow as any).runWithStepContext = async () => {
+    ctx.personas.createAdult = async () => {
       ctx.store.savePersona({
         id: "p1",
         familyId: member.familyId,
@@ -88,6 +88,7 @@ describe("03 — adult persona creation", () => {
       });
       throw new Error("Validation failure");
     };
+    (ctx.workflow as any).runWithStepContext = async (_: unknown, fn: () => Promise<void>) => fn();
     const spy = vi.vi.spyOn(contextModule, "createRequestContext").mockReturnValue(ctx as any);
 
     try {

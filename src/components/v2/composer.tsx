@@ -499,6 +499,11 @@ export function V2Composer({
             <span style={{ color: "#fff", fontWeight: 800, textAlign: "right" }}>{row.value}</span>
           </div>
         ))}
+        {error && (
+          <p role="alert" style={{ margin: "12px 0 0", padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.12)", color: "#fff", fontSize: "0.88rem", lineHeight: 1.4 }}>
+            {error}
+          </p>
+        )}
         <button
           type="button"
           onClick={submit}

@@ -45,6 +45,8 @@ export interface Baby {
   displayName: string;
   /** Calendar date YYYY-MM-DD for birthday-story offers (issue 64). */
   birthDate: string | null;
+  /** Parent-editable daily schedule; null → app default. */
+  dailyRoutine: import("@/domain/daily-types").RoutineEntry[] | null;
   rosterGroupId: string;
   rosterScope: RosterScope;
   isDefault: boolean;

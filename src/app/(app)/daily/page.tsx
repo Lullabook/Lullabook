@@ -57,8 +57,8 @@ export default async function DailyLifePage({
       babyId={baby.id}
       babyName={baby.displayName}
       initialMoments={moments}
-      routine={DEFAULT_ROUTINE}
-      memberId={member.id}
+      routine={baby.dailyRoutine ?? DEFAULT_ROUTINE}
+      canEditRoutine={member.role === "guardian"}
       castOptions={castOptions}
       prefillDate={prefillDate}
       initialView={params.week ? "week" : "timeline"}

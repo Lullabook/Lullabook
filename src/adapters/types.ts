@@ -151,11 +151,23 @@ export type WorkflowJobPayload =
   | { type: "storybook-generate"; storybookId: string; memberId: string }
   | { type: "page-recover"; pageId: string; memberId: string; attempt: number };
 
+export interface PersonaCreatePayload {
+  mode: "adult" | "baby" | "promote-character";
+  memberId: string;
+  displayName: string;
+  characterId?: string;
+  kind?: "baby" | "adult";
+  photoKeys: string[];
+  selfieKey?: string;
+}
+
 export interface WorkflowAdapter {
   enqueue(name: string, work: () => Promise<void>, payload?: WorkflowJobPayload): void;
   run(steps: WorkflowStep[]): Promise<void>;
   waitForEvent<T>(eventName: string, matchId: string): Promise<T>;
   emitEvent<T>(eventName: string, data: T): Promise<void>;
+  requestPersonaCreate(payload: PersonaCreatePayload): void;
+  flush(): Promise<void>;
 }
 
 export interface NotificationAdapter {

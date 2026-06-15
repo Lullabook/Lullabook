@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Inngest } from "inngest";
 import type {
+  PersonaCreatePayload,
   WorkflowAdapter,
   WorkflowJobPayload,
   WorkflowStep,
@@ -10,7 +11,11 @@ import type {
 // first-class Next.js serve handler, per-step memoization that maps directly
 // onto the per-Page step model, and event-match `waitForEvent` for the fal
 // training webhook (ADR-0011).
-export const inngest = new Inngest({ id: "lullabook" });
+const eventKey = process.env.INNGEST_EVENT_KEY;
+export const inngest = new Inngest({
+  id: "lullabook",
+  ...(eventKey ? { eventKey } : {}),
+});
 
 export const EVENTS = {
   storybookGenerateRequested: "lullabook/storybook.generate.requested",
@@ -54,6 +59,12 @@ export class InngestWorkflowAdapter implements WorkflowAdapter {
    * between steps would replay into a store that never saw the step's output.
    */
   onStepCommitted?: () => Promise<void>;
+
+  requestPersonaCreate(payload: PersonaCreatePayload): void {
+    this.pendingSends.push(
+      inngest.send({ name: EVENTS.personaCreateRequested, data: payload })
+    );
+  }
 
   enqueue(name: string, _work: () => Promise<void>, payload?: WorkflowJobPayload): void {
     if (!payload) {

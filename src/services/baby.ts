@@ -14,6 +14,7 @@ export interface UpdateBabyInput {
   babyId: string;
   displayName?: string;
   birthDate?: string | null;
+  dailyRoutine?: import("@/domain/daily-types").RoutineEntry[] | null;
 }
 
 function normalizeBirthDate(value: string | null | undefined): string | null {
@@ -73,6 +74,7 @@ export class BabyService {
       familyId: member.familyId,
       displayName: input.displayName,
       birthDate: normalizeBirthDate(input.birthDate),
+      dailyRoutine: null,
       rosterGroupId,
       rosterScope,
       isDefault: existing.length === 0,
@@ -103,6 +105,8 @@ export class BabyService {
         input.birthDate !== undefined
           ? normalizeBirthDate(input.birthDate)
           : baby.birthDate,
+      dailyRoutine:
+        input.dailyRoutine !== undefined ? input.dailyRoutine : baby.dailyRoutine,
     };
     this.store.saveBaby(updated);
     return updated;

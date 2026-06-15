@@ -217,7 +217,7 @@ export function FamilyPageClient({
               );
             })}
             <Link
-              href="/personas/new"
+              href={addHref}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -561,7 +561,7 @@ export function FamilyPageClient({
                       ? "Ready to star in illustrated stories."
                       : "Add photos and voice to unlock illustrated stories."}
                   </span>
-                  <Link className="v2-btn v2-btn--primary" href="/storybooks/new">
+                  <Link className="v2-btn v2-btn--primary" href={`/storybooks/new?personas=${detail.id}`}>
                     ✨ Cast in a story
                   </Link>
                 </div>

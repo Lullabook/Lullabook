@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { createMomentAction } from "@/lib/actions";
+import { createMomentAction, updateBabyDailyRoutineAction } from "@/lib/actions";
 import {
   MOMENT_TYPES,
   momentMeta,
@@ -38,7 +38,7 @@ interface DailyLifeClientProps {
   babyName: string;
   initialMoments: DailyMomentView[];
   routine: RoutineEntry[];
-  memberId: string;
+  canEditRoutine: boolean;
   castOptions: CastOption[];
   prefillDate?: string;
   initialView?: "timeline" | "week";
@@ -65,7 +65,8 @@ export function DailyLifeClient({
   babyId,
   babyName,
   initialMoments,
-  routine,
+  routine: initialRoutine,
+  canEditRoutine,
   castOptions,
   prefillDate,
   initialView = "timeline",
@@ -75,6 +76,11 @@ export function DailyLifeClient({
   const router = useRouter();
   const [view, setView] = useState<"timeline" | "week">(initialView);
   const [moments, setMoments] = useState<DailyMomentView[]>(initialMoments);
+  const [routine, setRoutine] = useState<RoutineEntry[]>(initialRoutine);
+  const [editingRoutine, setEditingRoutine] = useState(false);
+  const [routineDraft, setRoutineDraft] = useState<RoutineEntry[]>(initialRoutine);
+  const [routineError, setRoutineError] = useState<string | null>(null);
+  const [routinePending, startRoutineTransition] = useTransition();
   const [draft, setDraft] = useState("");
   const [draftType, setDraftType] = useState<MomentType>("milestone");
   const [selectedCast, setSelectedCast] = useState<string[]>([]);
@@ -146,11 +152,31 @@ export function DailyLifeClient({
     router.push(`/daily?week=${target}`);
   }
 
+  function startRoutineEdit() {
+    setRoutineDraft(routine.map((r) => ({ ...r })));
+    setRoutineError(null);
+    setEditingRoutine(true);
+  }
+
+  function saveRoutine() {
+    setRoutineError(null);
+    startRoutineTransition(async () => {
+      const res = await updateBabyDailyRoutineAction(babyId, routineDraft);
+      if (!res.ok) {
+        setRoutineError(res.error);
+        return;
+      }
+      setRoutine(routineDraft);
+      setEditingRoutine(false);
+      router.refresh();
+    });
+  }
+
   return (
-    <div className="v2-stack" style={{ gap: 22 }}>
+    <div className="v2-stack v2-daily-page" style={{ gap: 22 }}>
       <div>
         <p className="v2-eyebrow">📔 {babyName}&apos;s days</p>
-        <h1 className="v2-page-title">Daily life</h1>
+        <h1 className="v2-page-title">Daily Life</h1>
         <p className="v2-page-lead" style={{ maxWidth: 580 }}>
           Jot down the little moments and the routine. Lullabook weaves them into stories that feel
           like real days — and they make {babyName}&apos;s persona richer over time.
@@ -237,7 +263,7 @@ export function DailyLifeClient({
           </div>
         </div>
       ) : (
-      <div style={{ display: "grid", gap: 26, gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr)", alignItems: "start" }}>
+      <div className="v2-daily-layout">
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
           <div style={cardStyle}>
             <label htmlFor="moment" style={{ display: "block", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.15rem", color: "#2E2438", marginBottom: 4 }}>
@@ -354,12 +380,88 @@ export function DailyLifeClient({
           </div>
         </div>
 
-        <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <aside className="v2-daily-routine">
           <div style={{ background: "#FFFDF9", border: "1px solid #ECE1CE", borderRadius: 22, padding: 20, boxShadow: "0 8px 22px rgba(58,40,80,0.07)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 14 }}>
-              <h3 style={{ margin: 0, fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.2rem", color: "#2E2438" }}>🕒 Their usual day</h3>
-              <button type="button" style={{ background: "none", border: "none", color: "#6A55C9", fontWeight: 800, fontSize: "0.82rem", cursor: "pointer", padding: 0, fontFamily: "var(--v2-font-body)" }}>Edit</button>
+              <h3 style={{ margin: 0, fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.2rem", color: "#2E2438" }}>🕒 {babyName}&apos;s usual day</h3>
+              {canEditRoutine && !editingRoutine ? (
+                <button type="button" onClick={startRoutineEdit} style={{ background: "none", border: "none", color: "#6A55C9", fontWeight: 800, fontSize: "0.82rem", cursor: "pointer", padding: 0, fontFamily: "var(--v2-font-body)" }}>
+                  Edit
+                </button>
+              ) : null}
             </div>
+            {editingRoutine ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {routineDraft.map((r, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "72px 40px 1fr auto", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="time"
+                      value={r.time}
+                      onChange={(e) => {
+                        const next = [...routineDraft];
+                        next[i] = { ...next[i], time: e.target.value };
+                        setRoutineDraft(next);
+                      }}
+                      style={{ fontSize: "0.82rem", padding: "8px", borderRadius: 10, border: "1px solid #ECE1CE", background: "#FBF4E7", color: "#2E2438" }}
+                    />
+                    <input
+                      value={r.icon}
+                      maxLength={4}
+                      aria-label="Icon"
+                      onChange={(e) => {
+                        const next = [...routineDraft];
+                        next[i] = { ...next[i], icon: e.target.value };
+                        setRoutineDraft(next);
+                      }}
+                      style={{ width: 40, textAlign: "center", fontSize: "1rem", padding: "6px 0", borderRadius: 10, border: "1px solid #ECE1CE", background: "#FBF4E7" }}
+                    />
+                    <input
+                      value={r.label}
+                      onChange={(e) => {
+                        const next = [...routineDraft];
+                        next[i] = { ...next[i], label: e.target.value };
+                        setRoutineDraft(next);
+                      }}
+                      style={{ fontSize: "0.88rem", padding: "8px 10px", borderRadius: 10, border: "1px solid #ECE1CE", background: "#FBF4E7", color: "#2E2438" }}
+                    />
+                    <button
+                      type="button"
+                      aria-label="Remove step"
+                      onClick={() => setRoutineDraft(routineDraft.filter((_, j) => j !== i))}
+                      style={{ background: "none", border: "none", color: "#B23A48", cursor: "pointer", fontWeight: 800 }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setRoutineDraft([...routineDraft, { time: "12:00", icon: "🕒", label: "New step" }])}
+                  style={{ alignSelf: "flex-start", padding: "6px 12px", borderRadius: 999, border: "1px dashed #D8C9B0", background: "#FFF8EC", color: "#6A55C9", fontWeight: 800, fontSize: "0.82rem", cursor: "pointer" }}
+                >
+                  ＋ Add step
+                </button>
+                {routineError ? (
+                  <p role="alert" style={{ margin: 0, color: "#B23A48", fontSize: "0.85rem" }}>{routineError}</p>
+                ) : null}
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <button type="button" className="v2-btn v2-btn--primary" disabled={routinePending} onClick={saveRoutine}>
+                    {routinePending ? "Saving…" : "Save routine"}
+                  </button>
+                  <button
+                    type="button"
+                    className="v2-btn v2-btn--ghost-surface"
+                    disabled={routinePending}
+                    onClick={() => {
+                      setEditingRoutine(false);
+                      setRoutineError(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {routine.map((r) => (
                 <div key={`${r.time}-${r.label}`} style={{ display: "flex", alignItems: "center", gap: 13, padding: "9px 0", borderBottom: "1px solid #F4ECDC" }}>
@@ -369,6 +471,7 @@ export function DailyLifeClient({
                 </div>
               ))}
             </div>
+            )}
           </div>
           <div style={{ background: "linear-gradient(160deg,#6A55C9,#B5739E)", borderRadius: 20, padding: 20, color: "#fff", boxShadow: "0 14px 32px rgba(106,85,201,0.26)" }}>
             <p style={{ margin: "0 0 8px", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.1rem" }}>Why this helps ✨</p>

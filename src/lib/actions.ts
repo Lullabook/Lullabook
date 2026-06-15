@@ -3,7 +3,6 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { EVENTS, inngest } from "@/adapters/inngest";
 import type { Brief, TextStoryBrief, TraitQuestionnaire } from "@/domain/types";
 import type { MomentType } from "@/domain/daily-types";
 import { castLimitError, castSlotInfo } from "@/lib/cast-limits";
@@ -191,11 +190,16 @@ export async function createPersonaAction(
       photos,
       mode === "adult" && selfie instanceof File ? selfie : null
     );
-    await inngest.send({
-      name: EVENTS.personaCreateRequested,
-      data: { mode, memberId: member.id, displayName, photoKeys, selfieKey },
+    ctx.workflow.requestPersonaCreate({
+      mode,
+      memberId: member.id,
+      displayName,
+      photoKeys,
+      selfieKey,
     });
+    await ctx.persist();
     revalidatePath("/personas");
+    revalidatePath("/family");
     return { ok: true, data: undefined };
   } catch (err) {
     return fail(err);
@@ -223,19 +227,18 @@ export async function promoteCharacterAction(
       photos,
       selfie instanceof File ? selfie : null
     );
-    await inngest.send({
-      name: EVENTS.personaCreateRequested,
-      data: {
-        mode: "promote-character",
-        memberId: member.id,
-        displayName: character.displayName,
-        characterId,
-        kind: String(formData.get("kind") ?? "baby") as "baby" | "adult",
-        photoKeys,
-        selfieKey,
-      },
+    ctx.workflow.requestPersonaCreate({
+      mode: "promote-character",
+      memberId: member.id,
+      displayName: character.displayName,
+      characterId,
+      kind: String(formData.get("kind") ?? "baby") as "baby" | "adult",
+      photoKeys,
+      selfieKey,
     });
+    await ctx.persist();
     revalidatePath("/personas");
+    revalidatePath("/family");
     return { ok: true, data: undefined };
   } catch (err) {
     return fail(err);
@@ -598,6 +601,40 @@ export async function createMomentAction(input: {
     revalidatePath("/daily");
     revalidatePath("/world");
     return { ok: true, data: { momentId: moment.id } };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function updateBabyDailyRoutineAction(
+  babyId: string,
+  routine: import("@/domain/daily-types").RoutineEntry[]
+): Promise<ActionResult> {
+  const { ctx, member } = await requireAuthedContext();
+  try {
+    if (member.role !== "guardian") {
+      return { ok: false, error: "Only guardians can edit the daily routine." };
+    }
+    for (const entry of routine) {
+      if (!/^\d{2}:\d{2}$/.test(entry.time)) {
+        return { ok: false, error: "Each time must be HH:MM (24-hour)." };
+      }
+      if (!entry.label.trim()) {
+        return { ok: false, error: "Every routine step needs a label." };
+      }
+    }
+    ctx.babies.updateBaby({
+      memberId: member.id,
+      babyId,
+      dailyRoutine: routine.map((r) => ({
+        time: r.time,
+        icon: r.icon.trim() || "🕒",
+        label: r.label.trim(),
+      })),
+    });
+    await ctx.persist();
+    revalidatePath("/daily");
+    return { ok: true, data: undefined };
   } catch (err) {
     return fail(err);
   }

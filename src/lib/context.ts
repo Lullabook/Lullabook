@@ -3,7 +3,7 @@ import { createBlobStore } from "@/lib/create-blob-store";
 import { CuratedClassicCatalog } from "@/adapters/classic-catalog";
 import { optionalEnv } from "@/adapters/env";
 import { RealFalAdapter } from "@/adapters/fal";
-import { InngestWorkflowAdapter } from "@/adapters/inngest";
+import { createWorkflowAdapter } from "@/lib/create-workflow-adapter";
 import { RekognitionLivenessAdapter } from "@/adapters/liveness";
 import { PermissiveDevModeration, RealModerationAdapter } from "@/adapters/moderation";
 import { RealNotificationAdapter } from "@/adapters/notifications";
@@ -55,7 +55,7 @@ export function createRequestContext() {
       : new PermissiveDevModeration();
   const liveness = new RekognitionLivenessAdapter();
   const blobs = createBlobStore();
-  const workflow = new InngestWorkflowAdapter();
+  const workflow = createWorkflowAdapter();
   const notifications = new RealNotificationAdapter();
   const stripe = new RealStripeAdapter();
   const pdf = new PdfLibAdapter();

@@ -12,6 +12,8 @@ node_modules/
 .next/
 .next-free/
 .next-paid/
+test-results/
+playwright-report/
 out/
 dist/
 build/
