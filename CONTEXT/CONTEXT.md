@@ -360,7 +360,52 @@ machine-facing wording.
 
 ---
 
-_Last updated 2026-06-14: added PRD v8 language (Moment photo write-only + vision→text,
+## Native mobile feature wave — incoming language (PRD v9)
+
+> Grilled 2026-06-16. This wave is **mobile-only** (the Expo app in `mobile/`, driven
+> on the iOS Simulator) and **features-first**. **Monetization is deferred to its own
+> later `/part1`** — no paywall UX, pricing, or live billing ships in this wave; the
+> existing `isActive` gate stays as-is and is force-unlocked in the simulator via
+> `DEV_FORCE_SUBSCRIPTION`. See `planning/prd-v9-mobile-feature-wave.md`.
+
+- **Mobile parity backbone** — the work of making the native app *actually function*:
+  every stubbed submit handler (`daily`, `family/new`, `characters/[id]` edit,
+  `account`) wired to the existing **Bearer-authenticated API** (`mobile/lib/api.ts`
+  → `src/app/api/*`), plus the **missing API routes** the mobile features need
+  (Moments create/list, Storybook create/generate + list). The web stays the backend;
+  mobile is a native front-end over the same domain services (ADR-0018). _Avoid_:
+  "rewrite", "new backend" (the services already exist — this is wiring + a few routes).
+
+- **Mobile Journal** — the [Journal](#journal)/[Moment](#moment)/[Firsts](#firsts)
+  capture loop (PRD v6/v8) brought to the native app over real data: log a Moment,
+  see the per-Baby timeline, filter the Firsts view, and take the inline
+  "make this a Story" offer. Same suggestion contract (offer → confirm Story Type →
+  generate; never silent). Tier-agnostic / free.
+
+- **Mobile Storybook** — native [Storybook](#storybook) generation (Brief → generate)
+  and the **reader** (paged text + illustration, per-Page candidates/re-roll) on the
+  device. Rides the existing generation pipeline + gate; in the simulator the gate is
+  force-unlocked. The future gate-move (illustrations free, paywall = narration +
+  voice + video + length, per `planning/pricing-and-features-2026-06-13.md`) belongs
+  to the deferred **payment `/part1`**, not this wave.
+
+### Payment direction (recorded now, built later)
+
+> Decided in the 2026-06-16 grill; **not implemented this wave**. When the payment
+> `/part1` runs, plan around: **Free + one paid tier + credits** — a free tier (short
+> illustrated stories, the acquisition hook), a single paid unlock (narration, real
+> family-voice weave, video, full length), and **credit-metered overage** for extra
+> [re-rolls](#regeneration--re-roll)/[Personas](#persona). This **moves the gate** off
+> illustrations and supersedes parts of [ADR-0009](docs/adr/0009-subscription-monetization.md)
+> / [ADR-0016](docs/adr/0016-character-tier-two-tier-consent.md) — so the payment wave
+> opens with an **ADR update**, not code. Platform when it ships: **mobile/Apple IAP
+> via RevenueCat** first (ADR-0018), since the simulator is the active test surface.
+
+---
+
+_Last updated 2026-06-16: added PRD v9 language (mobile feature wave — parity backbone,
+mobile Journal, mobile Storybook; payment deferred with Free+paid+credits direction
+recorded). Prior update 2026-06-14: added PRD v8 language (Moment photo write-only + vision→text,
 Firsts, Birthday Story; ADR-0021). Prior update 2026-06-14: added Roster avatar language
 (display generated avatars, never raw photos; PRD v7, ADR-0020). Prior update 2026-06-13:
 added Journal & Moments language (Moment, Significant Moment, Journal, Auto-context layer,

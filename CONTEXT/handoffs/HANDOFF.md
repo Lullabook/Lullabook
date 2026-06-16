@@ -3,12 +3,14 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-14-prd-v8-photo-stories.md`** —
-> `/part1` planning: PRD v8 (Photo Stories, Firsts, Birthday) + ADR-0021 + issues 64–73.
-> Planning only, no code. Next: `/part2` from issue 64.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-16-prd-v9-mobile-feature-wave.md`** —
+> `/part1` planning: PRD v9 (native mobile feature wave — make the app real: Journal +
+> Storybook on device, social-only auth). Payment **deferred** (own later `/part1`,
+> Free+paid+credits recorded). Issues 74–81. Planning only, no code. Next: `/part2` from issue 74.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-16-prd-v9-mobile-feature-wave.md` — `/part1` PRD v9: mobile parity backbone (wire stubbed handlers + Bearer API), mobile Journal/Firsts, mobile Storybook generate+reader, social-only auth (Apple+Google); payment deferred; issues 74–81 (GH #17–24)
 - `SESSION-HANDOFF-2026-06-14-prd-v8-photo-stories.md` — `/part1` PRD v8: photo-to-story (write-only Moment photo, ADR-0021), Firsts view + instant offer, birthday auto-story, lullaby HITL runbook; issues 64–73
 - `SESSION-HANDOFF-2026-06-14-issues-58-63.md` — issues 58–62 + 63 runbook: roster avatars, two-mode dev, web polish, mobile parity; 212 tests
 - `SESSION-HANDOFF-2026-06-14-issue-57.md` — issue 57: local disk blob-store dev fallback
