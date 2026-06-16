@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Link, router } from "expo-router";
 import * as AppleAuthentication from "expo-apple-authentication";
+import { Eyebrow, Field, PageTitle, Lead } from "@/components/maya-ui";
+import { C, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 export default function SignInScreen() {
@@ -52,63 +54,75 @@ export default function SignInScreen() {
 
   return (
     <View style={styles.container} accessibilityLabel="Sign in">
-      <Text style={styles.title}>Welcome to Lullabook</Text>
-      <TextInput
-        style={styles.input}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        placeholder="Email"
-        value={email}
-        onChangeText={setEmail}
-        accessibilityLabel="Email"
-      />
-      <TextInput
-        style={styles.input}
-        secureTextEntry
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        accessibilityLabel="Password"
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable style={styles.button} onPress={signIn} disabled={loading} accessibilityRole="button">
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
-      </Pressable>
-      <AppleAuthentication.AppleAuthenticationButton
-        buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-        cornerRadius={8}
-        style={styles.appleButton}
-        onPress={signInWithApple}
-      />
-      <Link href="/sign-up" style={styles.link}>
-        Create an account
-      </Link>
+      <View style={styles.hero}>
+        <Text style={styles.heroMark}>🌙</Text>
+      </View>
+      <Eyebrow>💛 Welcome back</Eyebrow>
+      <PageTitle>Welcome to Lullabook</PageTitle>
+      <Lead>Sign in to make a bedtime story starring your family.</Lead>
+
+      <View style={styles.form}>
+        <Field
+          label="Email"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholder="you@example.com"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <Field
+          label="Password"
+          secureTextEntry
+          placeholder="••••••••"
+          value={password}
+          onChangeText={setPassword}
+        />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Pressable style={styles.button} onPress={signIn} disabled={loading} accessibilityRole="button">
+          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
+        </Pressable>
+        <AppleAuthentication.AppleAuthenticationButton
+          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+          cornerRadius={R.pill}
+          style={styles.appleButton}
+          onPress={signInWithApple}
+        />
+        <Link href="/sign-up" style={styles.link}>
+          Create an account
+        </Link>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: "#FFF8F0" },
-  title: { fontSize: 28, fontWeight: "700", marginBottom: 24, color: "#2B1B10" },
-  input: {
-    borderWidth: 1,
-    borderColor: "#E8D5C4",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    backgroundColor: "#fff",
-    fontSize: 16,
-  },
-  button: {
-    backgroundColor: "#6B4F3A",
-    borderRadius: 12,
-    padding: 16,
+  container: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: C.bg, gap: 6 },
+  hero: {
+    alignSelf: "center",
+    width: 76,
+    height: 76,
+    borderRadius: 22,
+    backgroundColor: C.primary,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    marginBottom: 18,
+    shadowColor: "#6A55C9",
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
   },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  appleButton: { width: "100%", height: 48, marginTop: 12 },
-  link: { marginTop: 20, textAlign: "center", color: "#6B4F3A", fontSize: 16 },
-  error: { color: "#B00020", marginBottom: 8 },
+  heroMark: { fontSize: 36 },
+  form: { marginTop: 18, gap: 14 },
+  button: {
+    backgroundColor: C.primary,
+    borderRadius: R.pill,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  appleButton: { width: "100%", height: 50, marginTop: 2 },
+  link: { marginTop: 16, textAlign: "center", color: C.primary, fontSize: 15, fontWeight: "800" },
+  error: { color: C.danger, fontWeight: "700" },
 });

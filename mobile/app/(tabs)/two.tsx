@@ -1,31 +1,60 @@
-import { StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
+import { Screen, Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
+import { C, R } from "@/constants/theme";
 
-import EditScreenInfo from '@/components/EditScreenInfo';
-import { Text, View } from '@/components/Themed';
+const LINKS = [
+  { icon: "📔", title: "Daily life", note: "Jot the little moments & routine", href: "/daily" },
+  { icon: "🐻", title: "Characters", note: "Invent free, text-only friends", href: "/characters/new" },
+  { icon: "💛", title: "Add family", note: "Photos → a private illustrated persona", href: "/family/new" },
+  { icon: "⚙️", title: "Account & privacy", note: "Your plan, family, and data", href: "/account" },
+];
 
-export default function TabTwoScreen() {
+export default function MoreScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Tab Two</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/(tabs)/two.tsx" />
-    </View>
+    <Screen>
+      <View>
+        <Eyebrow>✨ More</Eyebrow>
+        <PageTitle>Everything else</PageTitle>
+        <Lead>Capture daily moments, invent characters, add family, and manage your account.</Lead>
+      </View>
+
+      {LINKS.map((l) => (
+        <Pressable key={l.href} onPress={() => router.push(l.href as never)} style={st.row} accessibilityRole="button" accessibilityLabel={l.title}>
+          <View style={st.iconWrap}>
+            <Text style={{ fontSize: 22 }}>{l.icon}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.title}>{l.title}</Text>
+            <Text style={st.note}>{l.note}</Text>
+          </View>
+          <Text style={st.chev}>›</Text>
+        </Pressable>
+      ))}
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+const st = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: C.surface,
+    borderColor: C.border,
+    borderWidth: 1,
+    borderRadius: R.card,
+    padding: 16,
   },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  iconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: C.primaryBg,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  separator: {
-    marginVertical: 30,
-    height: 1,
-    width: '80%',
-  },
+  title: { fontWeight: "800", fontSize: 16, color: C.text },
+  note: { color: C.muted, fontSize: 13, marginTop: 2 },
+  chev: { color: C.soft, fontSize: 26, fontWeight: "700" },
 });

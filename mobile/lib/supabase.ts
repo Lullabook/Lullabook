@@ -1,8 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as SecureStore from "expo-secure-store";
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "";
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "";
+import { requireSupabaseConfig } from "@/lib/env";
 
 const SecureStoreAdapter = {
   getItem: (key: string) => SecureStore.getItemAsync(key),
@@ -10,16 +9,32 @@ const SecureStoreAdapter = {
   removeItem: (key: string) => SecureStore.deleteItemAsync(key),
 };
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: SecureStoreAdapter,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
+let client: SupabaseClient | undefined;
+
+function getClient(): SupabaseClient {
+  if (!client) {
+    const { url, key } = requireSupabaseConfig();
+    client = createClient(url, key, {
+      auth: {
+        storage: SecureStoreAdapter,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      },
+    });
+  }
+  return client;
+}
+
+/** Lazy Supabase client — avoids crashing route modules at import time. */
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop, receiver) {
+    const value = Reflect.get(getClient(), prop, receiver);
+    return typeof value === "function" ? value.bind(getClient()) : value;
   },
 });
 
 export async function getAccessToken(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
+  const { data } = await getClient().auth.getSession();
   return data.session?.access_token ?? null;
 }
