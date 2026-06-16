@@ -1,6 +1,6 @@
 import { getApiUrl } from "@/lib/env";
 import { getAccessToken } from "@/lib/supabase";
-import type { Character, Persona } from "@domain/types";
+import type { Character, Persona, StoryType } from "@domain/types";
 
 const apiBase = getApiUrl();
 
@@ -44,6 +44,7 @@ export interface HomeResponse {
     role: string;
     jurisdiction: string;
   };
+  selectedBaby: { id: string; displayName: string } | null;
   personas: Persona[];
   characters: Character[];
   subscriptionActive: boolean;
@@ -60,6 +61,20 @@ export function createCharacter(body: {
   attestation?: string;
 }): Promise<{ characterId: string }> {
   return apiFetch("/api/characters", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function fetchCharacter(id: string): Promise<{ character: Character & { createdAt: string } }> {
+  return apiFetch(`/api/characters/${encodeURIComponent(id)}`);
+}
+
+export function updateCharacter(
+  id: string,
+  questionnaire: import("@domain/types").TraitQuestionnaire
+): Promise<{ characterId: string }> {
+  return apiFetch(`/api/characters/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({ questionnaire }),
+  });
 }
 
 export function createPersona(formData: FormData): Promise<{ queued: boolean }> {
@@ -115,4 +130,73 @@ export function createMoment(input: {
 
 export function listMoments(babyId: string): Promise<{ moments: MomentWire[] }> {
   return apiFetch(`/api/moments?babyId=${encodeURIComponent(babyId)}`);
+}
+
+export interface StorybookSummary {
+  id: string;
+  familyId: string;
+  babyId?: string;
+  status: import("@domain/types").StorybookStatus;
+  theme: string;
+  storyType: StoryType;
+  createdAt: string;
+  finalizedAt: string | null;
+}
+
+export function createStorybook(brief: import("@domain/types").Brief): Promise<{
+  storybookId: string;
+  status: string;
+}> {
+  return apiFetch("/api/storybooks", { method: "POST", body: JSON.stringify(brief) });
+}
+
+export function listStorybooks(babyId?: string): Promise<{ storybooks: StorybookSummary[] }> {
+  const q = babyId ? `?babyId=${encodeURIComponent(babyId)}` : "";
+  return apiFetch(`/api/storybooks${q}`);
+}
+
+export interface StorybookPageWire {
+  id: string;
+  index: number;
+  text: string;
+  generationStatus: import("@domain/types").PageGenerationStatus;
+  illustrationBlobKey: string | null;
+  hasIllustration: boolean;
+  candidates: { id: string; kind: string; content: string; selected: boolean }[];
+}
+
+export interface StorybookDetailWire {
+  id: string;
+  status: import("@domain/types").StorybookStatus;
+  theme: string;
+  storyType: StoryType;
+  rerollBudgetRemaining: number;
+  rerollCredits: number;
+  pages: StorybookPageWire[];
+}
+
+export function getStorybook(id: string): Promise<StorybookDetailWire> {
+  return apiFetch(`/api/storybooks/${encodeURIComponent(id)}`);
+}
+
+export function rerollPageImage(pageId: string): Promise<{ rerolled: boolean }> {
+  return apiFetch(`/api/storybooks/pages/${encodeURIComponent(pageId)}/reroll-image`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function selectPageCandidate(candidateId: string): Promise<{ selected: boolean }> {
+  return apiFetch(`/api/storybooks/candidates/${encodeURIComponent(candidateId)}/select`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function illustrationSource(blobKey: string): Promise<{ uri: string; headers?: Record<string, string> }> {
+  const token = await getAccessToken();
+  return {
+    uri: `${apiBase}/api/images?key=${encodeURIComponent(blobKey)}`,
+    ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+  };
 }

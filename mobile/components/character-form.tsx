@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton, GhostButton } from "@/components/maya-ui";
-import { createCharacter } from "@/lib/api";
+import { createCharacter, updateCharacter } from "@/lib/api";
 import { C, F } from "@/constants/theme";
 
 export interface CharacterFormValues {
@@ -38,7 +38,15 @@ function describe(v: CharacterFormValues) {
   return s + ".";
 }
 
-export function CharacterForm({ initial, isEdit }: { initial?: Partial<CharacterFormValues>; isEdit?: boolean }) {
+export function CharacterForm({
+  initial,
+  isEdit,
+  characterId,
+}: {
+  initial?: Partial<CharacterFormValues>;
+  isEdit?: boolean;
+  characterId?: string;
+}) {
   const [v, setV] = useState<CharacterFormValues>({ ...EMPTY, ...initial });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +56,26 @@ export function CharacterForm({ initial, isEdit }: { initial?: Partial<Character
   async function submit() {
     if (!ready || saving) return;
     if (isEdit) {
-      router.replace("/characters" as never);
+      if (!characterId) return;
+      setSaving(true);
+      setError(null);
+      try {
+        await updateCharacter(characterId, {
+          name: v.name.trim(),
+          nickname: v.nickname.trim() || undefined,
+          relationships: split(v.people),
+          favoriteAnimals: split(v.animals),
+          favoriteToys: split(v.toys),
+          songs: split(v.songs),
+          topics: split(v.traits),
+          isFictional: true,
+        });
+        router.replace("/characters" as never);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not save character");
+      } finally {
+        setSaving(false);
+      }
       return;
     }
     if (!v.isFictional) {
