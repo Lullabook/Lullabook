@@ -85,3 +85,34 @@ export function hardDeleteAccount(): Promise<{ deleted: boolean }> {
     body: JSON.stringify({ confirmation: "DELETE" }),
   });
 }
+
+export interface MomentWire {
+  id: string;
+  familyId: string;
+  babyId: string;
+  createdByMemberId: string;
+  body: string;
+  occurredOn: string;
+  isSignificant: boolean;
+  momentType: import("@domain/daily-types").MomentType;
+  createdAt: string;
+}
+
+export function createMoment(input: {
+  babyId: string;
+  body: string;
+  momentType: import("@domain/daily-types").MomentType;
+  occurredOn?: string;
+  significant?: boolean;
+  linkedPersonaIds?: string[];
+  linkedCharacterIds?: string[];
+}): Promise<{ moment: MomentWire }> {
+  return apiFetch("/api/moments", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listMoments(babyId: string): Promise<{ moments: MomentWire[] }> {
+  return apiFetch(`/api/moments?babyId=${encodeURIComponent(babyId)}`);
+}
