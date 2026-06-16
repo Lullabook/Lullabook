@@ -129,6 +129,9 @@ export function createTestContext() {
     coldStart,
     onboarding,
     textStories,
+    async persist(): Promise<void> {
+      await workflow.flush();
+    },
   };
 }
 
