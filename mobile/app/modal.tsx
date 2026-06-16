@@ -1,35 +1,27 @@
-import { StatusBar } from 'expo-status-bar';
-import { Platform, StyleSheet } from 'react-native';
+import { StatusBar } from "expo-status-bar";
+import { Platform, StyleSheet, Text } from "react-native";
 
-import EditScreenInfo from '@/components/EditScreenInfo';
-import { Text, View } from '@/components/Themed';
+import { Screen, Card, Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
+import { C, F } from "@/constants/theme";
 
 export default function ModalScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Modal</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/modal.tsx" />
-
-      {/* Use a light status bar on iOS to account for the black space above the modal */}
+    <Screen>
+      <Eyebrow>✨ Preview</Eyebrow>
+      <PageTitle>Storybook modal</PageTitle>
+      <Lead>This placeholder is ready for future native sheet flows.</Lead>
+      <Card>
+        <Text style={styles.title}>Nothing needs your attention here yet.</Text>
+      </Card>
       <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   title: {
+    color: C.text,
+    fontFamily: F.displayBold,
     fontSize: 20,
-    fontWeight: 'bold',
-  },
-  separator: {
-    marginVertical: 30,
-    height: 1,
-    width: '80%',
   },
 });

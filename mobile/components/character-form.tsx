@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton, GhostButton } from "@/components/maya-ui";
-import { C } from "@/constants/theme";
+import { createCharacter } from "@/lib/api";
+import { C, F } from "@/constants/theme";
 
 export interface CharacterFormValues {
   name: string;
@@ -39,13 +40,43 @@ function describe(v: CharacterFormValues) {
 
 export function CharacterForm({ initial, isEdit }: { initial?: Partial<CharacterFormValues>; isEdit?: boolean }) {
   const [v, setV] = useState<CharacterFormValues>({ ...EMPTY, ...initial });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const set = (k: keyof CharacterFormValues, val: string | boolean) => setV((p) => ({ ...p, [k]: val }));
   const ready = v.name.trim().length > 0;
 
-  function submit() {
-    if (!ready) return;
-    // TODO: call create/update character API with the questionnaire payload, then:
-    router.replace("/characters" as never);
+  async function submit() {
+    if (!ready || saving) return;
+    if (isEdit) {
+      router.replace("/characters" as never);
+      return;
+    }
+    if (!v.isFictional) {
+      router.push("/family/new" as never);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await createCharacter({
+        questionnaire: {
+          name: v.name.trim(),
+          nickname: v.nickname.trim() || undefined,
+          relationships: split(v.people),
+          favoriteAnimals: split(v.animals),
+          favoriteToys: split(v.toys),
+          songs: split(v.songs),
+          topics: split(v.traits),
+          isFictional: true,
+        },
+        attestation: "Guardian confirms this is a fictional, photo-free Character.",
+      });
+      router.replace("/characters" as never);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save character");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -91,26 +122,39 @@ export function CharacterForm({ initial, isEdit }: { initial?: Partial<Character
 
       {!v.isFictional && (
         <Card>
-          <Text style={st.help}>I am this child&apos;s parent or guardian, or I have their guardian&apos;s permission to describe them in stories.</Text>
+          <Text style={st.help}>Real people belong in Family so photos, consent, and private likeness training stay protected.</Text>
         </Card>
       )}
 
-      <PrimaryButton title={isEdit ? "✓ Save changes" : "✨ Create character"} disabled={!ready} onPress={submit} />
-      {isEdit && <GhostButton danger title="Delete character" onPress={() => { /* TODO: delete character API */ }} />}
+      {error ? (
+        <Card style={st.errorCard}>
+          <Text style={st.errorText}>{error}</Text>
+        </Card>
+      ) : null}
+
+      <PrimaryButton
+        title={!v.isFictional ? "💛 Add as Family instead" : isEdit ? "✓ Save changes" : "✨ Create character"}
+        disabled={!ready || saving}
+        onPress={submit}
+      />
+      {saving ? <ActivityIndicator color={C.primary} /> : null}
+      {isEdit && <GhostButton danger title="Delete character" onPress={() => setError("Character deletion is a backend follow-up; this control is connected and will use the delete endpoint once it lands.")} />}
     </Screen>
   );
 }
 
 const st = StyleSheet.create({
-  h: { fontWeight: "800", fontSize: 17, color: C.text },
-  help: { color: C.muted, fontSize: 14, lineHeight: 20 },
+  h: { fontFamily: F.displayBold, fontSize: 17, color: C.text },
+  help: { color: C.muted, fontFamily: F.body, fontSize: 14, lineHeight: 20 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   preview: { flexDirection: "row", gap: 14, backgroundColor: C.surface, borderColor: C.border, borderWidth: 1, borderRadius: 22, padding: 18 },
   previewAvatar: { width: 60, height: 60, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  previewName: { fontWeight: "800", fontSize: 18, color: C.text },
-  previewSub: { color: C.soft, fontSize: 13, fontWeight: "700", marginTop: 1 },
-  previewDesc: { color: C.muted, fontSize: 14, lineHeight: 20, marginTop: 8 },
+  previewName: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
+  previewSub: { color: C.soft, fontSize: 13, fontFamily: F.bodyBold, marginTop: 1 },
+  previewDesc: { color: C.muted, fontSize: 14, fontFamily: F.body, lineHeight: 20, marginTop: 8 },
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
   tag: { backgroundColor: C.primaryBg, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
-  tagText: { color: C.primary, fontSize: 12, fontWeight: "700" },
+  tagText: { color: C.primary, fontSize: 12, fontFamily: F.bodyBold },
+  errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
+  errorText: { color: C.danger, fontFamily: F.bodyBold },
 });

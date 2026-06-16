@@ -1,11 +1,11 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
-import { C, R } from "@/constants/theme";
+import { C, F, R } from "@/constants/theme";
 
 const LINKS = [
   { icon: "📔", title: "Daily life", note: "Jot the little moments & routine", href: "/daily" },
-  { icon: "🐻", title: "Characters", note: "Invent free, text-only friends", href: "/characters/new" },
+  { icon: "🐻", title: "Characters", note: "Invent free, text-only friends", href: "/characters" },
   { icon: "💛", title: "Add family", note: "Photos → a private illustrated persona", href: "/family/new" },
   { icon: "⚙️", title: "Account & privacy", note: "Your plan, family, and data", href: "/account" },
 ];
@@ -40,6 +40,7 @@ const st = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
+    minHeight: 76,
     backgroundColor: C.surface,
     borderColor: C.border,
     borderWidth: 1,
@@ -54,7 +55,7 @@ const st = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { fontWeight: "800", fontSize: 16, color: C.text },
-  note: { color: C.muted, fontSize: 13, marginTop: 2 },
-  chev: { color: C.soft, fontSize: 26, fontWeight: "700" },
+  title: { fontFamily: F.displayBold, fontSize: 17, color: C.text },
+  note: { color: C.muted, fontFamily: F.body, fontSize: 13, marginTop: 2 },
+  chev: { color: C.soft, fontSize: 26, fontFamily: F.bodyBold },
 });

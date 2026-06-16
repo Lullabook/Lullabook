@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Link, router } from "expo-router";
 import { Eyebrow, Field, PageTitle, Lead } from "@/components/maya-ui";
-import { C, R } from "@/constants/theme";
+import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 export default function SignUpScreen() {
@@ -54,7 +54,7 @@ export default function SignUpScreen() {
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Pressable style={styles.button} onPress={signUp} disabled={loading} accessibilityRole="button">
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign up</Text>}
+          {loading ? <ActivityIndicator color={C.surface} /> : <Text style={styles.buttonText}>Sign up</Text>}
         </Pressable>
         <Link href="/sign-in" style={styles.link}>
           I already have an account
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 4,
   },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  link: { marginTop: 16, textAlign: "center", color: C.primary, fontSize: 15, fontWeight: "800" },
-  error: { color: C.danger, fontWeight: "700" },
+  buttonText: { color: C.surface, fontSize: 16, fontFamily: F.bodyBold },
+  link: { marginTop: 16, textAlign: "center", color: C.primary, fontSize: 15, fontFamily: F.bodyBold },
+  error: { color: C.danger, fontFamily: F.bodyBold },
 });

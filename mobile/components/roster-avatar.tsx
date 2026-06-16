@@ -1,5 +1,5 @@
 import { Image, Text, View, type ViewStyle } from "react-native";
-import { C } from "@/constants/theme";
+import { C, F } from "@/constants/theme";
 import { getApiUrl } from "@/lib/env";
 import type { PersonaStatus } from "@domain/types";
 
@@ -51,7 +51,7 @@ export function RosterAvatar({
       {showImage ? (
         <Image source={{ uri: avatarUrl(avatarKey) }} style={{ width: size, height: size }} accessibilityLabel={`${name} roster avatar`} />
       ) : (
-        <Text style={{ color: "#fff", fontWeight: "800", fontSize: size * 0.42 }}>{initial.toUpperCase()}</Text>
+        <Text style={{ color: C.surface, fontFamily: F.displayBold, fontSize: size * 0.42 }}>{initial.toUpperCase()}</Text>
       )}
     </View>
   );
@@ -72,12 +72,12 @@ export function PhotoUploadStatus({ count, enough }: { count: number; enough: bo
             borderColor: C.border,
           }}
         >
-          <Text style={{ fontWeight: "700", fontSize: 12, color: i < count ? C.greenText : C.soft }}>
+          <Text style={{ fontFamily: F.bodyBold, fontSize: 12, color: i < count ? C.greenText : C.soft }}>
             {i < count ? `✓ Photo ${i + 1}` : `Photo ${i + 1}`}
           </Text>
         </View>
       ))}
-      <Text style={{ color: C.muted, fontSize: 13, alignSelf: "center" }}>
+      <Text style={{ color: C.muted, fontFamily: F.body, fontSize: 13, alignSelf: "center" }}>
         {enough ? `${count} selected — ready` : `${count} of 3 minimum`}
       </Text>
     </View>
