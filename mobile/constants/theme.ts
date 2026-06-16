@@ -3,10 +3,7 @@
  * RN can't use CSS gradients without expo-linear-gradient, so header bands use a
  * solid `primary`. Add expo-linear-gradient later if you want the 3-stop hero.
  *
- * Brand fonts (Baloo 2 + Nunito) need expo-font. Until then, weights approximate
- * the picture-book feel. To load them:
- *   import { useFonts } from "expo-font";
- *   useFonts({ "Baloo2": require("../assets/fonts/Baloo2-Bold.ttf"), ... });
+ * Brand fonts are loaded in app/_layout.tsx from @expo-google-fonts.
  */
 export const C = {
   bg: "#FBF4E7",
@@ -38,5 +35,13 @@ export const C = {
 } as const;
 
 export const R = { pill: 999, card: 22, detail: 26, slot: 12, input: 14, chip: 999 } as const;
+
+export const F = {
+  display: "Baloo2_800ExtraBold",
+  displayBold: "Baloo2_700Bold",
+  body: "Nunito_400Regular",
+  bodySemi: "Nunito_600SemiBold",
+  bodyBold: "Nunito_800ExtraBold",
+} as const;
 
 export const AVATAR_COLORS = ["#8B6DF0", "#E79A3C", "#E78AA0", "#5FB389", "#3f9bb0"];

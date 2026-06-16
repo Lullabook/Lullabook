@@ -1,40 +1,40 @@
-import { Link, Stack } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { Link, Stack } from "expo-router";
+import { StyleSheet, Text } from "react-native";
 
-import { Text, View } from '@/components/Themed';
+import { Screen, Card, Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
+import { C, F } from "@/constants/theme";
 
 export default function NotFoundScreen() {
   return (
     <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
-      <View style={styles.container}>
-        <Text style={styles.title}>This screen doesn't exist.</Text>
+      <Stack.Screen options={{ title: "Not found" }} />
+      <Screen>
+        <Eyebrow>☀️ Lullabook</Eyebrow>
+        <PageTitle>This page wandered off</PageTitle>
+        <Lead>The route is not ready yet, but your family world is safe.</Lead>
 
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>Go to home screen!</Text>
-        </Link>
-      </View>
+        <Card>
+          <Text style={styles.title}>Try the main tabs again.</Text>
+          <Link href="/" style={styles.link}>
+            Back to Home
+          </Link>
+        </Card>
+      </Screen>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
   title: {
+    fontFamily: F.displayBold,
     fontSize: 20,
-    fontWeight: 'bold',
+    color: C.text,
   },
   link: {
     marginTop: 15,
     paddingVertical: 15,
-  },
-  linkText: {
-    fontSize: 14,
-    color: '#2e78b7',
+    color: C.primary,
+    fontFamily: F.bodyBold,
+    fontSize: 15,
   },
 });

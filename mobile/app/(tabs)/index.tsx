@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton } from "@/components/maya-ui";
 import { fetchHome, type HomeResponse } from "@/lib/api";
 import { RosterAvatar } from "@/components/roster-avatar";
-import { C, R } from "@/constants/theme";
+import { C, F } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 export default function HomeScreen() {
@@ -127,15 +127,15 @@ export default function HomeScreen() {
 
 const st = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: C.bg },
-  copy: { fontSize: 16, lineHeight: 23, color: C.text },
-  cardTitle: { fontSize: 18, fontWeight: "800", color: C.text },
-  item: { fontSize: 16, color: C.text, fontWeight: "700" },
-  emptyNote: { fontSize: 14, color: C.soft, lineHeight: 20 },
+  copy: { fontFamily: F.body, fontSize: 16, lineHeight: 23, color: C.text },
+  cardTitle: { fontSize: 18, fontFamily: F.displayBold, color: C.text },
+  item: { fontSize: 16, color: C.text, fontFamily: F.bodyBold },
+  emptyNote: { fontSize: 14, color: C.soft, fontFamily: F.body, lineHeight: 20 },
   personaRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  metaInline: { fontSize: 13, color: C.muted, marginTop: 1 },
+  metaInline: { fontSize: 13, color: C.muted, fontFamily: F.body, marginTop: 1 },
   planRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   planDot: { width: 9, height: 9, borderRadius: 5 },
-  meta: { fontSize: 14, color: C.muted, fontWeight: "700" },
+  meta: { fontSize: 14, color: C.muted, fontFamily: F.bodyBold },
   errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
-  errorText: { color: C.danger, fontWeight: "700" },
+  errorText: { color: C.danger, fontFamily: F.bodyBold },
 });

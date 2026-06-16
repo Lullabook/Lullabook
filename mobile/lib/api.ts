@@ -21,6 +21,22 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function apiFormData<T>(path: string, body: FormData): Promise<T> {
+  const token = await getAccessToken();
+  const res = await fetch(`${apiBase}${path}`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body,
+  });
+  if (!res.ok) {
+    const responseBody = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(responseBody.error ?? `Request failed (${res.status})`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export interface HomeResponse {
   member: {
     id: string;
@@ -44,6 +60,10 @@ export function createCharacter(body: {
   attestation?: string;
 }): Promise<{ characterId: string }> {
   return apiFetch("/api/characters", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function createPersona(formData: FormData): Promise<{ queued: boolean }> {
+  return apiFormData("/api/personas", formData);
 }
 
 export function createTextStory(

@@ -3,8 +3,8 @@ import { CharacterForm } from "@/components/character-form";
 
 export default function EditCharacterScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  // TODO: fetch the character by `id` and pass its questionnaire as `initial`.
-  // Demo seed so the screen renders standalone:
+  // The native edit endpoint is not exposed yet; keep the screen openable with a
+  // warm sample so navigation tests never land on Expo's not-found template.
   const initial = {
     name: "Pip",
     nickname: "Pippin",

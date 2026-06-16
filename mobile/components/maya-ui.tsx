@@ -12,13 +12,20 @@ import {
   View,
   type TextInputProps,
 } from "react-native";
-import { C, R } from "@/constants/theme";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { C, F, R } from "@/constants/theme";
 
 export function Screen({ children }: { children: ReactNode }) {
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={s.screen} keyboardShouldPersistTaps="handled">
-      {children}
-    </ScrollView>
+    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={s.screen}
+        keyboardShouldPersistTaps="handled"
+      >
+        {children}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -54,7 +61,7 @@ export function Field({ label, ...props }: { label?: string } & TextInputProps) 
 export function PrimaryButton({ title, onPress, disabled }: { title: string; onPress?: () => void; disabled?: boolean }) {
   return (
     <Pressable onPress={onPress} disabled={disabled} style={[s.btn, disabled ? s.btnDisabled : s.btnPrimary]}>
-      <Text style={[s.btnText, { color: disabled ? C.soft : "#fff" }]}>{title}</Text>
+      <Text style={[s.btnText, { color: disabled ? C.soft : C.surface }]}>{title}</Text>
     </Pressable>
   );
 }
@@ -78,24 +85,43 @@ export function Chip({ label, icon, active, onPress }: { label: string; icon?: s
 export function Avatar({ initial, size = 50, color = C.primaryLight }: { initial: string; size?: number; color?: string }) {
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color, alignItems: "center", justifyContent: "center" }}>
-      <Text style={{ color: "#fff", fontWeight: "800", fontSize: size * 0.42 }}>{initial}</Text>
+      <Text style={{ color: C.surface, fontFamily: F.displayBold, fontSize: size * 0.42 }}>{initial}</Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  screen: { padding: 20, paddingBottom: 60, gap: 18 },
-  eyebrow: { textTransform: "uppercase", letterSpacing: 1.6, fontSize: 11, fontWeight: "800", color: C.primaryLight, marginBottom: 4 },
-  pageTitle: { fontSize: 28, fontWeight: "800", color: C.text, letterSpacing: -0.5 },
-  lead: { fontSize: 15, lineHeight: 22, color: C.muted, marginTop: 6 },
-  card: { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1, borderRadius: R.card, padding: 18, gap: 14 },
-  label: { fontWeight: "700", fontSize: 15, color: C.text },
-  input: { width: "100%", fontSize: 16, color: C.text, backgroundColor: C.bg, borderColor: C.border, borderWidth: 1, borderRadius: R.input, padding: 13 },
-  btn: { borderRadius: R.pill, paddingVertical: 14, paddingHorizontal: 22, alignItems: "center", justifyContent: "center" },
-  btnPrimary: { backgroundColor: C.primary },
+  safe: { flex: 1, backgroundColor: C.bg },
+  scroll: { flex: 1, backgroundColor: C.bg },
+  screen: { paddingHorizontal: 22, paddingTop: 22, paddingBottom: 112, gap: 22 },
+  eyebrow: { textTransform: "uppercase", letterSpacing: 1.6, fontSize: 11, fontFamily: F.bodyBold, color: C.primaryLight, marginBottom: 4 },
+  pageTitle: { fontSize: 32, fontFamily: F.display, color: C.text, letterSpacing: -0.5, lineHeight: 38 },
+  lead: { fontSize: 16, lineHeight: 24, color: C.muted, marginTop: 6, fontFamily: F.body },
+  card: {
+    backgroundColor: C.surface,
+    borderColor: C.border,
+    borderWidth: 1,
+    borderRadius: R.card,
+    padding: 22,
+    gap: 14,
+    shadowColor: "#3A2850",
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  label: { fontFamily: F.displayBold, fontSize: 16, color: C.text },
+  input: { width: "100%", fontSize: 16, color: C.text, backgroundColor: C.bg, borderColor: C.border, borderWidth: 1, borderRadius: R.input, padding: 13, fontFamily: F.body },
+  btn: { minHeight: 48, borderRadius: R.pill, paddingVertical: 14, paddingHorizontal: 22, alignItems: "center", justifyContent: "center" },
+  btnPrimary: {
+    backgroundColor: C.primary,
+    shadowColor: C.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+  },
   btnGhost: { backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border },
   btnDisabled: { backgroundColor: "#E7DCCB" },
-  btnText: { fontWeight: "800", fontSize: 15 },
-  chip: { borderRadius: R.chip, borderWidth: 1.5, paddingVertical: 10, paddingHorizontal: 16 },
-  chipText: { fontWeight: "800", fontSize: 14 },
+  btnText: { fontFamily: F.bodyBold, fontSize: 15 },
+  chip: { minHeight: 44, borderRadius: R.chip, borderWidth: 1.5, paddingVertical: 10, paddingHorizontal: 16, justifyContent: "center" },
+  chipText: { fontFamily: F.bodyBold, fontSize: 14 },
 });

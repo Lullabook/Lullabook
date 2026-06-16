@@ -1,10 +1,25 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton } from "@/components/maya-ui";
 import { PhotoUploadStatus, RosterAvatar } from "@/components/roster-avatar";
-import { C } from "@/constants/theme";
+import { createPersona } from "@/lib/api";
+import { C, F } from "@/constants/theme";
+
+interface PickedPhoto {
+  uri: string;
+  name: string;
+  type: string;
+}
+
+function imagePart(asset: ImagePicker.ImagePickerAsset, fallbackName: string): PickedPhoto {
+  return {
+    uri: asset.uri,
+    name: asset.fileName ?? fallbackName,
+    type: asset.mimeType ?? "image/jpeg",
+  };
+}
 
 export default function AddFamilyScreen() {
   const [kind, setKind] = useState<"adult" | "baby">("adult");
@@ -12,17 +27,24 @@ export default function AddFamilyScreen() {
   const [rel, setRel] = useState("");
   const [babyCalls, setBabyCalls] = useState("");
   const [theyCall, setTheyCall] = useState("");
-  const [photos, setPhotos] = useState<string[]>([]);
-  const [selfie, setSelfie] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<PickedPhoto[]>([]);
+  const [selfie, setSelfie] = useState<PickedPhoto | null>(null);
   const [consent, setConsent] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function pickPhotos() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, quality: 0.9, selectionLimit: 10 });
-    if (!res.canceled) setPhotos((p) => [...p, ...res.assets.map((a) => a.uri)]);
+    if (!res.canceled) {
+      setPhotos((p) => [
+        ...p,
+        ...res.assets.map((asset, index) => imagePart(asset, `reference-${p.length + index + 1}.jpg`)),
+      ]);
+    }
   }
   async function takeSelfie() {
     const res = await ImagePicker.launchCameraAsync({ cameraType: ImagePicker.CameraType.front, quality: 0.9 });
-    if (!res.canceled) setSelfie(res.assets[0].uri);
+    if (!res.canceled) setSelfie(imagePart(res.assets[0], "selfie.jpg"));
   }
 
   const enough = photos.length >= 3;
@@ -30,9 +52,28 @@ export default function AddFamilyScreen() {
   const ready = enough && consent && (!showSelfie || !!selfie) && name.trim().length > 0;
   const previewInitial = (name.trim()[0] || "?").toUpperCase();
 
-  function submit() {
-    if (!ready) return;
-    router.replace("/(tabs)");
+  async function submit() {
+    if (!ready || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.set("mode", kind);
+      fd.set("displayName", name.trim());
+      fd.set("relationship", rel.trim());
+      fd.set("babyCalls", babyCalls.trim());
+      fd.set("theyCallBaby", theyCall.trim());
+      for (const photo of photos) {
+        fd.append("photos", photo as unknown as Blob);
+      }
+      if (selfie) fd.set("selfie", selfie as unknown as Blob);
+      await createPersona(fd);
+      router.replace("/(tabs)");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start training");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -101,40 +142,43 @@ export default function AddFamilyScreen() {
 
       <Card>
         <Pressable onPress={() => setConsent((v) => !v)} style={st.consentRow}>
-          <View style={[st.checkbox, { backgroundColor: consent ? C.primary : "#fff", borderColor: consent ? C.primary : C.borderDashed }]}>{consent ? <Text style={st.checkmark}>✓</Text> : null}</View>
+          <View style={[st.checkbox, { backgroundColor: consent ? C.primary : C.surface, borderColor: consent ? C.primary : C.borderDashed }]}>{consent ? <Text style={st.checkmark}>✓</Text> : null}</View>
           <Text style={st.consentText}>
             {kind === "baby"
-              ? "I am this child's Guardian. I consent to training a private likeness model from these photos."
+              ? "I am this child's Guardian. I consent to training a private likeness model from these photos. On iOS, baby likeness requires Email-Plus consent before training."
               : "These photos are of me. I consent to training a private likeness model of myself."}
           </Text>
         </Pressable>
-        <PrimaryButton title={ready ? "✨ Start training (~5 min)" : enough ? "Confirm consent to continue" : `Add ${Math.max(0, 3 - photos.length)} more photo(s)`} disabled={!ready} onPress={submit} />
+        {error ? <Text style={st.errorText}>{error}</Text> : null}
+        <PrimaryButton title={ready ? "✨ Start training (~5 min)" : enough ? "Confirm consent to continue" : `Add ${Math.max(0, 3 - photos.length)} more photo(s)`} disabled={!ready || saving} onPress={submit} />
+        {saving ? <ActivityIndicator color={C.primary} /> : null}
       </Card>
     </Screen>
   );
 }
 
 const st = StyleSheet.create({
-  h: { fontWeight: "800", fontSize: 17, color: C.text },
-  help: { color: C.soft, fontSize: 13, lineHeight: 19 },
+  h: { fontFamily: F.displayBold, fontSize: 17, color: C.text },
+  help: { color: C.soft, fontFamily: F.body, fontSize: 13, lineHeight: 19 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   preview: { flexDirection: "row", gap: 14, alignItems: "center", backgroundColor: C.primary, borderRadius: 24, padding: 18 },
-  previewName: { color: "#fff", fontWeight: "800", fontSize: 18 },
+  previewName: { color: C.surface, fontFamily: F.displayBold, fontSize: 18 },
   previewPill: { alignSelf: "flex-start", marginTop: 4, backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
-  previewPillText: { color: "#fff", fontWeight: "800", fontSize: 12 },
+  previewPillText: { color: C.surface, fontFamily: F.bodyBold, fontSize: 12 },
   previewStatusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   dot: { width: 9, height: 9, borderRadius: 5 },
-  previewStatus: { color: "#FBEAF3", fontWeight: "700", fontSize: 13 },
+  previewStatus: { color: "#FBEAF3", fontFamily: F.bodyBold, fontSize: 13 },
   countPill: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
-  countText: { fontWeight: "800", fontSize: 12 },
+  countText: { fontFamily: F.bodyBold, fontSize: 12 },
   dropzone: { alignItems: "center", justifyContent: "center", gap: 6, padding: 26, borderRadius: 18, borderWidth: 2, borderColor: C.borderDashed, borderStyle: "dashed", backgroundColor: C.surfaceAlt },
-  dropTitle: { fontWeight: "800", fontSize: 16, color: C.primary },
+  dropTitle: { fontFamily: F.bodyBold, fontSize: 16, color: C.primary },
   selfieFrame: { width: 64, height: 64, borderRadius: 16, backgroundColor: C.bg, borderWidth: 2, borderColor: C.borderDashed, borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
   selfieBtn: { borderRadius: 999, borderWidth: 1, borderColor: C.border, backgroundColor: C.surfaceAlt, paddingHorizontal: 18, paddingVertical: 12 },
-  selfieBtnText: { color: C.primary, fontWeight: "800", fontSize: 14 },
+  selfieBtnText: { color: C.primary, fontFamily: F.bodyBold, fontSize: 14 },
   consentRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  checkbox: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 2 },
-  checkmark: { color: "#fff", fontWeight: "800", fontSize: 13 },
-  consentText: { flex: 1, color: C.muted, fontSize: 14, lineHeight: 20 },
+  checkbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  checkmark: { color: C.surface, fontFamily: F.bodyBold, fontSize: 13 },
+  consentText: { flex: 1, color: C.muted, fontFamily: F.body, fontSize: 14, lineHeight: 20 },
+  errorText: { color: C.danger, fontFamily: F.bodyBold, fontSize: 14, lineHeight: 20 },
 });

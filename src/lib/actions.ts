@@ -7,6 +7,7 @@ import type { Brief, TextStoryBrief, TraitQuestionnaire } from "@/domain/types";
 import type { MomentType } from "@/domain/daily-types";
 import { castLimitError, castSlotInfo } from "@/lib/cast-limits";
 import { requireAuthedContext } from "@/lib/auth";
+import { createAuthClient } from "@/lib/supabase";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }

@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 import { Link, router } from "expo-router";
 import * as AppleAuthentication from "expo-apple-authentication";
 import { Eyebrow, Field, PageTitle, Lead } from "@/components/maya-ui";
-import { C, R } from "@/constants/theme";
+import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 export default function SignInScreen() {
@@ -11,11 +11,13 @@ export default function SignInScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) router.replace("/(tabs)");
     });
+    AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
   }, []);
 
   async function signIn() {
@@ -79,15 +81,17 @@ export default function SignInScreen() {
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <Pressable style={styles.button} onPress={signIn} disabled={loading} accessibilityRole="button">
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign in</Text>}
+          {loading ? <ActivityIndicator color={C.surface} /> : <Text style={styles.buttonText}>Sign in</Text>}
         </Pressable>
-        <AppleAuthentication.AppleAuthenticationButton
-          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-          cornerRadius={R.pill}
-          style={styles.appleButton}
-          onPress={signInWithApple}
-        />
+        {appleAvailable ? (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={R.pill}
+            style={styles.appleButton}
+            onPress={signInWithApple}
+          />
+        ) : null}
         <Link href="/sign-up" style={styles.link}>
           Create an account
         </Link>
@@ -121,8 +125,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 4,
   },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  buttonText: { color: C.surface, fontSize: 16, fontFamily: F.bodyBold },
   appleButton: { width: "100%", height: 50, marginTop: 2 },
-  link: { marginTop: 16, textAlign: "center", color: C.primary, fontSize: 15, fontWeight: "800" },
-  error: { color: C.danger, fontWeight: "700" },
+  link: { marginTop: 16, textAlign: "center", color: C.primary, fontSize: 15, fontFamily: F.bodyBold },
+  error: { color: C.danger, fontFamily: F.bodyBold },
 });
