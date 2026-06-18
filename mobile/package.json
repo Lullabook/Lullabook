@@ -9,8 +9,9 @@
     "@supabase/supabase-js": "^2.108.1",
     "expo": "~56.0.11",
     "expo-apple-authentication": "^56.0.4",
-    "expo-auth-session": "~6.0.3",
+    "expo-auth-session": "~56.0.14",
     "expo-constants": "~56.0.18",
+    "expo-crypto": "~56.0.4",
     "expo-font": "~56.0.6",
     "expo-image-picker": "~56.0.18",
     "expo-linking": "~56.0.14",
@@ -35,8 +36,10 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
+    "start:paid": "EXPO_PUBLIC_API_URL=http://127.0.0.1:3001 REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 expo start --host localhost",
+    "proxy:8081": "node scripts/ipv4-metro-proxy.mjs",
     "ios": "expo start --ios",
+    "ios:paid": "EXPO_PUBLIC_API_URL=http://127.0.0.1:3001 EXPO_PUBLIC_DEV_EMAIL=simulator@lullabook.dev EXPO_PUBLIC_DEV_PASSWORD=SimulatorDev1! REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 expo start --ios --host localhost",
     "web": "expo start --web"
   },
   "private": true

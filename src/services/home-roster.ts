@@ -11,7 +11,7 @@ export interface HomeRoster {
 export class HomeRosterService {
   constructor(private readonly store: DataStore) {}
 
-  getForMember(memberId: string): HomeRoster {
+  getForMember(memberId: string, subscriptionActiveOverride?: boolean): HomeRoster {
     const member = this.store.members.get(memberId);
     if (!member) throw new Error("Member not found");
 
@@ -25,7 +25,8 @@ export class HomeRosterService {
     return {
       personas,
       characters,
-      subscriptionActive: sub?.status === "active",
+      subscriptionActive:
+        subscriptionActiveOverride ?? sub?.status === "active",
       hasConsentReceipt,
     };
   }

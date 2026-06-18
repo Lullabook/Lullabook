@@ -5,11 +5,15 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
 import * as QueryParams from "expo-auth-session/build/QueryParams";
-import { Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
+import { Eyebrow, Field, PageTitle, Lead } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 WebBrowser.maybeCompleteAuthSession();
+
+const DEV_EMAIL = process.env.EXPO_PUBLIC_DEV_EMAIL ?? "";
+const DEV_PASSWORD = process.env.EXPO_PUBLIC_DEV_PASSWORD ?? "";
+const DEV_SIGNIN_ENABLED = __DEV__ && !!DEV_EMAIL && !!DEV_PASSWORD;
 
 async function createSessionFromUrl(url: string) {
   const { params, errorCode } = QueryParams.getQueryParams(url);
@@ -28,8 +32,10 @@ async function createSessionFromUrl(url: string) {
 
 export default function SignInScreen() {
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<"apple" | "google" | null>(null);
+  const [loading, setLoading] = useState<"apple" | "google" | "dev" | "email" | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const [email, setEmail] = useState(DEV_EMAIL);
+  const [password, setPassword] = useState(DEV_PASSWORD);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -37,6 +43,24 @@ export default function SignInScreen() {
     });
     AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
   }, []);
+
+  async function afterAuth() {
+    router.replace("/(tabs)");
+  }
+
+  async function signInWithEmail() {
+    setLoading("email");
+    setError(null);
+    try {
+      const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (err) throw err;
+      await afterAuth();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Email sign-in failed");
+    } finally {
+      setLoading(null);
+    }
+  }
 
   async function signInWithApple() {
     setLoading("apple");
@@ -54,7 +78,7 @@ export default function SignInScreen() {
         token: credential.identityToken,
       });
       if (err) throw err;
-      router.replace("/(tabs)");
+      await afterAuth();
     } catch (e) {
       if ((e as { code?: string }).code !== "ERR_REQUEST_CANCELED") {
         setError(e instanceof Error ? e.message : "Apple sign-in failed");
@@ -79,10 +103,54 @@ export default function SignInScreen() {
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type === "success") {
         await createSessionFromUrl(result.url);
-        router.replace("/(tabs)");
+        await afterAuth();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Google sign-in failed");
+      const message = e instanceof Error ? e.message : "Google sign-in failed";
+      if (message.includes("provider is not enabled")) {
+        setError("Google is not enabled in Supabase yet. Use Apple or the simulator email sign-in below.");
+      } else {
+        setError(message);
+      }
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function devQuickSignIn() {
+    if (!DEV_SIGNIN_ENABLED) return;
+    setEmail(DEV_EMAIL);
+    setPassword(DEV_PASSWORD);
+    setLoading("dev");
+    setError(null);
+    try {
+      let { error: err } = await supabase.auth.signInWithPassword({
+        email: DEV_EMAIL,
+        password: DEV_PASSWORD,
+      });
+      if (err?.message?.includes("Invalid login credentials")) {
+        const created = await supabase.auth.signUp({
+          email: DEV_EMAIL,
+          password: DEV_PASSWORD,
+          options: { data: { jurisdiction: "US_IOS" } },
+        });
+        err = created.error;
+        if (!err && created.data.session) {
+          await afterAuth();
+          return;
+        }
+        if (!err) {
+          const retry = await supabase.auth.signInWithPassword({
+            email: DEV_EMAIL,
+            password: DEV_PASSWORD,
+          });
+          err = retry.error;
+        }
+      }
+      if (err) throw err;
+      await afterAuth();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Dev sign-in failed");
     } finally {
       setLoading(null);
     }
@@ -108,9 +176,11 @@ export default function SignInScreen() {
             style={styles.appleButton}
             onPress={signInWithApple}
           />
-        ) : Platform.OS === "ios" ? null : (
+        ) : (
           <Pressable style={styles.button} onPress={signInWithApple} disabled={loading !== null}>
-            <Text style={styles.buttonText}>{loading === "apple" ? "…" : " Continue with Apple"}</Text>
+            <Text style={styles.buttonText}>
+              {loading === "apple" ? "…" : " Continue with Apple"}
+            </Text>
           </Pressable>
         )}
 
@@ -121,6 +191,30 @@ export default function SignInScreen() {
             <Text style={styles.googleText}>Continue with Google</Text>
           )}
         </Pressable>
+
+        {DEV_SIGNIN_ENABLED ? (
+          <View style={styles.devBlock}>
+            <Text style={styles.devLabel}>Simulator dev sign-in</Text>
+            <Field
+              label="Email"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
+            <Field label="Password" secureTextEntry value={password} onChangeText={setPassword} />
+            <Pressable style={styles.devButton} onPress={signInWithEmail} disabled={loading !== null}>
+              <Text style={styles.devButtonText}>
+                {loading === "email" ? "Signing in…" : "Sign in with email"}
+              </Text>
+            </Pressable>
+            <Pressable style={styles.devQuick} onPress={devQuickSignIn} disabled={loading !== null}>
+              <Text style={styles.devQuickText}>
+                {loading === "dev" ? "…" : "⚡ One-tap simulator account"}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -161,5 +255,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   googleText: { color: C.text, fontSize: 16, fontFamily: F.bodyBold },
+  devBlock: {
+    marginTop: 8,
+    gap: 10,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surfaceAlt,
+  },
+  devLabel: { fontFamily: F.bodyBold, fontSize: 13, color: C.muted },
+  devButton: {
+    backgroundColor: C.primary,
+    borderRadius: R.pill,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  devButtonText: { color: C.surface, fontFamily: F.bodyBold, fontSize: 15 },
+  devQuick: { alignItems: "center", paddingVertical: 6 },
+  devQuickText: { color: C.primary, fontFamily: F.bodyBold, fontSize: 14 },
   error: { color: C.danger, fontFamily: F.bodyBold },
 });

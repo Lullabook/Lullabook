@@ -12,7 +12,10 @@ export async function GET(request: Request): Promise<NextResponse> {
       createSupabaseJwtVerifier(),
       createRequestContext
     );
-    const roster = new HomeRosterService(ctx.store).getForMember(member.id);
+    const roster = new HomeRosterService(ctx.store).getForMember(
+      member.id,
+      ctx.subscriptions.isActive(member.familyId)
+    );
     const selectedBaby = ctx.babies.getSelected(member.id);
     return NextResponse.json({
       member: {
