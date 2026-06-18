@@ -3,13 +3,14 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-18-part1-prd-v10-hitl-smoke.md`** —
-> `/part1` PRD v10: full-app HITL smoke verification on the local Simulator (`dev:paid`).
-> Issues 82–87 (GH #29–34), dependency-ordered. Invariants pinned (≤5min draft, ≤30s page,
-> 401/hard-delete/illustration-only boundaries). Next: `/part2` from **issue 82** (write the runbook).
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-18-part2-issue-82-hitl-runbook.md`** —
+> `/part2` issue 82 (GH #29): wrote `CONTEXT/local-dev/HITL-SMOKE-RUNBOOK.md` foundation
+> (§0 complete, §1–§5 scaffolded). Markdown only — suite unaffected. Red-team fixed a
+> non-measurable "p95<1s" step. Next: `/part2` from **issue 83** (runbook §1 auth & account).
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-18-part2-issue-82-hitl-runbook.md` — `/part2` issue 82: HITL smoke runbook foundation (`CONTEXT/local-dev/HITL-SMOKE-RUNBOOK.md` §0 + §1–§5 scaffold); markdown-only, suite green; red-team fixed non-human-measurable latency step; next issue 83
 - `SESSION-HANDOFF-2026-06-18-part1-prd-v10-hitl-smoke.md` — `/part1` PRD v10: full-app HITL smoke verification (local Simulator + dev:paid); runbook + issues 82–87 (GH #29–34); invariants = PASS/FAIL contract; next `/part2` from issue 82
 - `SESSION-HANDOFF-2026-06-18-skills-guardrails-and-issue-reconciliation.md` — skill guardrails (`/part1` invariants gate, `/part2` red-team pass, both outside repo); closed GH #18–24 (issues 75–81) as code-complete; HITL Simulator passes still owed
 - `SESSION-HANDOFF-2026-06-16-prd-v9-mobile-wave-complete.md` — `/part2` PRD v9 build: issues 75–81 implemented (Journal, Firsts, Storybook Bearer API + generate + reader, stubbed-handler wiring, social-only auth); 225 tests; commit 3e87ed4
