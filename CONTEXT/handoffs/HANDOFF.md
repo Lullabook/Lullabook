@@ -3,13 +3,15 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-16-prd-v9-mobile-feature-wave.md`** —
-> `/part1` planning: PRD v9 (native mobile feature wave — make the app real: Journal +
-> Storybook on device, social-only auth). Payment **deferred** (own later `/part1`,
-> Free+paid+credits recorded). Issues 74–81. Planning only, no code. Next: `/part2` from issue 74.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-18-skills-guardrails-and-issue-reconciliation.md`** —
+> Meta session: added production guardrails to global `/part1` (invariants gate) and
+> `/part2` (red-team pass) skills; verified and **closed GitHub issues #18–24 (75–81)** as
+> code-complete. Remaining work = HITL Simulator passes. Open: confirm a 3rd guardrail (pre-push gate).
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-18-skills-guardrails-and-issue-reconciliation.md` — skill guardrails (`/part1` invariants gate, `/part2` red-team pass, both outside repo); closed GH #18–24 (issues 75–81) as code-complete; HITL Simulator passes still owed
+- `SESSION-HANDOFF-2026-06-16-prd-v9-mobile-wave-complete.md` — `/part2` PRD v9 build: issues 75–81 implemented (Journal, Firsts, Storybook Bearer API + generate + reader, stubbed-handler wiring, social-only auth); 225 tests; commit 3e87ed4
 - `SESSION-HANDOFF-2026-06-16-prd-v9-mobile-feature-wave.md` — `/part1` PRD v9: mobile parity backbone (wire stubbed handlers + Bearer API), mobile Journal/Firsts, mobile Storybook generate+reader, social-only auth (Apple+Google); payment deferred; issues 74–81 (GH #17–24)
 - `SESSION-HANDOFF-2026-06-14-prd-v8-photo-stories.md` — `/part1` PRD v8: photo-to-story (write-only Moment photo, ADR-0021), Firsts view + instant offer, birthday auto-story, lullaby HITL runbook; issues 64–73
 - `SESSION-HANDOFF-2026-06-14-issues-58-63.md` — issues 58–62 + 63 runbook: roster avatars, two-mode dev, web polish, mobile parity; 212 tests
