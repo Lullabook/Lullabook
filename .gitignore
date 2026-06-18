@@ -28,3 +28,13 @@ KAIZEN-REVIEW-BRIEF.md
 .vscode/
 .idea/
 tsconfig.tsbuildinfo
+
+# macOS Finder/iCloud duplicate cruft ("Name 2.ext" / "Name 2") — these once broke
+# expo-router (duplicate route files → every screen "Unmatched Route"). Never commit.
+* 2.*
+* 2
+* [0-9].*
+
+# Generated audit / debug artifacts (not source)
+appaudit-report-*.md
+COMPOSER_*_DEBUG_PROMPT.md
