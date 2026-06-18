@@ -5,6 +5,7 @@ import { C, F, R } from "@/constants/theme";
 
 const LINKS = [
   { icon: "📔", title: "Daily life", note: "Jot the little moments & routine", href: "/daily" },
+  { icon: "📚", title: "Storybooks", note: "Generate & read illustrated books", href: "/storybooks" },
   { icon: "🐻", title: "Characters", note: "Invent free, text-only friends", href: "/characters" },
   { icon: "💛", title: "Add family", note: "Photos → a private illustrated persona", href: "/family/new" },
   { icon: "⚙️", title: "Account & privacy", note: "Your plan, family, and data", href: "/account" },

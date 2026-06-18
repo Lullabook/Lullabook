@@ -49,7 +49,28 @@ export default function AddFamilyScreen() {
 
   const enough = photos.length >= 3;
   const showSelfie = kind === "adult";
-  const ready = enough && consent && (!showSelfie || !!selfie) && name.trim().length > 0;
+  const ready =
+    enough &&
+    consent &&
+    name.trim().length > 0 &&
+    (!showSelfie || !!selfie) &&
+    (kind === "baby" || rel.trim().length > 0);
+
+  function selectKind(next: "adult" | "baby") {
+    setKind(next);
+    if (next === "baby") {
+      setRel("");
+      setBabyCalls("");
+      setTheyCall("");
+      setSelfie(null);
+    }
+  }
+
+  const previewSubtitle =
+    kind === "baby"
+      ? "Baby Persona"
+      : `${rel.trim() || "Relationship"} to the baby`;
+
   const previewInitial = (name.trim()[0] || "?").toUpperCase();
 
   async function submit() {
@@ -88,7 +109,7 @@ export default function AddFamilyScreen() {
         <RosterAvatar name={name.trim() || "New member"} initial={previewInitial} status="training" size={60} />
         <View style={{ flex: 1 }}>
           <Text style={st.previewName}>{name.trim() || "New member"}</Text>
-          <View style={st.previewPill}><Text style={st.previewPillText}>{(rel.trim() || "Relationship")} to the baby</Text></View>
+          <View style={st.previewPill}><Text style={st.previewPillText}>{previewSubtitle}</Text></View>
           <View style={st.previewStatusRow}>
             <View style={[st.dot, { backgroundColor: enough ? C.green : "#C9A9A9" }]} />
             <Text style={st.previewStatus}>{enough ? "Ready to train likeness" : "Needs photos"}</Text>
@@ -99,16 +120,29 @@ export default function AddFamilyScreen() {
       <Card>
         <Text style={st.h}>Who is this?</Text>
         <View style={st.chipRow}>
-          <Chip icon="🧑" label="An adult" active={kind === "adult"} onPress={() => setKind("adult")} />
-          <Chip icon="👶" label="The baby" active={kind === "baby"} onPress={() => setKind("baby")} />
+          <Chip icon="🧑" label="An adult" active={kind === "adult"} onPress={() => selectKind("adult")} />
+          <Chip icon="👶" label="The baby" active={kind === "baby"} onPress={() => selectKind("baby")} />
         </View>
       </Card>
 
       <Card>
-        <Field label="Their name" placeholder="Nadia" value={name} onChangeText={setName} />
-        <Field label="Their relationship to the baby" placeholder="Grandma" value={rel} onChangeText={setRel} />
-        <Field label="What the baby calls them" placeholder="Nani" value={babyCalls} onChangeText={setBabyCalls} />
-        <Field label="What they call the baby" placeholder="moonbeam" value={theyCall} onChangeText={setTheyCall} />
+        <Field
+          label={kind === "baby" ? "Baby's name" : "Their name"}
+          placeholder={kind === "baby" ? "Maya" : "Nadia"}
+          value={name}
+          onChangeText={setName}
+        />
+        {kind === "adult" ? (
+          <>
+            <Field label="Their relationship to the baby" placeholder="Grandma" value={rel} onChangeText={setRel} />
+            <Field label="What the baby calls them" placeholder="Nani" value={babyCalls} onChangeText={setBabyCalls} />
+            <Field label="What they call the baby" placeholder="moonbeam" value={theyCall} onChangeText={setTheyCall} />
+          </>
+        ) : (
+          <Text style={st.help}>
+            Baby likeness needs 3+ photos and Guardian consent. Relationship nicknames are for adults only.
+          </Text>
+        )}
       </Card>
 
       <Card>

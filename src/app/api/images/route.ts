@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthedContext } from "@/lib/auth";
+import { resolveRequestAuth } from "@/lib/request-auth";
 
 /**
  * Signed-URL resolver: Pages store Family-scoped blob keys, never provider
@@ -11,7 +11,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!key) {
     return NextResponse.json({ error: "Missing key" }, { status: 400 });
   }
-  const authed = await getAuthedContext();
+  const authed = await resolveRequestAuth(req);
   if (!authed) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

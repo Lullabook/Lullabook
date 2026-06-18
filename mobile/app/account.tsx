@@ -56,7 +56,7 @@ export default function AccountScreen() {
             try {
               await hardDeleteAccount();
               await supabase.auth.signOut();
-              router.replace("/sign-up");
+              router.replace("/sign-in");
             } catch (e) {
               setNotice(e instanceof Error ? e.message : "Could not delete account");
             } finally {

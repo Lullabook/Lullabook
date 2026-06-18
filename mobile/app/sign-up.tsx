@@ -1,30 +1,88 @@
-import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Link, router } from "expo-router";
-import { Eyebrow, Field, PageTitle, Lead } from "@/components/maya-ui";
+import * as AppleAuthentication from "expo-apple-authentication";
+import * as WebBrowser from "expo-web-browser";
+import { makeRedirectUri } from "expo-auth-session";
+import * as QueryParams from "expo-auth-session/build/QueryParams";
+import { Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
-export default function SignUpScreen() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+WebBrowser.maybeCompleteAuthSession();
 
-  async function signUp() {
-    setLoading(true);
+async function createSessionFromUrl(url: string) {
+  const { params, errorCode } = QueryParams.getQueryParams(url);
+  if (errorCode) throw new Error(errorCode);
+  const accessToken = params.access_token;
+  const refreshToken = params.refresh_token;
+  if (!accessToken || !refreshToken) {
+    throw new Error("No session tokens returned");
+  }
+  const { error } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  if (error) throw error;
+}
+
+export default function SignUpScreen() {
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<"apple" | "google" | null>(null);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
+  }, []);
+
+  async function signUpWithApple() {
+    setLoading("apple");
     setError(null);
-    const { error: err } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { jurisdiction: "US_IOS" } },
-    });
-    setLoading(false);
-    if (err) {
-      setError(err.message);
-      return;
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) throw new Error("No identity token");
+      const { error: err } = await supabase.auth.signInWithIdToken({
+        provider: "apple",
+        token: credential.identityToken,
+      });
+      if (err) throw err;
+      router.replace("/(tabs)");
+    } catch (e) {
+      if ((e as { code?: string }).code !== "ERR_REQUEST_CANCELED") {
+        setError(e instanceof Error ? e.message : "Apple sign-up failed");
+      }
+    } finally {
+      setLoading(null);
     }
-    router.replace("/(tabs)");
+  }
+
+  async function signUpWithGoogle() {
+    setLoading("google");
+    setError(null);
+    try {
+      const redirectTo = makeRedirectUri({ scheme: "com.lullabook" });
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (oauthError) throw oauthError;
+      if (!data.url) throw new Error("No OAuth URL");
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type === "success") {
+        await createSessionFromUrl(result.url);
+        router.replace("/(tabs)");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Google sign-up failed");
+    } finally {
+      setLoading(null);
+    }
   }
 
   return (
@@ -34,28 +92,33 @@ export default function SignUpScreen() {
       </View>
       <Eyebrow>💛 New here</Eyebrow>
       <PageTitle>Create your Family</PageTitle>
-      <Lead>Start free with text-only stories — no photos, no subscription needed.</Lead>
+      <Lead>Sign up with Apple or Google — your first Member and Family are created automatically.</Lead>
 
       <View style={styles.form}>
-        <Field
-          label="Email"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder="you@example.com"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <Field
-          label="Password"
-          secureTextEntry
-          placeholder="Choose a password"
-          value={password}
-          onChangeText={setPassword}
-        />
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Pressable style={styles.button} onPress={signUp} disabled={loading} accessibilityRole="button">
-          {loading ? <ActivityIndicator color={C.surface} /> : <Text style={styles.buttonText}>Sign up</Text>}
+
+        {appleAvailable ? (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={R.pill}
+            style={styles.appleButton}
+            onPress={signUpWithApple}
+          />
+        ) : Platform.OS === "ios" ? null : (
+          <Pressable style={styles.button} onPress={signUpWithApple} disabled={loading !== null}>
+            <Text style={styles.buttonText}>{loading === "apple" ? "…" : " Continue with Apple"}</Text>
+          </Pressable>
+        )}
+
+        <Pressable style={styles.googleButton} onPress={signUpWithGoogle} disabled={loading !== null}>
+          {loading === "google" ? (
+            <ActivityIndicator color={C.text} />
+          ) : (
+            <Text style={styles.googleText}>Continue with Google</Text>
+          )}
         </Pressable>
+
         <Link href="/sign-in" style={styles.link}>
           I already have an account
         </Link>
@@ -83,13 +146,22 @@ const styles = StyleSheet.create({
   heroMark: { fontSize: 36 },
   form: { marginTop: 18, gap: 14 },
   button: {
-    backgroundColor: C.primary,
+    backgroundColor: C.text,
     borderRadius: R.pill,
     paddingVertical: 16,
     alignItems: "center",
-    marginTop: 4,
   },
   buttonText: { color: C.surface, fontSize: 16, fontFamily: F.bodyBold },
+  appleButton: { width: "100%", height: 50 },
+  googleButton: {
+    backgroundColor: C.surface,
+    borderRadius: R.pill,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  googleText: { color: C.text, fontSize: 16, fontFamily: F.bodyBold },
   link: { marginTop: 16, textAlign: "center", color: C.primary, fontSize: 15, fontFamily: F.bodyBold },
   error: { color: C.danger, fontFamily: F.bodyBold },
 });
