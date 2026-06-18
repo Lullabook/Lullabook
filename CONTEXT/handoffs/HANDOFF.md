@@ -3,13 +3,14 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-18-part2-issue-82-hitl-runbook.md`** —
-> `/part2` issue 82 (GH #29): wrote `CONTEXT/local-dev/HITL-SMOKE-RUNBOOK.md` foundation
-> (§0 complete, §1–§5 scaffolded). Markdown only — suite unaffected. Red-team fixed a
-> non-measurable "p95<1s" step. Next: `/part2` from **issue 83** (runbook §1 auth & account).
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-18-part2-issue-82-rerun-verification-gate.md`** —
+> `/part2` re-run on issue 82 under updated skill: added machine-checkable gate
+> `npm run check:runbook` (`scripts/check-hitl-runbook.mjs`), recorded as the issue-82
+> Verification-command. Gate red-teamed (catches 5 fault classes). Next: `/part2` from **issue 83**.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-18-part2-issue-82-rerun-verification-gate.md` — `/part2` re-run: added `npm run check:runbook` verification gate for the HITL runbook (sections/commands/paths/ADRs/no-secrets); gate fault-injection-tested; runbook + issue 82 record it; next issue 83
 - `SESSION-HANDOFF-2026-06-18-part2-issue-82-hitl-runbook.md` — `/part2` issue 82: HITL smoke runbook foundation (`CONTEXT/local-dev/HITL-SMOKE-RUNBOOK.md` §0 + §1–§5 scaffold); markdown-only, suite green; red-team fixed non-human-measurable latency step; next issue 83
 - `SESSION-HANDOFF-2026-06-18-part1-prd-v10-hitl-smoke.md` — `/part1` PRD v10: full-app HITL smoke verification (local Simulator + dev:paid); runbook + issues 82–87 (GH #29–34); invariants = PASS/FAIL contract; next `/part2` from issue 82
 - `SESSION-HANDOFF-2026-06-18-skills-guardrails-and-issue-reconciliation.md` — skill guardrails (`/part1` invariants gate, `/part2` red-team pass, both outside repo); closed GH #18–24 (issues 75–81) as code-complete; HITL Simulator passes still owed
