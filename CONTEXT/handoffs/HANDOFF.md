@@ -3,13 +3,14 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-18-part2-issue-82-rerun-verification-gate.md`** —
-> `/part2` re-run on issue 82 under updated skill: added machine-checkable gate
-> `npm run check:runbook` (`scripts/check-hitl-runbook.mjs`), recorded as the issue-82
-> Verification-command. Gate red-teamed (catches 5 fault classes). Next: `/part2` from **issue 83**.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-18-live-app-run-and-dupe-sweep.md`** —
+> Ran the mobile app on Simulator (dev:paid + IPv4 proxy); fixed total expo-router
+> "Unmatched Route" failure caused by macOS `* 2` duplicate files; swept 128 dupes
+> repo-wide + `.gitignore` guard (PR #38). All session PRs #28/#35/#36/#37/#38 merged. Next: `/part2` issue 83.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-18-live-app-run-and-dupe-sweep.md` — ran app on Simulator; fixed expo-router total failure (macOS `* 2` dupes); repo-wide dupe sweep + gitignore guard (PR #38); all session PRs merged; servers still running; next issue 83
 - `SESSION-HANDOFF-2026-06-18-part2-issue-82-rerun-verification-gate.md` — `/part2` re-run: added `npm run check:runbook` verification gate for the HITL runbook (sections/commands/paths/ADRs/no-secrets); gate fault-injection-tested; runbook + issue 82 record it; next issue 83
 - `SESSION-HANDOFF-2026-06-18-part2-issue-82-hitl-runbook.md` — `/part2` issue 82: HITL smoke runbook foundation (`CONTEXT/local-dev/HITL-SMOKE-RUNBOOK.md` §0 + §1–§5 scaffold); markdown-only, suite green; red-team fixed non-human-measurable latency step; next issue 83
 - `SESSION-HANDOFF-2026-06-18-part1-prd-v10-hitl-smoke.md` — `/part1` PRD v10: full-app HITL smoke verification (local Simulator + dev:paid); runbook + issues 82–87 (GH #29–34); invariants = PASS/FAIL contract; next `/part2` from issue 82
