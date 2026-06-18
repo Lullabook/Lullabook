@@ -33,5 +33,13 @@ account-gated steps. **No app code change** unless a defect surfaces.
       with zero real secrets committed (env-var names only).
 - [ ] Defect-filing instructions are concrete (label, repro template).
 
+## Verification-command
+```bash
+npm run check:runbook
+```
+Exits 0 iff the runbook has all required sections and cites no nonexistent `npm run`
+script / repo file / `ADR-NNNN`, and pastes no literal secret. This is the machine-
+checkable done-condition and the guard for issues 83–87 as they extend the runbook.
+
 ## Blocked by
 None — start here.

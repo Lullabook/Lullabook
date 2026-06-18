@@ -181,6 +181,20 @@ dev:paid @ :3001, Simulator <iOS ver>, keys present: <list by NAME>
 
 ---
 
+## Verification (machine-checkable done-condition)
+
+This runbook has an automated guard so it can't rot into a "confidently wrong" doc as
+issues 83–87 extend it:
+
+```bash
+npm run check:runbook      # node scripts/check-hitl-runbook.mjs — exits 0 iff clean
+```
+
+It fails the build if the runbook drops a required section, cites an `npm run` script /
+repo file / `ADR-NNNN` that doesn't exist, or pastes a literal secret value. **Run it
+after editing any section** (it is the issue-82 done-condition and the guard for every
+later slice).
+
 ## §1 Auth & account — *filled in by issue 83*
 _Scaffold: Google sign-in, Apple sign-in (device caveat), session restore, hard-delete teardown._
 
