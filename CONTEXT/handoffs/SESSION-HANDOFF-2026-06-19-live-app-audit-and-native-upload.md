@@ -19,7 +19,8 @@
 3. **Extracted native FormData helper** — `mobile/lib/form-data.ts` with
    `NativeUploadFile`, `appendNativeFile`, and `setNativeFile` for React Native's
    `{ uri, name, type }` upload parts (not web Blobs). `mobile/app/family/new.tsx`
-   now imports from here instead of inlining the interface.
+   imports from here; **`submit()` and `takeSelfie()` wired in follow-up** after
+   Simulator HITL bugs B1/B2 (see `SESSION-HANDOFF-2026-06-16-mobile-simulator-hitl-bugs.md`).
 
 ## State
 
@@ -31,10 +32,11 @@
 
 ## Not done / follow-ups
 
-- **Run `live-app-audit`** — skill exists but no audit has been executed yet this
-  session; hermes should drive the first full free+paid sweep.
-- Mobile submit handlers beyond `family/new.tsx` wiring may still need the
-  `form-data` helper if other screens upload photos.
+- **Re-run Add Family HITL** — bug log in `SESSION-HANDOFF-2026-06-16-mobile-simulator-hitl-bugs.md`;
+  FormData + camera permission fixes landed on this branch; confirm `POST /api/personas` `202`.
+- **Run `live-app-audit`** — skill exists but no audit has been executed yet; hermes should
+  drive the first full free+paid sweep after issue 70 closes.
+- Other mobile upload surfaces may still need the `form-data` helper if they append Blobs.
 - HITL Simulator passes for issues 75–81 are still owed (runbook exists).
 
 ## Suggested skills

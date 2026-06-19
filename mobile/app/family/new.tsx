@@ -40,8 +40,21 @@ export default function AddFamilyScreen() {
     }
   }
   async function takeSelfie() {
-    const res = await ImagePicker.launchCameraAsync({ cameraType: ImagePicker.CameraType.front, quality: 0.9 });
-    if (!res.canceled) setSelfie(imagePart(res.assets[0], "selfie.jpg"));
+    setError(null);
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        setError("Camera access is required for the consent selfie.");
+        return;
+      }
+      const res = await ImagePicker.launchCameraAsync({
+        cameraType: ImagePicker.CameraType.front,
+        quality: 0.9,
+      });
+      if (!res.canceled) setSelfie(imagePart(res.assets[0], "selfie.jpg"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open the camera");
+    }
   }
 
   const enough = photos.length >= 3;
@@ -82,9 +95,9 @@ export default function AddFamilyScreen() {
       fd.set("babyCalls", babyCalls.trim());
       fd.set("theyCallBaby", theyCall.trim());
       for (const photo of photos) {
-        fd.append("photos", photo as unknown as Blob);
+        appendNativeFile(fd, "photos", photo);
       }
-      if (selfie) fd.set("selfie", selfie as unknown as Blob);
+      if (selfie) setNativeFile(fd, "selfie", selfie);
       await createPersona(fd);
       router.replace("/(tabs)");
     } catch (e) {
