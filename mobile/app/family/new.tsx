@@ -5,13 +5,10 @@ import * as ImagePicker from "expo-image-picker";
 import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton } from "@/components/maya-ui";
 import { PhotoUploadStatus, RosterAvatar } from "@/components/roster-avatar";
 import { createPersona } from "@/lib/api";
+import { appendNativeFile, setNativeFile, type NativeUploadFile } from "@/lib/form-data";
 import { C, F } from "@/constants/theme";
 
-interface PickedPhoto {
-  uri: string;
-  name: string;
-  type: string;
-}
+interface PickedPhoto extends NativeUploadFile {}
 
 function imagePart(asset: ImagePicker.ImagePickerAsset, fallbackName: string): PickedPhoto {
   return {
