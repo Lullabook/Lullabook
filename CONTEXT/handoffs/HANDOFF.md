@@ -3,13 +3,16 @@
 For a fresh agent (target: **Cursor**, TDD) picking up implementation. This doc is
 a pointer map, not a re-statement — read the referenced artifacts.
 
-> **Latest session handoff: `SESSION-HANDOFF-2026-06-18-live-app-run-and-dupe-sweep.md`** —
-> Ran the mobile app on Simulator (dev:paid + IPv4 proxy); fixed total expo-router
-> "Unmatched Route" failure caused by macOS `* 2` duplicate files; swept 128 dupes
-> repo-wide + `.gitignore` guard (PR #38). All session PRs #28/#35/#36/#37/#38 merged. Next: `/part2` issue 83.
+> **Latest session handoff: `SESSION-HANDOFF-2026-06-16-mobile-simulator-hitl-bugs.md`** —
+> Paid Simulator HITL after PR #26: documents Add Family P0 bugs (FormData upload, selfie
+> camera permission), Metro IPv4, OAuth config, and back-title cosmetic. FormData + camera
+> fixes on branch `handoff/2026-06-19-live-app-audit-and-native-upload`. Next: re-run HITL
+> to close **issue 70**.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-16-mobile-simulator-hitl-bugs.md` — Simulator HITL bug log (B1–B6): Add Family FormData + selfie errors, Metro/OAuth/back-title; next issue 70
+- `SESSION-HANDOFF-2026-06-19-live-app-audit-and-native-upload.md` — live-app-audit skill (hermes orchestration) + xcode-ios-dev skill + mobile FormData helper; next: run audit or issue 83
 - `SESSION-HANDOFF-2026-06-18-live-app-run-and-dupe-sweep.md` — ran app on Simulator; fixed expo-router total failure (macOS `* 2` dupes); repo-wide dupe sweep + gitignore guard (PR #38); all session PRs merged; servers still running; next issue 83
 - `SESSION-HANDOFF-2026-06-18-part2-issue-82-rerun-verification-gate.md` — `/part2` re-run: added `npm run check:runbook` verification gate for the HITL runbook (sections/commands/paths/ADRs/no-secrets); gate fault-injection-tested; runbook + issue 82 record it; next issue 83
 - `SESSION-HANDOFF-2026-06-18-part2-issue-82-hitl-runbook.md` — `/part2` issue 82: HITL smoke runbook foundation (`CONTEXT/local-dev/HITL-SMOKE-RUNBOOK.md` §0 + §1–§5 scaffold); markdown-only, suite green; red-team fixed non-human-measurable latency step; next issue 83
