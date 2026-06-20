@@ -11,6 +11,7 @@ a pointer map, not a re-statement — read the referenced artifacts.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-20-part1-prd-v11-issue70-gate.md` — `/part1` PRD v11 (addendum to v10): iOS-only; one new issue 88 = Add-Family photo-upload verification (Gate 0, blocks 83–87); owed 75–81 passes re-pointed to runbook §1–§5; web live-app-audit deferred; next `/part2` from issue 88
 - `SESSION-HANDOFF-2026-06-16-mobile-simulator-hitl-bugs.md` — Simulator HITL bug log (B1–B6): Add Family FormData + selfie errors, Metro/OAuth/back-title; next issue 70
 - `SESSION-HANDOFF-2026-06-19-live-app-audit-and-native-upload.md` — live-app-audit skill (hermes orchestration) + xcode-ios-dev skill + mobile FormData helper; next: run audit or issue 83
 - `SESSION-HANDOFF-2026-06-18-live-app-run-and-dupe-sweep.md` — ran app on Simulator; fixed expo-router total failure (macOS `* 2` dupes); repo-wide dupe sweep + gitignore guard (PR #38); all session PRs merged; servers still running; next issue 83
