@@ -107,3 +107,10 @@ deviation is a **FAIL → new defect issue**.
 
 ## Issues
 See `CONTEXT/issues/82`–`87` (GitHub #29–34). Dependency-ordered; start at 82.
+
+> **Addendum (PRD v11, 2026-06-20):** before executing 83–87, run the new **Gate 0**
+> issue **88** — Add-Family photo-upload verification on the iOS Simulator (closes the
+> issue-70 owed pass after the B1/B2 fix landed in `dc3f836`). v11
+> (`prd-v11-issue70-upload-verification.md`) also re-points the owed Simulator passes
+> for issues 75–81 onto runbook §1–§5 (no duplicate issues). The web `live-app-audit`
+> is out of scope and user-triggered.
