@@ -1,8 +1,14 @@
 # 0008 — Payment-transaction as verifiable parental consent (VPC)
 
-- Status: Accepted
+- Status: Accepted — **updated by [ADR-0023](0023-three-tier-monetization-and-credits.md)**
 - Date: 2026-06-09
 - Depends on: [ADR-0001](0001-photo-conditioned-likeness.md), [ADR-0006](0006-family-member-guardian-model.md), [ADR-0007](0007-data-lifecycle-and-deletion.md)
+
+> **2026-06-21 update (ADR-0023).** The VPC mechanism is now **any paid entry,
+> including the 7-day free trial** (a card-on-file is required to start the trial), not
+> "an active paid subscription" specifically. The invariant is unchanged and reinforced:
+> **no child likeness is created without a card-on-file VPC.** There is no free tier; the
+> first-open "aha" runs on a pre-baked, **baby-free** demo Story.
 
 > ⚠️ Engineering design intent, not legal advice. The COPPA/GDPR posture around
 > minors' biometric data must get a lawyer's sign-off before launch.

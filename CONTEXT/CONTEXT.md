@@ -389,22 +389,54 @@ machine-facing wording.
   voice + video + length, per `planning/pricing-and-features-2026-06-13.md`) belongs
   to the deferred **payment `/part1`**, not this wave.
 
-### Payment direction (recorded now, built later)
+## Tier
+The subscription level a Household is on. **Three paid tiers** — **Basic** ($8), **Normal**
+($15), **Plus** ($25) — entered via a **Trial**. There is **no free tier**. Each tier sets a
+monthly **Story cap**, a Family-member cap, and which capabilities (narration, video,
+**Custom art style**) are unlocked. See
+[ADR-0023](docs/adr/0023-three-tier-monetization-and-credits.md).
 
-> Decided in the 2026-06-16 grill; **not implemented this wave**. When the payment
-> `/part1` runs, plan around: **Free + one paid tier + credits** — a free tier (short
-> illustrated stories, the acquisition hook), a single paid unlock (narration, real
-> family-voice weave, video, full length), and **credit-metered overage** for extra
-> [re-rolls](#regeneration--re-roll)/[Personas](#persona). This **moves the gate** off
-> illustrations and supersedes parts of [ADR-0009](docs/adr/0009-subscription-monetization.md)
-> / [ADR-0016](docs/adr/0016-character-tier-two-tier-consent.md) — so the payment wave
-> opens with an **ADR update**, not code. Platform when it ships: **mobile/Apple IAP
-> via RevenueCat** first (ADR-0018), since the simulator is the active test surface.
+## Trial
+The **7-day free trial of Normal** that is the only entry point. **A card-on-file is
+required to start it**, which is what makes it the Verifiable Parental Consent gate
+([ADR-0008](docs/adr/0008-verifiable-parental-consent.md)): **no child likeness is created
+without it.** The first-open "aha" runs on a pre-baked, **baby-free Demo Story** before the
+card.
+
+## Story cap
+The per-Household monthly limit on generated Stories (Basic 4 / Normal 8 / Plus 20). A
+**generous ceiling**, not a hard quota most users reach — margin is protected by **breakage**
+and metering, not by a stingy cap. Enforced server-side and idempotently. Resets monthly.
+
+## Credit
+The unit that meters **cost-heavy overage** beyond a tier's included allotment — extra
+**Video pages**, extra **Custom art style** trainings, and extra
+[re-rolls](#regeneration--re-roll). Tracked in a per-Household ledger; a **failed** metered
+action **refunds** the credit and never blocks the Story. See
+[ADR-0023](docs/adr/0023-three-tier-monetization-and-credits.md).
+
+## Custom art style
+A **Plus**-tier **trained Style LoRA** (from reference images / a seed) bound to the
+Household and used as a book's **Style Bible**. A real training cost (hence credit-metered:
+1 train/mo included); on failure the Story falls back to the default Style Bible. Distinct
+from picking a preset style.
+
+## Story Context Engine
+The **deterministic selector** that assembles a bounded **story context set** for a Baby and
+feeds it to the [Prompt] builder — generalizing the Moments
+[Auto-context layer](#auto-context-layer) to roster cast, age/[Firsts], a **past-Story
+summary** (continuity / anti-repeat), and moment-photo vision-text (never raw images). Bound
+by a token budget; significant [Moments](#moment) always win on trim; the per-Baby watermark
+advances only on a generation that reaches Story text. See
+[ADR-0022](docs/adr/0022-story-context-engine.md).
 
 ---
 
-_Last updated 2026-06-16: added PRD v9 language (mobile feature wave — parity backbone,
-mobile Journal, mobile Storybook; payment deferred with Free+paid+credits direction
+_Last updated 2026-06-21: added PRD v12 language (Tier [Basic/Normal/Plus], Trial-as-entry
+[no free tier], Story cap, Credit, Custom art style [Style LoRA], Story Context Engine;
+ADR-0022 supersedes ADR-0019, ADR-0023 supersedes ADR-0009 + parts of ADR-0016 and updates
+ADR-0008). Prior update 2026-06-16: added PRD v9 language (mobile feature wave — parity
+backbone, mobile Journal, mobile Storybook; payment deferred with Free+paid+credits direction
 recorded). Prior update 2026-06-14: added PRD v8 language (Moment photo write-only + vision→text,
 Firsts, Birthday Story; ADR-0021). Prior update 2026-06-14: added Roster avatar language
 (display generated avatars, never raw photos; PRD v7, ADR-0020). Prior update 2026-06-13:

@@ -1,6 +1,6 @@
 # 0009 — Subscription monetization, metered on Personas
 
-- Status: Accepted — **but superseded-in-part / pending revision** (see note)
+- Status: **Superseded by [ADR-0023](0023-three-tier-monetization-and-credits.md)** (2026-06-21)
 - Date: 2026-06-09
 - Depends on: [ADR-0002](0002-per-persona-lora.md), [ADR-0004](0004-curated-versioned-storybook.md)
 
