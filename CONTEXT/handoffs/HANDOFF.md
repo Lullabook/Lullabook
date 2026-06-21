@@ -11,6 +11,7 @@ a pointer map, not a re-statement — read the referenced artifacts.
 
 ## Session handoffs (newest first)
 
+- `SESSION-HANDOFF-2026-06-21-part1-prd-v12-monetization-context-ux.md` — `/part1` PRD v12 (PRIORITY wave, ahead of iOS HITL): 3-tier monetization (Basic/Normal/Plus, trial-as-VPC, no free tier, credits) ADR-0023; Story Context Engine ADR-0022 (supersedes 0019); 5-tab IA + baby-hero Home dashboard; issues 89–99 (build B→A→C); next `/part2` from issue 89
 - `SESSION-HANDOFF-2026-06-20-part1-prd-v11-issue70-gate.md` — `/part1` PRD v11 (addendum to v10): iOS-only; one new issue 88 = Add-Family photo-upload verification (Gate 0, blocks 83–87); owed 75–81 passes re-pointed to runbook §1–§5; web live-app-audit deferred; next `/part2` from issue 88
 - `SESSION-HANDOFF-2026-06-16-mobile-simulator-hitl-bugs.md` — Simulator HITL bug log (B1–B6): Add Family FormData + selfie errors, Metro/OAuth/back-title; next issue 70
 - `SESSION-HANDOFF-2026-06-19-live-app-audit-and-native-upload.md` — live-app-audit skill (hermes orchestration) + xcode-ios-dev skill + mobile FormData helper; next: run audit or issue 83

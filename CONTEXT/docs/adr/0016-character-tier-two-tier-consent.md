@@ -1,8 +1,13 @@
 # 0016 — Free text-only Character tier and two-tier consent
 
-- Status: Accepted
+- Status: Accepted — **gate-line superseded by [ADR-0023](0023-three-tier-monetization-and-credits.md)**
 - Date: 2026-06-10
 - Depends on: [ADR-0001](0001-photo-conditioned-likeness.md), [ADR-0008](0008-verifiable-parental-consent.md), [ADR-0009](0009-subscription-monetization.md), [ADR-0015](0015-multi-jurisdiction-launch.md)
+
+> **2026-06-21 note (ADR-0023).** The free/paid **gate line** here is superseded by the
+> three-tier model (Basic/Normal/Plus, trial-as-entry, no free tier). The two-tier
+> **consent** reasoning (fictional Characters carry no biometric data; baby/family
+> likeness requires VPC) still holds and is reinforced by ADR-0023.
 
 ## Context
 

@@ -1,6 +1,12 @@
 # Moments feed generation as an auto-context layer
 
-Status: accepted (2026-06-13)
+Status: accepted (2026-06-13) — **generalized by [ADR-0022](0022-story-context-engine.md)**
+
+> **2026-06-21 note (ADR-0022).** The Moments auto-context layer below is now **one
+> input** to the broader **Story Context Engine** (roster, age/Firsts, past-Story
+> summary, and photo vision-text join Moments). The contract here — significant always,
+> ordinary since-last-Story, watermark advances on success only, never crosses Babies —
+> is preserved verbatim as the Moments rule inside the engine.
 
 ## Context
 
