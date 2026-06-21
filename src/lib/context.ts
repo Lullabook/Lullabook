@@ -30,6 +30,7 @@ import { VoiceClipService } from "@/services/voice-clip";
 import { MomentService } from "@/services/moment";
 import { JournalNudgeService } from "@/services/journal-nudge";
 import { PastStorySummaryService } from "@/services/past-story-summary";
+import { EntitlementService } from "@/services/entitlement";
 import { WorldService } from "@/services/world";
 
 export type RequestContext = ReturnType<typeof createRequestContext>;
@@ -63,6 +64,7 @@ export function createRequestContext() {
 
   const childSafety = new ChildSafetyService(store, moderation);
   const subscriptions = new SubscriptionService(store, stripe);
+  const entitlements = new EntitlementService(store, subscriptions);
   const personas = new PersonaService(
     store,
     fal,
@@ -77,7 +79,7 @@ export function createRequestContext() {
   const characters = new CharacterService(store, anthropic, childSafety);
   const babies = new BabyService(store);
   const familyRoster = new FamilyRosterService(store);
-  const voiceClips = new VoiceClipService(store, blobs);
+  const voiceClips = new VoiceClipService(store, blobs, entitlements);
   const moments = new MomentService(store);
   const journalNudges = new JournalNudgeService(store, moments);
   const pastStorySummary = new PastStorySummaryService(store);
@@ -98,7 +100,8 @@ export function createRequestContext() {
     useReferenceModelForMulti,
     null,
     null,
-    pastStorySummary
+    pastStorySummary,
+    entitlements
   );
   const sharing = new SharingService(store);
   const family = new FamilyService(store);
@@ -123,6 +126,7 @@ export function createRequestContext() {
     moments,
     journalNudges,
     pastStorySummary,
+    entitlements,
     world,
     personas,
     storybooks,

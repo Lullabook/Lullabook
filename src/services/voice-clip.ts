@@ -2,6 +2,7 @@ import { v4 as uuid } from "uuid";
 import type { BlobStore } from "@/adapters/types";
 import type { DataStore } from "@/db/store";
 import type { VoiceClip, VoiceConsentReceipt } from "@/domain/types";
+import type { EntitlementService } from "@/services/entitlement";
 import { ConsentEngine } from "@/services/consent-engine";
 
 export interface RecordVoiceClipInput {
@@ -17,6 +18,7 @@ export class VoiceClipService {
   constructor(
     private readonly store: DataStore,
     private readonly blobs: BlobStore,
+    private readonly entitlements: EntitlementService,
     private readonly consentEngine: ConsentEngine = new ConsentEngine()
   ) {}
 
@@ -52,6 +54,10 @@ export class VoiceClipService {
     if (!member) throw new Error("Member not found");
     const persona = this.store.getPersona(input.personaId, input.memberId);
     if (!persona) throw new Error("Persona not found");
+
+    // ADR-0023 / issue 91: narration (real-voice weave) is a Normal+
+    // capability. A Basic Household cannot upload voice material — 403.
+    this.entitlements.requireCapability(member.familyId, "narrate");
 
     const consent = this.store.getVoiceConsentForPersona(input.personaId);
     if (!consent) {

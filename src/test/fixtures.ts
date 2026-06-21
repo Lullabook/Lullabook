@@ -30,6 +30,7 @@ import { VoiceClipService } from "@/services/voice-clip";
 import { MomentService } from "@/services/moment";
 import { JournalNudgeService } from "@/services/journal-nudge";
 import { PastStorySummaryService } from "@/services/past-story-summary";
+import { EntitlementService } from "@/services/entitlement";
 import { WorldService } from "@/services/world";
 
 export function createTestContext() {
@@ -48,6 +49,7 @@ export function createTestContext() {
 
   const childSafety = new ChildSafetyService(store, moderation);
   const subscriptions = new SubscriptionService(store, stripe);
+  const entitlements = new EntitlementService(store, subscriptions);
   const personas = new PersonaService(
     store,
     fal,
@@ -62,7 +64,7 @@ export function createTestContext() {
   const characters = new CharacterService(store, anthropic, childSafety);
   const babies = new BabyService(store);
   const familyRoster = new FamilyRosterService(store);
-  const voiceClips = new VoiceClipService(store, blobs);
+  const voiceClips = new VoiceClipService(store, blobs, entitlements);
   const moments = new MomentService(store);
   const journalNudges = new JournalNudgeService(store, moments);
   const pastStorySummary = new PastStorySummaryService(store);
@@ -79,7 +81,8 @@ export function createTestContext() {
     false,
     video,
     null,
-    pastStorySummary
+    pastStorySummary,
+    entitlements
   );
   const multiStorybooks = new StorybookService(
     store,
@@ -93,7 +96,8 @@ export function createTestContext() {
     true,
     video,
     null,
-    pastStorySummary
+    pastStorySummary,
+    entitlements
   );
   const sharing = new SharingService(store);
   const family = new FamilyService(store);
@@ -126,6 +130,7 @@ export function createTestContext() {
     moments,
     journalNudges,
     pastStorySummary,
+    entitlements,
     world,
     storybooks,
     multiStorybooks,
