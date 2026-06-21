@@ -150,8 +150,14 @@ export class EntitlementService {
    * Gate: creating another family-member (adult likeness — each is a LoRA, the
    * biggest cost) must stay within the tier's member cap, else 403. Counts the
    * family's existing adult personas (RLS-checked via the actor).
+   *
+   * A no-op for unentitled families (`tier === "none"`) — the subscription/VPC
+   * gate (issue 92) blocks that path separately; the member cap only constrains
+   * *entitled* households.
    */
   requireMemberSlot(familyId: string, actorMemberId: string): void {
+    const tier = this.getTier(familyId);
+    if (tier === "none") return;
     const ent = this.getEntitlement(familyId);
     if (ent.memberCap === Infinity) return;
     const adults = this.store

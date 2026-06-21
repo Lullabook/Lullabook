@@ -14,6 +14,8 @@ import type {
   NotificationAdapter,
   PdfAdapter,
   PersonaCreatePayload,
+  RevenueCatPurchaseAdapter,
+  RevenueCatPurchaseResult,
   StripeAdapter,
   VideoAdapter,
   VideoClipResult,
@@ -134,6 +136,7 @@ export class FakeFal implements FalAdapter {
   public idempotencyKeys: string[] = [];
   public failImageOnPage: number | null = null;
   public failPages = new Set<number>();
+  public failTraining = false;
   public currentPage = 0;
   private jobs = new Map<string, FalTrainWebhook>();
   private imageResultsByKey = new Map<string, FalImageResult>();
@@ -143,9 +146,9 @@ export class FakeFal implements FalAdapter {
     const jobId = `job-${this.trainCalls}`;
     this.jobs.set(jobId, {
       jobId,
-      status: "ready",
-      loraWeightKey: `lora/${jobId}`,
-      sampleImageUrls: [`https://example.com/sample-${jobId}.png`],
+      status: this.failTraining ? "failed" : "ready",
+      loraWeightKey: this.failTraining ? undefined : `lora/${jobId}`,
+      sampleImageUrls: this.failTraining ? undefined : [`https://example.com/sample-${jobId}.png`],
     });
     return { jobId, status: "queued" };
   }
@@ -470,5 +473,47 @@ export class StubModeration implements ModerationAdapter {
 export class StubLiveness implements LivenessAdapter {
   async verifySelfie(_photos: Buffer[], _selfie: Buffer): Promise<{ matched: boolean; confidence: number }> {
     throw new Error("Liveness adapter not configured");
+  }
+}
+
+export class FakeRevenueCat implements RevenueCatPurchaseAdapter {
+  public trialStarts: { familyId: string; tier: string }[] = [];
+  public purchases: { familyId: string; tier: string }[] = [];
+  public syncCalls = 0;
+  public simulateOutage = false;
+  private entitlements = new Map<string, { tier: string; isTrial: boolean }>();
+
+  async startTrial(
+    familyId: string,
+    tier: string,
+    options: { hasPaymentMethod: boolean }
+  ): Promise<RevenueCatPurchaseResult> {
+    if (!options.hasPaymentMethod) {
+      throw new Error("A payment method is required to start a trial (VPC gate)");
+    }
+    this.trialStarts.push({ familyId, tier });
+    const entitlementId = `rc_ent_${familyId}_${tier}`;
+    this.entitlements.set(familyId, { tier, isTrial: true });
+    return { entitlementId, isTrial: true };
+  }
+
+  async purchase(
+    familyId: string,
+    tier: string,
+    options: { hasPaymentMethod: boolean }
+  ): Promise<RevenueCatPurchaseResult> {
+    if (!options.hasPaymentMethod) {
+      throw new Error("A payment method is required to purchase");
+    }
+    this.purchases.push({ familyId, tier });
+    const entitlementId = `rc_ent_${familyId}_${tier}`;
+    this.entitlements.set(familyId, { tier, isTrial: false });
+    return { entitlementId, isTrial: false };
+  }
+
+  async fetchEntitlement(familyId: string): Promise<{ tier: string; isTrial: boolean } | null> {
+    this.syncCalls++;
+    if (this.simulateOutage) return null;
+    return this.entitlements.get(familyId) ?? null;
   }
 }

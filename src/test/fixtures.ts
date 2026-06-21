@@ -6,6 +6,7 @@ import {
   FakeModeration,
   FakeNotifications,
   FakePdf,
+  FakeRevenueCat,
   FakeStripe,
   FakeVideo,
   FakeWorkflow,
@@ -31,6 +32,11 @@ import { MomentService } from "@/services/moment";
 import { JournalNudgeService } from "@/services/journal-nudge";
 import { PastStorySummaryService } from "@/services/past-story-summary";
 import { EntitlementService } from "@/services/entitlement";
+import { RevenueCatPurchaseService } from "@/services/revenuecat-purchase";
+import { StoryCapService } from "@/services/story-cap";
+import { CreditLedgerService } from "@/services/credit-ledger";
+import { CustomStyleService } from "@/services/custom-style";
+import { HomeDashboardService } from "@/services/home-dashboard";
 import { WorldService } from "@/services/world";
 
 export function createTestContext() {
@@ -46,10 +52,15 @@ export function createTestContext() {
   const notifications = new FakeNotifications();
   const stripe = new FakeStripe();
   const pdf = new FakePdf();
+  const revenuecat = new FakeRevenueCat();
 
   const childSafety = new ChildSafetyService(store, moderation);
   const subscriptions = new SubscriptionService(store, stripe);
   const entitlements = new EntitlementService(store, subscriptions);
+  const revenuecatPurchases = new RevenueCatPurchaseService(store, subscriptions, revenuecat, entitlements);
+  const storyCap = new StoryCapService(store, entitlements);
+  const credits = new CreditLedgerService(store, entitlements);
+  const customStyles = new CustomStyleService(store, fal, workflow, blobs, entitlements, credits);
   const personas = new PersonaService(
     store,
     fal,
@@ -59,7 +70,8 @@ export function createTestContext() {
     workflow,
     notifications,
     subscriptions,
-    childSafety
+    childSafety,
+    entitlements
   );
   const characters = new CharacterService(store, anthropic, childSafety);
   const babies = new BabyService(store);
@@ -106,6 +118,7 @@ export function createTestContext() {
   const coldStart = new ColdStartService(store, storybooks);
   const onboarding = new OnboardingService(store);
   const textStories = new TextStoryService(store, anthropic, childSafety);
+  const homeDashboard = new HomeDashboardService(store, moments, storybooks);
 
   return {
     store,
@@ -120,6 +133,7 @@ export function createTestContext() {
     notifications,
     stripe,
     pdf,
+    revenuecat,
     childSafety,
     subscriptions,
     characters,
@@ -131,6 +145,11 @@ export function createTestContext() {
     journalNudges,
     pastStorySummary,
     entitlements,
+    revenuecatPurchases,
+    storyCap,
+    credits,
+    customStyles,
+    homeDashboard,
     world,
     storybooks,
     multiStorybooks,
@@ -297,8 +316,13 @@ export async function seedMayaWorld(
   if (!member) throw new Error("Member not found");
 
   // Subscription + consent so Baby Persona + illustrated generation are allowed.
+  // Set tier to Plus so the 5-adult roster fits within the member cap (issue 93).
   if (!ctx.subscriptions.isActive(member.familyId)) {
     withActiveSubscription(ctx, member);
+  }
+  const sub = ctx.store.getSubscription(member.familyId);
+  if (sub) {
+    ctx.store.saveSubscription({ ...sub, tier: "plus", updatedAt: new Date() });
   }
   ctx.subscriptions.recordConsent(member.familyId, member.id, member.jurisdiction);
 

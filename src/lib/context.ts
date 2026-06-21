@@ -9,6 +9,7 @@ import { PermissiveDevModeration, RealModerationAdapter } from "@/adapters/moder
 import { RealNotificationAdapter } from "@/adapters/notifications";
 import { PdfLibAdapter } from "@/adapters/pdf";
 import { RealStripeAdapter } from "@/adapters/stripe";
+import { RealRevenueCatPurchaseAdapter } from "@/adapters/revenuecat-purchase";
 import { SupabaseDataStore } from "@/db/supabase-store";
 import { createServiceClient } from "@/lib/supabase";
 import { BabyService } from "@/services/baby";
@@ -31,6 +32,11 @@ import { MomentService } from "@/services/moment";
 import { JournalNudgeService } from "@/services/journal-nudge";
 import { PastStorySummaryService } from "@/services/past-story-summary";
 import { EntitlementService } from "@/services/entitlement";
+import { RevenueCatPurchaseService } from "@/services/revenuecat-purchase";
+import { StoryCapService } from "@/services/story-cap";
+import { CreditLedgerService } from "@/services/credit-ledger";
+import { CustomStyleService } from "@/services/custom-style";
+import { HomeDashboardService } from "@/services/home-dashboard";
 import { WorldService } from "@/services/world";
 
 export type RequestContext = ReturnType<typeof createRequestContext>;
@@ -61,6 +67,15 @@ export function createRequestContext() {
   const notifications = new RealNotificationAdapter();
   const stripe = new RealStripeAdapter();
   const pdf = new PdfLibAdapter();
+  const revenuecatPurchases = new RevenueCatPurchaseService(
+    store,
+    subscriptions,
+    new RealRevenueCatPurchaseAdapter(),
+    entitlements
+  );
+  const storyCap = new StoryCapService(store, entitlements);
+  const credits = new CreditLedgerService(store, entitlements);
+  const customStyles = new CustomStyleService(store, fal, workflow, blobs, entitlements, credits);
 
   const childSafety = new ChildSafetyService(store, moderation);
   const subscriptions = new SubscriptionService(store, stripe);
@@ -74,7 +89,8 @@ export function createRequestContext() {
     workflow,
     notifications,
     subscriptions,
-    childSafety
+    childSafety,
+    entitlements
   );
   const characters = new CharacterService(store, anthropic, childSafety);
   const babies = new BabyService(store);
@@ -111,6 +127,7 @@ export function createRequestContext() {
   const onboarding = new OnboardingService(store);
   const roster = new PersonaRosterService(store);
   const textStories = new TextStoryService(store, anthropic, childSafety);
+  const homeDashboard = new HomeDashboardService(store, moments, storybooks);
 
   return {
     store,
@@ -127,6 +144,11 @@ export function createRequestContext() {
     journalNudges,
     pastStorySummary,
     entitlements,
+    revenuecatPurchases,
+    storyCap,
+    credits,
+    customStyles,
+    homeDashboard,
     world,
     personas,
     storybooks,

@@ -30,6 +30,7 @@ const requiredSections = [
   "## Defect path",
   "## §1 Auth & account",
   "## §2 Family & roster",
+  "### §2.x Add-Family photo upload (issue 70)",
   "## §3 Journal / Firsts / Moments",
   "## §4 Storybook generate & reader",
   "## §5 Failure & boundary sweep",

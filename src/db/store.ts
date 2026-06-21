@@ -4,6 +4,7 @@ import type {
   BabyPersonBond,
   Character,
   ConsentReceipt,
+  CustomStyle,
   Family,
   LightConsentReceipt,
   Member,
@@ -58,6 +59,7 @@ export class DataStore {
   autoContextWatermarks = new Map<string, BabyAutoContextWatermark>();
   babyPastStorySummaries = new Map<string, BabyPastStorySummary>();
   journalNudgeStates = new Map<string, JournalNudgeState>();
+  customStyles = new Map<string, CustomStyle>();
 
   createFamily(): Family {
     const family: Family = { id: uuid(), createdAt: new Date() };
@@ -546,6 +548,9 @@ export class DataStore {
     }
     for (const [id, s] of this.journalNudgeStates) {
       if (memberIds.has(s.memberId)) this.journalNudgeStates.delete(id);
+    }
+    for (const [id, s] of this.customStyles) {
+      if (s.familyId === familyId) this.customStyles.delete(id);
     }
 
     this.subscriptions.delete(familyId);

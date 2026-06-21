@@ -181,3 +181,29 @@ export interface PdfAdapter {
     pages: { text: string; illustrationUrl: string }[];
   }): Promise<Buffer>;
 }
+
+/** RevenueCat purchase/entitlement result. */
+export interface RevenueCatPurchaseResult {
+  /** The entitlement id RevenueCat associates with the purchase. */
+  entitlementId: string;
+  /** Whether this was a trial start vs a direct purchase. */
+  isTrial: boolean;
+}
+
+/** RevenueCat adapter for IAP purchase + entitlement sync (issue 92). */
+export interface RevenueCatPurchaseAdapter {
+  /** Start a trial for the given tier; requires card-on-file. */
+  startTrial(
+    familyId: string,
+    tier: string,
+    options: { hasPaymentMethod: boolean }
+  ): Promise<RevenueCatPurchaseResult>;
+  /** Direct purchase (non-trial) of a tier. */
+  purchase(
+    familyId: string,
+    tier: string,
+    options: { hasPaymentMethod: boolean }
+  ): Promise<RevenueCatPurchaseResult>;
+  /** Sync the current entitlement from RevenueCat; returns null on outage. */
+  fetchEntitlement(familyId: string): Promise<{ tier: string; isTrial: boolean } | null>;
+}

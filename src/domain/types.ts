@@ -364,3 +364,16 @@ export interface GeneratedStory {
   scenes: Scene[];
   styleBible: StyleBible;
 }
+
+/** A Plus-tier trained Style LoRA bound to a Household (issue 95 / ADR-0023). */
+export type CustomStyleStatus = "generating" | "ready" | "failed";
+
+export interface CustomStyle {
+  id: string;
+  familyId: string;
+  createdByMemberId: string;
+  seed: string;
+  status: CustomStyleStatus;
+  loraWeightKey: string | null;
+  createdAt: Date;
+}
