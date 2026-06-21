@@ -86,8 +86,9 @@ export class PastStorySummaryService {
     const baby = this.store.getBaby(babyId, actorMemberId);
     if (!baby) throw new Error("Baby not found");
 
+    // Summaries arrive oldest→newest (insertion order); take the newest-N.
     const all = this.store.getBabyPastStorySummaries(babyId, actorMemberId);
-    const window = all.slice(0, PAST_STORY_ROLLING_WINDOW);
+    const window = all.slice(-PAST_STORY_ROLLING_WINDOW);
     if (window.length === 0) return undefined;
 
     const combined = window.map((w) => w.summary).join(" | ");

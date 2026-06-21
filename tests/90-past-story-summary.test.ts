@@ -75,6 +75,31 @@ describe("90 — Past-Story continuity summary (anti-repeat)", () => {
     expect(rolling!.length).toBeLessThanOrEqual(ROLLING_SUMMARY_MAX_CHARS);
   });
 
+  it("rolling window keeps the NEWEST N on identical createdAt (tie-break by insertion)", async () => {
+    const ctx = createTestContext();
+    const guardian = await subscribedGuardian(ctx);
+    const baby = ctx.babies.addBaby({ memberId: guardian.id, displayName: "Maya" });
+    const total = PAST_STORY_ROLLING_WINDOW + 2;
+    // All share one timestamp (rapid back-to-back finalizations); insertion
+    // order is the tiebreaker — later insert = newer.
+    const sameTs = new Date(Date.UTC(2026, 0, 1));
+    for (let i = 0; i < total; i++) {
+      ctx.store.saveBabyPastStorySummary({
+        id: `tie-${i}`,
+        familyId: guardian.familyId,
+        babyId: baby.id,
+        storybookId: `book-${i}`,
+        summary: `Theme: Story number ${i}`,
+        createdAt: sameTs,
+      });
+    }
+
+    const rolling = ctx.pastStorySummary.getRollingSummary(guardian.id, baby.id);
+    expect(rolling).toContain(`Story number ${total - 1}`);
+    expect(rolling).toContain(`Story number ${total - PAST_STORY_ROLLING_WINDOW}`);
+    expect(rolling).not.toContain("Story number 0");
+  });
+
   it("engine receives the rolling summary and the Prompt reflects an anti-repeat instruction", async () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);

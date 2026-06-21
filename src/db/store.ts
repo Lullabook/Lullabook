@@ -193,13 +193,16 @@ export class DataStore {
     this.autoContextWatermarks.set(watermark.babyId, watermark);
   }
 
-  /** Per-Baby rolling past-Story summaries, newest first (issue 90). RLS-gated. */
+  /**
+   * Per-Baby rolling past-Story summaries in insertion order (oldest→newest).
+   * Insertion order is the monotonic tiebreaker: when two summaries share a
+   * `createdAt` ms (e.g. rapid back-to-back finalizations), the one inserted
+   * later is newer, so the service's `.slice(-N)` keeps the true newest-N. RLS-gated.
+   */
   getBabyPastStorySummaries(babyId: string, actorMemberId: string): BabyPastStorySummary[] {
     const baby = this.getBaby(babyId, actorMemberId); // throws RlsViolationError across families
     if (!baby) return [];
-    return [...this.babyPastStorySummaries.values()]
-      .filter((s) => s.babyId === babyId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return [...this.babyPastStorySummaries.values()].filter((s) => s.babyId === babyId);
   }
 
   saveBabyPastStorySummary(summary: BabyPastStorySummary): void {
