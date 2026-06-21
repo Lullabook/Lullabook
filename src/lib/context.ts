@@ -67,6 +67,8 @@ export function createRequestContext() {
   const notifications = new RealNotificationAdapter();
   const stripe = new RealStripeAdapter();
   const pdf = new PdfLibAdapter();
+  const subscriptions = new SubscriptionService(store, stripe);
+  const entitlements = new EntitlementService(store, subscriptions);
   const revenuecatPurchases = new RevenueCatPurchaseService(
     store,
     subscriptions,
@@ -78,8 +80,6 @@ export function createRequestContext() {
   const customStyles = new CustomStyleService(store, fal, workflow, blobs, entitlements, credits);
 
   const childSafety = new ChildSafetyService(store, moderation);
-  const subscriptions = new SubscriptionService(store, stripe);
-  const entitlements = new EntitlementService(store, subscriptions);
   const personas = new PersonaService(
     store,
     fal,

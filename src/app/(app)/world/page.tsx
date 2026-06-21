@@ -4,6 +4,7 @@ import { RosterAvatar } from "@/components/v2/roster-avatar";
 import { BookCover } from "@/components/v2/book-cover";
 import { DevSeedButton } from "@/components/v2/dev-seed-button";
 import { WorldJournalCards } from "@/components/v2/world-journal-cards";
+import { HomeDashboard } from "@/components/v2/home-dashboard";
 import { requireAuthedContext } from "@/lib/auth";
 import { bookHref } from "@/lib/book-nav";
 import { castLabel } from "@/lib/cast-label";
@@ -57,6 +58,8 @@ export default async function WorldPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
+  const dashboard = ctx.homeDashboard.getDashboard(member.id, baby.id);
+
   return (
     <div className="v2-stack">
       <WorldJournalCards
@@ -90,54 +93,7 @@ export default async function WorldPage() {
         }
       />
 
-      <section className="v2-hero">
-        <span
-          className="v2-hero__twinkle"
-          style={{ top: 34, left: 60, width: 6, height: 6 }}
-          aria-hidden="true"
-        />
-        <span
-          className="v2-hero__twinkle"
-          style={{
-            top: 70,
-            right: 90,
-            width: 5,
-            height: 5,
-            background: "#FFF3D6",
-            animationDelay: "0.5s",
-          }}
-          aria-hidden="true"
-        />
-        <span
-          className="v2-hero__twinkle"
-          style={{
-            bottom: 40,
-            left: 120,
-            width: 5,
-            height: 5,
-            animationDelay: "1s",
-          }}
-          aria-hidden="true"
-        />
-
-        <p className="v2-hero__eyebrow">✨ A growing world starring</p>
-        <div className="v2-hero__star" aria-hidden="true">
-          {babyInitial}
-        </div>
-        <h1 className="v2-hero__title">{baby.displayName}&apos;s World</h1>
-        <p className="v2-hero__lead">
-          A whole world of stories starring {baby.displayName} — and everyone who
-          loves them. Built page by page, voice by voice.
-        </p>
-        <div className="v2-hero__stats">
-          <span className="v2-hero__stat">💛 {familyCount} family</span>
-          <span className="v2-hero__stat">🐻 {characterCount} characters</span>
-          <span className="v2-hero__stat">📚 {storyCount} stories</span>
-        </div>
-        <Link className="v2-btn v2-btn--cream" href="/storybooks/new" style={{ marginTop: 24 }}>
-          ✨ Start a new story
-        </Link>
-      </section>
+      <HomeDashboard dashboard={dashboard} />
 
       <section>
         <div className="v2-section-head">

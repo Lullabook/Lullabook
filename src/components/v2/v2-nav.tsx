@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { V2_NAV } from "@/components/v2/tokens";
+import { tabForPath } from "@/components/nav-links";
 
 export function V2Nav() {
   const pathname = usePathname();
@@ -10,9 +11,7 @@ export function V2Nav() {
   return (
     <nav className="v2-nav" aria-label="Primary">
       {V2_NAV.map((item) => {
-        const active =
-          pathname === item.href ||
-          (item.href !== "/world" && pathname.startsWith(item.href));
+        const active = tabForPath(pathname) === item.label;
         return (
           <Link
             key={item.href}

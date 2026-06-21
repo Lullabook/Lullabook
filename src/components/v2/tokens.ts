@@ -106,12 +106,11 @@ export const V2_FONTS = {
 } as const;
 
 export const V2_NAV = [
-  { href: "/world", icon: "☀️", label: "World" },
+  { href: "/world", icon: "☀️", label: "Home" },
   { href: "/stories", icon: "📚", label: "Stories" },
   { href: "/storybooks/new", icon: "✨", label: "Create" },
   { href: "/family", icon: "💛", label: "Family" },
-  { href: "/characters", icon: "🐻", label: "Characters" },
-  { href: "/daily", icon: "📔", label: "Daily Life" },
+  { href: "/account", icon: "⚙️", label: "Settings" },
 ] as const;
 
 export const AVATAR_GRADIENTS = [

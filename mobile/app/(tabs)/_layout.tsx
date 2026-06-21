@@ -27,14 +27,35 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Home",
+          tabBarIcon: ({ focused }) => <TabIcon emoji="☀️" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="stories"
+        options={{
+          title: "Stories",
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📚" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="create"
+        options={{
+          title: "Create",
+          tabBarIcon: ({ focused }) => <TabIcon emoji="✨" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="family"
+        options={{
+          title: "Family",
           tabBarIcon: ({ focused }) => <TabIcon emoji="💛" focused={focused} />,
         }}
       />
       <Tabs.Screen
-        name="two"
+        name="settings"
         options={{
-          title: "More",
-          tabBarIcon: ({ focused }) => <TabIcon emoji="✨" focused={focused} />,
+          title: "Settings",
+          tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" focused={focused} />,
         }}
       />
     </Tabs>
