@@ -29,6 +29,7 @@ import { TextStoryService } from "@/services/text-story";
 import { VoiceClipService } from "@/services/voice-clip";
 import { MomentService } from "@/services/moment";
 import { JournalNudgeService } from "@/services/journal-nudge";
+import { PastStorySummaryService } from "@/services/past-story-summary";
 import { WorldService } from "@/services/world";
 
 export function createTestContext() {
@@ -64,6 +65,7 @@ export function createTestContext() {
   const voiceClips = new VoiceClipService(store, blobs);
   const moments = new MomentService(store);
   const journalNudges = new JournalNudgeService(store, moments);
+  const pastStorySummary = new PastStorySummaryService(store);
   const world = new WorldService(store, babies, familyRoster);
   const storybooks = new StorybookService(
     store,
@@ -75,7 +77,9 @@ export function createTestContext() {
     subscriptions,
     classicCatalog,
     false,
-    video
+    video,
+    null,
+    pastStorySummary
   );
   const multiStorybooks = new StorybookService(
     store,
@@ -87,7 +91,9 @@ export function createTestContext() {
     subscriptions,
     classicCatalog,
     true,
-    video
+    video,
+    null,
+    pastStorySummary
   );
   const sharing = new SharingService(store);
   const family = new FamilyService(store);
@@ -119,6 +125,7 @@ export function createTestContext() {
     voiceClips,
     moments,
     journalNudges,
+    pastStorySummary,
     world,
     storybooks,
     multiStorybooks,

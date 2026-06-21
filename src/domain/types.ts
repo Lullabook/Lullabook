@@ -115,6 +115,17 @@ export interface BabyAutoContextWatermark {
   lastStoryAt: Date | null;
 }
 
+/** Per-Baby rolling continuity/anti-repeat summary of a finalized Story (issue 90). */
+export interface BabyPastStorySummary {
+  id: string;
+  familyId: string;
+  babyId: string;
+  storybookId: string;
+  /** Bounded text: theme + cast + a truncated beats excerpt. No raw photo data. */
+  summary: string;
+  createdAt: Date;
+}
+
 export type JournalNudgeKind = "daily_dismiss" | "weekly_seen";
 
 /** Per-member per-Baby nudge suppression (issues 53, 55). */
