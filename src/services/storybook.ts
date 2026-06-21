@@ -13,6 +13,10 @@ import type { Brief, GeneratedStory, PageGenerationStatus, Storybook } from "@/d
 import { readyPageFloor, resolvePageCount } from "@/domain/story-type";
 import { ChildSafetyService } from "@/services/child-safety";
 import { AutoContextService } from "@/services/auto-context";
+import {
+  ContextSelector,
+  StoryContextSelector,
+} from "@/services/context-selector";
 import type { SubscriptionService } from "@/services/subscription";
 
 const FREE_REROLL_BUDGET = 5;
@@ -20,6 +24,9 @@ const FREE_REROLL_BUDGET = 5;
 type PersonaRecord = NonNullable<ReturnType<DataStore["getPersona"]>>;
 
 export class StorybookService {
+  private readonly autoContext: AutoContextService;
+  private readonly contextSelector: ContextSelector;
+
   constructor(
     private readonly store: DataStore,
     private readonly anthropic: AnthropicAdapter,
@@ -30,8 +37,16 @@ export class StorybookService {
     private readonly subscriptions: SubscriptionService,
     private readonly classicCatalog: ClassicCatalog,
     private readonly useReferenceModelForMulti = false,
-    private readonly video: VideoAdapter | null = null
-  ) {}
+    private readonly video: VideoAdapter | null = null,
+    contextSelector: ContextSelector | null = null
+  ) {
+    // ADR-0022: the Story Context Engine generalizes the ADR-0019 Moments
+    // auto-context layer. AutoContextService keeps owning the watermark; the
+    // selector composes it and layers roster/age/firsts/past-story/vision-text.
+    this.autoContext = new AutoContextService(store);
+    this.contextSelector =
+      contextSelector ?? new StoryContextSelector(store, this.autoContext);
+  }
 
   private normalizeBrief(memberId: string, brief: Brief): Brief {
     const member = this.store.members.get(memberId);
@@ -191,9 +206,12 @@ export class StorybookService {
 
     let momentContext: string | undefined;
     if (brief.babyId) {
-      const autoContext = new AutoContextService(this.store);
-      const ctxSet = autoContext.buildSet(memberId, brief.babyId);
-      momentContext = ctxSet.promptBlock || undefined;
+      const contextSet = await this.contextSelector.selectForBaby(
+        memberId,
+        brief.babyId,
+        brief.starringPersonaIds
+      );
+      momentContext = contextSet.promptBlock || undefined;
     }
 
     const generateStory = storybook.classicId
@@ -305,7 +323,7 @@ export class StorybookService {
 
     const persistedAfterText = this.store.getPersistedGeneration(storybookId);
     if (persistedAfterText?.story.pages?.length && brief.babyId) {
-      new AutoContextService(this.store).advanceWatermark(brief.babyId);
+      this.autoContext.advanceWatermark(brief.babyId);
     }
 
     // Read back the persisted pass, never an in-process variable: on an
