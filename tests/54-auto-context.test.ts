@@ -70,7 +70,7 @@ describe("54 — auto-context personalization layer", () => {
       false
     );
 
-    const call = ctx.anthropic.calls.at(-1);
+    const call = ctx.anthropic.calls.at(-1) as { momentContext?: string } | undefined;
     expect(call?.momentContext).toContain("Before story");
     expect(ctx.store.getStorybook(book.id, guardian.id)?.status).not.toBe("failed");
   });

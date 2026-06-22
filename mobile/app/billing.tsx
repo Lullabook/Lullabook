@@ -108,7 +108,7 @@ function TierCard({
       </View>
       <Pressable
         style={[st.chooseBtn, tier.isRecommended ? { backgroundColor: C.primary } : { borderColor: C.primary, borderWidth: 1 }]}
-        onPress={() => router.push("/account")}
+        onPress={() => router.dismiss()}
         accessibilityRole="button"
         accessibilityLabel={`Choose ${tier.label}`}
       >

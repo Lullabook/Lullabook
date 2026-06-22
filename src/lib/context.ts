@@ -3,8 +3,11 @@ import { createBlobStore } from "@/lib/create-blob-store";
 import { CuratedClassicCatalog } from "@/adapters/classic-catalog";
 import { optionalEnv } from "@/adapters/env";
 import { RealFalAdapter } from "@/adapters/fal";
+import { DevFalFallbackAdapter } from "@/adapters/dev-fal-fallback";
+import { FakeLiveness } from "@/adapters/fakes";
 import { createWorkflowAdapter } from "@/lib/create-workflow-adapter";
 import { RekognitionLivenessAdapter } from "@/adapters/liveness";
+import { shouldDevBypassLiveness, shouldDevFalFallback } from "@/lib/dev-bypass";
 import { PermissiveDevModeration, RealModerationAdapter } from "@/adapters/moderation";
 import { RealNotificationAdapter } from "@/adapters/notifications";
 import { PdfLibAdapter } from "@/adapters/pdf";
@@ -53,7 +56,13 @@ export function createRequestContext() {
 
   const anthropic = new RealAnthropicAdapter();
   const classicCatalog = new CuratedClassicCatalog();
-  const fal = new RealFalAdapter();
+  // Issue 108: dev fal fallback — in dev with DEV_FAL_FALLBACK=true and no
+  // FAL_API_KEY, wrap the real adapter so training returns a placeholder
+  // `ready` result (persona reaches `ready` without live fal keys). Double-
+  // gated, inert in production.
+  const fal = shouldDevFalFallback() && !optionalEnv("FAL_API_KEY")
+    ? new DevFalFallbackAdapter()
+    : new RealFalAdapter();
   // ADR-0010: real classifiers in production (fail closed). Locally, when no
   // Sightengine account is configured, fall back to a permissive dev adapter
   // so the app is clickable — never in production.
@@ -61,7 +70,12 @@ export function createRequestContext() {
     optionalEnv("SIGHTENGINE_API_USER") || process.env.NODE_ENV === "production"
       ? new RealModerationAdapter()
       : new PermissiveDevModeration();
-  const liveness = new RekognitionLivenessAdapter();
+  // Issue 108: dev liveness bypass — in dev with DEV_LIVENESS_BYPASS=true, wire
+  // FakeLiveness so the Simulator can create an Adult Persona from library
+  // photos + a library selfie without Rekognition. Double-gated, inert in prod.
+  const liveness = shouldDevBypassLiveness()
+    ? new FakeLiveness()
+    : new RekognitionLivenessAdapter();
   const blobs = createBlobStore();
   const workflow = createWorkflowAdapter();
   const notifications = new RealNotificationAdapter();

@@ -42,6 +42,19 @@ export default function AddFamilyScreen() {
   async function takeSelfie() {
     setError(null);
     try {
+      // Issue 108: in dev (__DEV__), allow picking the selfie from the photo
+      // library instead of requiring the camera (which doesn't work in the
+      // iOS Simulator). In production, always use the camera (liveness).
+      if (__DEV__) {
+        const res = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          quality: 0.9,
+          allowsEditing: true,
+          aspect: [1, 1],
+        });
+        if (!res.canceled) setSelfie(imagePart(res.assets[0], "selfie.jpg"));
+        return;
+      }
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
         setError("Camera access is required for the consent selfie.");

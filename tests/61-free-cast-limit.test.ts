@@ -22,8 +22,6 @@ describe("61 — free cast slot limits", () => {
           name: `Friend ${i}`,
           isFictional: true,
           topics: ["play"],
-          personality: "gentle",
-          ageFeel: "young",
         },
         attestation: "fictional",
       });

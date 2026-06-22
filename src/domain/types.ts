@@ -49,7 +49,7 @@ export interface Baby {
   /** Calendar date YYYY-MM-DD for birthday-story offers (issue 64). */
   birthDate: string | null;
   /** Parent-editable daily schedule; null → app default. */
-  dailyRoutine: import("@/domain/daily-types").RoutineEntry[] | null;
+  dailyRoutine: import("./daily-types").RoutineEntry[] | null;
   rosterGroupId: string;
   rosterScope: RosterScope;
   isDefault: boolean;
@@ -99,7 +99,7 @@ export interface Moment {
   occurredOn: string;
   isSignificant: boolean;
   /** UI category from the Daily capture form (design drop-in). */
-  momentType: import("@/domain/daily-types").MomentType;
+  momentType: import("./daily-types").MomentType;
   createdAt: Date;
 }
 

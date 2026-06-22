@@ -108,9 +108,9 @@ export default function AccountScreen() {
           ))}
         </View>
         {subscribed ? (
-          <GhostButton title="Manage billing" onPress={() => setNotice("Billing is active in this paid simulator build. App Store billing opens through RevenueCat in TestFlight.")} />
+          <GhostButton title="Manage billing" onPress={() => router.push("/billing")} />
         ) : (
-          <PrimaryButton title="✨ Upgrade to Illustrated" onPress={() => setNotice("This local app is running the free backend. Restart with npm run dev:paid to test the paid Subscription state.")} />
+          <PrimaryButton title="✨ Upgrade to Illustrated" onPress={() => router.push("/billing")} />
         )}
       </Card>
 

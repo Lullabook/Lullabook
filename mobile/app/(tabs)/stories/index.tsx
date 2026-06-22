@@ -63,7 +63,7 @@ export default function StorybookLibraryScreen() {
         <Lead>Illustrated books you&apos;ve generated — tap to read or watch them finish.</Lead>
       </View>
 
-      <PrimaryButton title="✨ New Storybook" onPress={() => router.push("/storybooks/new" as never)} />
+      <PrimaryButton title="✨ New Storybook" onPress={() => router.push("/create" as never)} />
 
       {error ? (
         <Card style={st.errorCard}>
@@ -79,7 +79,7 @@ export default function StorybookLibraryScreen() {
         books.map((book) => (
           <Pressable
             key={book.id}
-            onPress={() => router.push(`/storybooks/${book.id}` as never)}
+            onPress={() => router.push(`/stories/${book.id}` as never)}
             style={st.row}
           >
             <View style={st.cover}>

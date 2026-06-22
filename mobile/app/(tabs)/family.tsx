@@ -3,12 +3,14 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead, Card } from "@/components/maya-ui";
 import { RosterAvatar } from "@/components/roster-avatar";
-import { fetchHome, type HomeResponse } from "@/lib/api";
+import { fetchHome, seedDemo, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
 
 export default function FamilyTab() {
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [seedMsg, setSeedMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -29,6 +31,27 @@ export default function FamilyTab() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Issue 107: dev-only seed button. __DEV__ is true in Expo dev builds, false
+  // in production/TestFlight. Calls the double-gated /api/dev/seed route.
+  async function handleSeed() {
+    if (seeding) return;
+    setSeeding(true);
+    setSeedMsg(null);
+    try {
+      const result = await seedDemo();
+      setSeedMsg(
+        result.alreadySeeded
+          ? "Already seeded ✓"
+          : `Seeded ${result.personas} personas, ${result.characters} characters, ${result.books} books ✓`
+      );
+      await load();
+    } catch (e) {
+      setSeedMsg(e instanceof Error ? e.message : "Seed failed");
+    } finally {
+      setSeeding(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -92,6 +115,20 @@ export default function FamilyTab() {
           <Text style={st.addBtnText}>＋ Create character</Text>
         </Pressable>
       </Card>
+
+      {/* Issue 107: dev-only seed button. __DEV__ is true only in dev builds. */}
+      {__DEV__ ? (
+        <Card>
+          <Text style={st.sectionTitle}>🧪 Dev tools</Text>
+          <Text style={st.emptyNote}>
+            Populate the Maya's World demo dataset for this Household (idempotent). Requires the paid backend running with DEV_DEMO_SEED=true.
+          </Text>
+          <Pressable style={st.addBtn} onPress={handleSeed} disabled={seeding}>
+            <Text style={st.addBtnText}>{seeding ? "Seeding…" : "🧪 Seed Maya's World"}</Text>
+          </Pressable>
+          {seedMsg ? <Text style={st.emptyNote}>{seedMsg}</Text> : null}
+        </Card>
+      ) : null}
     </Screen>
   );
 }

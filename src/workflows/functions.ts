@@ -35,14 +35,17 @@ export const storybookGenerate = inngest.createFunction(
         ctx.storybooks.runGenerationBody(memberId, storybookId)
       );
     } catch (err) {
-      // Terminal failure of the whole run: never strand a book in
-      // `generating` — the UI treats `failed` as the re-rollable floor.
+      // Issue 100: the service backstop (runGenerationBody) already forces the
+      // book to `failed` if still `generating`. This is defense-in-depth (mark
+      // `failed` if the service backstop was somehow bypassed) AND the persist:
+      // the in-memory map is terminal, but Postgres must not strand the book,
+      // so always sync before re-throwing.
       const book = ctx.store.storybooks.get(storybookId);
       if (book && book.status === "generating") {
         book.status = "failed";
         ctx.store.storybooks.set(book.id, book);
-        await ctx.store.sync();
       }
+      await ctx.store.sync();
       throw err;
     }
     await ctx.persist();

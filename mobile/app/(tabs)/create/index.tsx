@@ -82,7 +82,7 @@ export default function NewStorybookScreen() {
         storyType,
         theme: theme.trim(),
       });
-      router.replace(`/storybooks/${result.storybookId}` as never);
+      router.replace(`/stories/${result.storybookId}` as never);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not generate Storybook";
       setError(message.includes("subscription") ? "Illustrated Stories need an active plan." : message);

@@ -16,6 +16,13 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { ctx, member } = authed;
+  // Issue 100: reap any book stranded in `generating` past the watchdog budget
+  // before reading, so the reader never polls an infinite "Illustrating"
+  // spinner. If the reaper changes anything, persist so the next request sees
+  // the terminal state without another reap pass.
+  if (ctx.storybooks.reapStrandedGenerations() > 0) {
+    await ctx.persist();
+  }
   const book = ctx.store.getStorybook(id, member.id);
   if (!book) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });

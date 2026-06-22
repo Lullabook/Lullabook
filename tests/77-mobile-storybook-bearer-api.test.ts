@@ -66,7 +66,7 @@ describe("77 — mobile storybook bearer API", () => {
 
   it("rejects generation without an active subscription", async () => {
     harness.authSub = "storybook-free";
-    const ctx = harness.ctx as RequestContext;
+    const ctx = harness.ctx!;
     const member = ctx.onboarding.ensureFamilyForNewUser("storybook-free", "free@example.com");
     const persona = await ctx.personas.createAdult({
       memberId: member.id,
@@ -90,7 +90,7 @@ describe("77 — mobile storybook bearer API", () => {
 
   it("creates a storybook and lists it", async () => {
     harness.authSub = "guardian";
-    const ctx = harness.ctx as RequestContext;
+    const ctx = harness.ctx!;
     const { guardian, baby } = await householdWithBaby(ctx, "Maya");
     withActiveSubscription(ctx, guardian);
     const persona = await ctx.personas.createAdult({
@@ -115,7 +115,7 @@ describe("77 — mobile storybook bearer API", () => {
     const created = (await createRes.json()) as { storybookId: string; status: string };
     expect(["generating", "draft"]).toContain(created.status);
 
-    await (ctx as RequestContext & { workflow: { drain: () => Promise<void> } }).workflow.drain();
+    await ctx.workflow.drain();
     const book = ctx.store.getStorybook(created.storybookId, guardian.id);
     expect(book?.status).toBe("draft");
 

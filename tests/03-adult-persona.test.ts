@@ -92,7 +92,7 @@ describe("03 — adult persona creation", () => {
     const spy = vi.vi.spyOn(contextModule, "createRequestContext").mockReturnValue(ctx as any);
 
     try {
-      await expect(personaCreate.fn({
+      await expect((personaCreate as any).fn({
         event: {
           data: {
             mode: "adult",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -59,6 +59,12 @@ export default function StorybookReaderScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  // Issue 101: bounded poll — never spin forever. A book that hasn't reached a
+  // terminal state within the budget is surfaced as a timed-out state with a
+  // retry, never an infinite "Illustrating" spinner.
+  const [pollTimedOut, setPollTimedOut] = useState(false);
+  const pollStartedRef = useRef<number | null>(null);
+  const POLL_BUDGET_MS = 5 * 60 * 1000;
 
   const load = useCallback(async () => {
     if (!storybookId) return;
@@ -66,6 +72,10 @@ export default function StorybookReaderScreen() {
       const data = await getStorybook(storybookId);
       setBook(data);
       setError(null);
+      if (data.status === "draft" || data.status === "failed" || data.status === "finalized") {
+        setPollTimedOut(false);
+        pollStartedRef.current = null;
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not load Storybook";
       if (message.includes("Unauthorized")) {
@@ -84,7 +94,15 @@ export default function StorybookReaderScreen() {
 
   useEffect(() => {
     if (!book || book.status === "draft" || book.status === "failed" || book.status === "finalized") return;
-    const timer = setInterval(load, 2500);
+    if (pollStartedRef.current === null) pollStartedRef.current = Date.now();
+    const timer = setInterval(() => {
+      if (pollStartedRef.current !== null && Date.now() - pollStartedRef.current > POLL_BUDGET_MS) {
+        setPollTimedOut(true);
+        clearInterval(timer);
+        return;
+      }
+      load();
+    }, 2500);
     return () => clearInterval(timer);
   }, [book?.status, load]);
 
@@ -134,6 +152,7 @@ export default function StorybookReaderScreen() {
   const pages = book.pages.sort((a, b) => a.index - b.index);
   const page = pages[pageIndex];
   const generating = book.status === "generating";
+  const failed = book.status === "failed";
   const imageCandidates = page?.candidates.filter((c) => c.kind === "image" && !c.selected) ?? [];
 
   return (
@@ -154,7 +173,33 @@ export default function StorybookReaderScreen() {
         </Card>
       ) : null}
 
-      {generating ? (
+      {/* Issue 101: failed book — a clear terminal state, never an infinite
+          spinner. Surfaces a retry affordance (re-load) so the reader isn't a
+          dead end. */}
+      {failed ? (
+        <Card style={st.errorCard}>
+          <Text style={st.errorText}>
+            This Storybook couldn't be finished. Some pages may still be readable below, and you can try loading again.
+          </Text>
+          <PrimaryButton title={actionBusy ? "Retrying…" : "↻ Try again"} onPress={load} />
+        </Card>
+      ) : null}
+
+      {/* Issue 101: poll timeout — the book is still `generating` past the
+          bounded watchdog budget. Surface it instead of spinning forever. */}
+      {pollTimedOut && generating ? (
+        <Card style={st.errorCard}>
+          <Text style={st.errorText}>
+            Generation is taking longer than expected. You can keep waiting or try again.
+          </Text>
+          <View style={st.navRow}>
+            <GhostButton title="↻ Retry" onPress={() => { setPollTimedOut(false); pollStartedRef.current = Date.now(); load(); }} />
+            <GhostButton title="Back" onPress={() => router.back()} />
+          </View>
+        </Card>
+      ) : null}
+
+      {generating && !pollTimedOut ? (
         <Card>
           <ActivityIndicator color={C.primary} />
           <Text style={st.copy}>Generating page {pages.filter((p) => p.generationStatus === "ready").length + 1}…</Text>
