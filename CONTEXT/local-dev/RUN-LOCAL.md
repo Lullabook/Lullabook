@@ -68,8 +68,24 @@ npm run dev:free   # http://localhost:3000 — DEV_FORCE_SUBSCRIPTION=inactive
 npm run dev:paid   # http://localhost:3001 — DEV_FORCE_SUBSCRIPTION=active
 ```
 
-Sign up (or use two browsers) to see paywall-gated vs unlocked flows. The override
-is ignored in production.
+Sign up (or use two browsers) to see paywall-gated vs unlocked flows.
+
+> **`DEV_FORCE_SUBSCRIPTION` is a dev-only override — it must never ship enabled.**
+> It is deliberately omitted from `.env.example` (it is not a real env var). The
+> only legal reads are the inline values set by the `dev:free` / `dev:paid` npm
+> scripts in `package.json`. A hard guard in `src/services/subscription.ts`
+> short-circuits to `undefined` when `NODE_ENV === "production"`, so the override
+> is inert in a built/prod build — confirmed by `tests/60` ("no effect in
+> production"). **Why this matters:** with issue 91 / ADR-0023, the
+> `EntitlementService` is the server-side source of truth for tier, Story cap,
+> member cap, and capability gates; `DEV_FORCE_SUBSCRIPTION` is a *dev convenience*
+> that force-flips the underlying subscription's `isActive` bit so a simulator
+> can exercise paid flows without IAP. If it ever leaked to prod, every Household
+> would read as entitled and the tier/credit boundary (issues 92–95) would be
+> bypassable client-side — a direct violation of ADR-0023's "no child likeness
+> without card-on-file VPC" cornerstone. Do not weaken the production guard, do
+> not add new read sites without the guard, and do not list it in any shipped
+> env file.
 
 ## 5. (Optional) Generate a real text Story
 

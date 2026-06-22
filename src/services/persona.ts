@@ -13,6 +13,7 @@ import { rosterAvatarBlobKey } from "@/lib/roster-avatar";
 import { runPreflightChecks } from "@/services/preflight";
 import { SubscriptionService } from "@/services/subscription";
 import { ChildSafetyService } from "@/services/child-safety";
+import type { EntitlementService } from "@/services/entitlement";
 
 export interface CreatePersonaInput {
   memberId: string;
@@ -40,10 +41,17 @@ export class PersonaService {
     private readonly workflow: WorkflowAdapter,
     private readonly notifications: NotificationAdapter,
     private readonly subscriptions: SubscriptionService,
-    private readonly childSafety: ChildSafetyService
+    private readonly childSafety: ChildSafetyService,
+    private readonly entitlements?: EntitlementService
   ) {}
 
   async createAdult(input: CreatePersonaInput): Promise<Persona> {
+    if (this.entitlements) {
+      const member = this.store.members.get(input.memberId);
+      if (member) {
+        this.entitlements.requireMemberSlot(member.familyId, input.memberId);
+      }
+    }
     return this.create(input, "adult", true);
   }
 

@@ -19,6 +19,9 @@ export type StorybookStatus = "generating" | "draft" | "finalized" | "failed";
 
 export type SubscriptionStatus = "none" | "active" | "canceled" | "past_due";
 
+/** Paid tier per ADR-0023 (Basic $8 / Normal $15 / Plus $25). */
+export type Tier = "basic" | "normal" | "plus";
+
 export type PageGenerationStatus = "pending" | "ready" | "quarantined" | "failed";
 
 export interface Family {
@@ -202,6 +205,8 @@ export interface Subscription {
   status: SubscriptionStatus;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  /** ADR-0023 paid tier; set by RevenueCat (issue 92). Undefined → Normal default for an active sub. */
+  tier?: Tier;
   updatedAt: Date;
 }
 
@@ -358,4 +363,17 @@ export interface GeneratedStory {
   pages: { index: number; text: string }[];
   scenes: Scene[];
   styleBible: StyleBible;
+}
+
+/** A Plus-tier trained Style LoRA bound to a Household (issue 95 / ADR-0023). */
+export type CustomStyleStatus = "generating" | "ready" | "failed";
+
+export interface CustomStyle {
+  id: string;
+  familyId: string;
+  createdByMemberId: string;
+  seed: string;
+  status: CustomStyleStatus;
+  loraWeightKey: string | null;
+  createdAt: Date;
 }

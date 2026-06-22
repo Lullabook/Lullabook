@@ -205,6 +205,26 @@ _Scaffold: Google sign-in, Apple sign-in (device caveat), session restore, hard-
 ## §2 Family & roster — *filled in by issue 84*
 _Scaffold: create member/persona, photo upload (70), training→ready, avatar, edit Character (80)._
 
+### §2.x Add-Family photo upload (issue 70)
+
+This is **Gate 0** for the v10 HITL wave — every downstream slice needs a created
+persona, so this runs first.
+
+| Step | Expectation | Result | Observed | Date |
+|------|-------------|--------|----------|------|
+| Add-Family `submit()` → `POST /api/personas` returns **`202` within 10s** for ≤6 photos | `202`; persona created; training started |  |  |  |
+| Uploaded photo present in **Family-scoped blob store** | Verified to exist (not assumed) |  |  |  |
+| **No raw uploaded photo** rendered on any mobile surface | Only generated `RosterAvatar` shows (ADR-0020 / ADR-0021) |  |  |  |
+| Upload 5xx/network error → in-screen retryable error | No crash / unhandled rejection; form stays mounted |  |  |  |
+| Camera-permission denial is graceful | No crash; user can retry or cancel |  |  |  |
+| Selfie omitted still succeeds | Adult persona created without selfie (selfie optional at form level) |  |  |  |
+| `POST /api/personas` with missing/invalid Bearer → **`401`** | No anonymous upload |  |  |  |
+
+_Machine-checkable proxy: `npm test -- mobile-form-data` (proves the FormData
+builder emits correct RN multipart parts) + `npm run check:runbook` (requires
+this §2.x step heading + row). The `202`/blob/no-raw-render observations are
+real-key HITL — recorded above, not asserted in CI._
+
 | Step | Expectation | Result | Observed | Date |
 |------|-------------|--------|----------|------|
 | _to be completed in issue 84_ |  |  |  |  |

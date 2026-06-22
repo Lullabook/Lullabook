@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { requireAuthedContext } from "@/lib/auth";
 import { cancelSubscriptionFormAction, startCheckoutFormAction } from "@/lib/actions";
 import { SubmitButton } from "@/components/submit-button";
+import { PaywallUI } from "@/components/v2/paywall-ui";
+import { getTierBadge } from "@/lib/paywall-config";
 
 export const metadata: Metadata = { title: "Billing" };
 
@@ -15,6 +17,8 @@ export default async function BillingPage({
   const sub = ctx.store.getSubscription(member.familyId);
   const active = sub?.status === "active";
   const purge = ctx.store.purgeScheduled.get(member.familyId);
+  const currentTier = active ? (sub?.tier ?? "normal") : undefined;
+  const badge = currentTier ? getTierBadge(currentTier) : null;
 
   const cardStyle = {
     background: "#FFFDF9",
@@ -41,45 +45,36 @@ export default async function BillingPage({
         <div className="v2-notice">Checkout canceled — no charge was made.</div>
       )}
 
-      <div style={cardStyle}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <h2 style={{ margin: 0, fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.3rem", color: "#2E2438" }}>
-            Illustrated plan
-          </h2>
-          <span
-            style={{
-              padding: "5px 12px",
-              borderRadius: 999,
-              background: active ? "#E1F1E8" : sub?.status === "canceled" ? "#FDF1F3" : "#FBF4E7",
-              color: active ? "#3E7A5A" : sub?.status === "canceled" ? "#B23A48" : "#9A8A78",
-              fontWeight: 800,
-              fontSize: "0.78rem",
-            }}
-          >
-            {sub?.status ?? "free"}
-          </span>
-        </div>
-        <ul style={{ color: "#6E6076", lineHeight: 1.9, margin: "12px 0 18px", paddingLeft: 20 }}>
-          <li>Unlimited illustrated Storybooks (fair use)</li>
-          <li>Up to 5 trained family members — babies and grown-ups</li>
-          <li>Your card payment doubles as verifiable parental consent</li>
-          <li>Cancel anytime: 30 days to export everything, then we purge it all</li>
-        </ul>
-
-        {active ? (
-          <form action={cancelSubscriptionFormAction}>
+      {active && badge && (
+        <div style={cardStyle}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0, fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.3rem", color: "#2E2438" }}>
+              Your plan: {badge.label}
+            </h2>
+            <span
+              style={{
+                padding: "5px 12px",
+                borderRadius: 999,
+                background: "#E1F1E8",
+                color: "#3E7A5A",
+                fontWeight: 800,
+                fontSize: "0.78rem",
+              }}
+            >
+              Active
+            </span>
+          </div>
+          <form action={cancelSubscriptionFormAction} style={{ marginTop: 16 }}>
             <SubmitButton className="v2-btn v2-btn--danger-ghost" label="Cancel subscription" pendingLabel="Canceling…" />
             <p style={{ marginTop: 12, marginBottom: 0, color: "#9A8A78", fontSize: "0.85rem" }}>
               Canceling starts a 30-day export window. Download your books as
               PDFs; after the window, photos, models, and books are purged.
             </p>
           </form>
-        ) : (
-          <form action={startCheckoutFormAction}>
-            <SubmitButton className="v2-btn v2-btn--amber" label="✨ Subscribe with Stripe" pendingLabel="Redirecting…" />
-          </form>
-        )}
-      </div>
+        </div>
+      )}
+
+      {!active && <PaywallUI currentTier={currentTier} />}
 
       {purge && (
         <div className="v2-notice">

@@ -34,6 +34,13 @@ export class HardDeleteService {
     await this.blobs.deletePrefix(`photos/${familyId}`);
     await this.blobs.deletePrefix(`lora/${familyId}`);
     await this.blobs.deletePrefix(`books/${familyId}`);
+    await this.blobs.deletePrefix(`styles/${familyId}`);
+    // Purge custom Style LoRA weights (issue 95)
+    for (const [, style] of this.store.customStyles) {
+      if (style.familyId === familyId && style.loraWeightKey) {
+        await this.blobs.delete(style.loraWeightKey);
+      }
+    }
     await this.blobs.deletePrefix(`voice/`);
     const storybooks = [...this.store.storybooks.values()].filter(
       (b) => b.familyId === familyId

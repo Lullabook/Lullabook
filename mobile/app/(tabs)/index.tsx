@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View, Pressable } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton } from "@/components/maya-ui";
+import { Screen, Card, PrimaryButton } from "@/components/maya-ui";
 import { fetchHome, type HomeResponse } from "@/lib/api";
-import { RosterAvatar } from "@/components/roster-avatar";
-import { C, F } from "@/constants/theme";
+import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
 export default function HomeScreen() {
@@ -34,11 +33,6 @@ export default function HomeScreen() {
     load();
   }, [load]);
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    router.replace("/sign-in");
-  }
-
   if (loading) {
     return (
       <View style={st.center} accessibilityLabel="Loading home">
@@ -47,15 +41,25 @@ export default function HomeScreen() {
     );
   }
 
-  const emptyRoster =
-    !!home && home.characters.length === 0 && home.personas.length === 0;
+  const babyName = home?.selectedBaby?.displayName ?? "Your baby";
+  const babyInitial = babyName.charAt(0).toUpperCase();
+  const storyCount = home?.personas?.length ?? 0;
 
   return (
     <Screen>
-      <View>
-        <Eyebrow>💛 Your family</Eyebrow>
-        <PageTitle>Your Family</PageTitle>
-        {home ? <Lead>{home.member.email}</Lead> : null}
+      {/* Hero */}
+      <View style={st.hero}>
+        <Text style={st.heroEyebrow}>✨ A growing world starring</Text>
+        <View style={st.heroStar}>
+          <Text style={st.heroStarText}>{babyInitial}</Text>
+        </View>
+        <Text style={st.heroTitle}>{babyName}&apos;s World</Text>
+        <Text style={st.heroLead}>
+          A whole world of stories starring {babyName} — and everyone who loves them.
+        </Text>
+        <Pressable style={st.heroCta} onPress={() => router.push("/storybooks/new")}>
+          <Text style={st.heroCtaText}>✨ Start a new story</Text>
+        </Pressable>
       </View>
 
       {error ? (
@@ -64,75 +68,164 @@ export default function HomeScreen() {
         </Card>
       ) : null}
 
-      {home ? (
-        <>
-          <Card>
-            <Text style={st.copy}>
-              {emptyRoster
-                ? "Start with a free Character and text Story — no subscription needed."
-                : home.trainingExpectationCopy}
-            </Text>
-          </Card>
+      {/* Dashboard cards */}
+      <View style={st.cardGrid}>
+        {/* Continue reading */}
+        <Pressable
+          style={st.dashCard}
+          onPress={() => router.push("/storybooks")}
+          accessibilityRole="button"
+          accessibilityLabel="Continue reading"
+        >
+          <View style={[st.dashIcon, { backgroundColor: C.primary }]}>
+            <Text style={st.dashIconText}>📖</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.dashTitle}>Continue reading</Text>
+            <Text style={st.dashSub}>Your last story →</Text>
+          </View>
+        </Pressable>
 
-          <Card>
-            <Text style={st.cardTitle}>🐻 Characters ({home.characters.length})</Text>
-            {home.characters.length === 0 ? (
-              <Text style={st.emptyNote}>No characters yet — invent a made-up friend.</Text>
-            ) : (
-              home.characters.map((c) => (
-                <Text key={c.id} style={st.item}>
-                  {c.displayName}
-                </Text>
-              ))
-            )}
-          </Card>
+        {/* Story nudge */}
+        <Pressable
+          style={[st.dashCard, { borderColor: C.accentLight }]}
+          onPress={() => router.push("/daily")}
+          accessibilityRole="button"
+          accessibilityLabel="Story nudge"
+        >
+          <View style={[st.dashIcon, { backgroundColor: C.accent }]}>
+            <Text style={st.dashIconText}>✨</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.dashTitle}>What happened today?</Text>
+            <Text style={st.dashSub}>Log a moment to personalize →</Text>
+          </View>
+        </Pressable>
 
-          <Card>
-            <Text style={st.cardTitle}>💛 Family ({home.personas.length})</Text>
-            {home.personas.length === 0 ? (
-              <Text style={st.emptyNote}>Add someone who loves them to draw your family.</Text>
-            ) : (
-              home.personas.map((p) => (
-                <View key={p.id} style={st.personaRow}>
-                  <RosterAvatar
-                    name={p.displayName}
-                    initial={p.displayName.charAt(0)}
-                    status={p.status}
-                    avatarKey={p.avatarKey}
-                    size={44}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={st.item}>{p.displayName}</Text>
-                    <Text style={st.metaInline}>{p.status}</Text>
-                  </View>
-                </View>
-              ))
-            )}
-          </Card>
+        {/* This week */}
+        <Pressable
+          style={st.dashCard}
+          onPress={() => router.push("/storybooks")}
+          accessibilityRole="button"
+          accessibilityLabel="This week"
+        >
+          <View style={[st.dashIcon, { backgroundColor: C.green }]}>
+            <Text style={st.dashIconText}>📊</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.dashTitle}>This week</Text>
+            <Text style={st.dashSub}>{storyCount} {storyCount === 1 ? "story" : "stories"} this week</Text>
+          </View>
+        </Pressable>
 
-          <View style={st.planRow}>
-            <View style={[st.planDot, { backgroundColor: home.subscriptionActive ? C.green : C.accent }]} />
-            <Text style={st.meta}>
-              Subscription: {home.subscriptionActive ? "active" : "free tier"}
+        {/* Family activity */}
+        <Pressable
+          style={st.dashCard}
+          onPress={() => router.push("/family")}
+          accessibilityRole="button"
+          accessibilityLabel="Family activity"
+        >
+          <View style={[st.dashIcon, { backgroundColor: C.rose }]}>
+            <Text style={st.dashIconText}>💛</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.dashTitle}>Family</Text>
+            <Text style={st.dashSub}>
+              {home?.personas?.length ?? 0} family members →
             </Text>
           </View>
-        </>
-      ) : null}
+        </Pressable>
+      </View>
+
+      <View style={st.planRow}>
+        <View style={[st.planDot, { backgroundColor: home?.subscriptionActive ? C.green : C.accent }]} />
+        <Text style={st.meta}>
+          {home?.subscriptionActive ? "Subscribed" : "Free tier"}
+        </Text>
+      </View>
 
       <PrimaryButton title="↻ Refresh" onPress={load} />
-      <GhostButton title="Sign out" onPress={signOut} />
     </Screen>
   );
 }
 
 const st = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: C.bg },
-  copy: { fontFamily: F.body, fontSize: 16, lineHeight: 23, color: C.text },
-  cardTitle: { fontSize: 18, fontFamily: F.displayBold, color: C.text },
-  item: { fontSize: 16, color: C.text, fontFamily: F.bodyBold },
-  emptyNote: { fontSize: 14, color: C.soft, fontFamily: F.body, lineHeight: 20 },
-  personaRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  metaInline: { fontSize: 13, color: C.muted, fontFamily: F.body, marginTop: 1 },
+  hero: {
+    backgroundColor: C.primary,
+    borderRadius: R.detail,
+    padding: 28,
+    alignItems: "center",
+    gap: 8,
+  },
+  heroEyebrow: {
+    fontFamily: F.bodyBold,
+    fontSize: 12,
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+    color: C.accentLight,
+  },
+  heroStar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  heroStarText: {
+    fontFamily: F.display,
+    fontSize: 30,
+    color: "#FFFDF9",
+  },
+  heroTitle: {
+    fontFamily: F.display,
+    fontSize: 26,
+    color: "#FFFDF9",
+    textAlign: "center",
+  },
+  heroLead: {
+    fontFamily: F.body,
+    fontSize: 14,
+    color: "rgba(255,253,249,0.8)",
+    textAlign: "center",
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+  heroCta: {
+    marginTop: 12,
+    backgroundColor: "#FFFDF9",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: R.pill,
+  },
+  heroCtaText: {
+    fontFamily: F.bodyBold,
+    fontSize: 15,
+    color: C.primary,
+  },
+  cardGrid: { gap: 12 },
+  dashCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: C.surface,
+    borderColor: C.border,
+    borderWidth: 1,
+    borderRadius: R.card,
+    padding: 16,
+  },
+  dashIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dashIconText: { fontSize: 20 },
+  dashTitle: { fontFamily: F.displayBold, fontSize: 16, color: C.text },
+  dashSub: { fontFamily: F.body, fontSize: 13, color: C.muted, marginTop: 2 },
   planRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   planDot: { width: 9, height: 9, borderRadius: 5 },
   meta: { fontSize: 14, color: C.muted, fontFamily: F.bodyBold },

@@ -22,6 +22,8 @@ import {
   PastStorySummaryService,
   pastStorySummaryProvider,
 } from "@/services/past-story-summary";
+import type { EntitlementService } from "@/services/entitlement";
+import { EntitlementService as EntitlementServiceImpl } from "@/services/entitlement";
 import type { SubscriptionService } from "@/services/subscription";
 
 const FREE_REROLL_BUDGET = 5;
@@ -32,6 +34,7 @@ export class StorybookService {
   private readonly autoContext: AutoContextService;
   private readonly pastStorySummary: PastStorySummaryService;
   private readonly contextSelector: ContextSelector;
+  private readonly entitlements: EntitlementService;
 
   constructor(
     private readonly store: DataStore,
@@ -45,7 +48,8 @@ export class StorybookService {
     private readonly useReferenceModelForMulti = false,
     private readonly video: VideoAdapter | null = null,
     contextSelector: ContextSelector | null = null,
-    pastStorySummary: PastStorySummaryService | null = null
+    pastStorySummary: PastStorySummaryService | null = null,
+    entitlements: EntitlementService | null = null
   ) {
     // ADR-0022: the Story Context Engine generalizes the ADR-0019 Moments
     // auto-context layer. AutoContextService keeps owning the watermark; the
@@ -54,6 +58,7 @@ export class StorybookService {
     // anti-repeat section lights up once Stories are finalized.
     this.autoContext = new AutoContextService(store);
     this.pastStorySummary = pastStorySummary ?? new PastStorySummaryService(store);
+    this.entitlements = entitlements ?? new EntitlementServiceImpl(store, subscriptions);
     this.contextSelector =
       contextSelector ??
       new StoryContextSelector(
@@ -96,8 +101,13 @@ export class StorybookService {
     const member = this.store.members.get(memberId);
     if (!member) throw new Error("Member not found");
 
-    if (!this.subscriptions.isActive(member.familyId)) {
-      throw new Error("Active subscription required for Storybook generation");
+    // ADR-0023 / issue 91: server-side entitlement gate. An unentitled Household
+    // is rejected with 403 (EntitlementError) — the client UI gate is UX only.
+    this.entitlements.requireEntitled(member.familyId);
+    // Narration (real-voice weave) is a Normal+ capability: a Brief that carries
+    // voice clips is rejected 403 on Basic.
+    if ((brief.voiceClipIds?.length ?? 0) > 0 || brief.lullabyClipId) {
+      this.entitlements.requireCapability(member.familyId, "narrate");
     }
 
     const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
@@ -145,8 +155,10 @@ export class StorybookService {
     const member = this.store.members.get(memberId);
     if (!member) throw new Error("Member not found");
 
-    if (!this.subscriptions.isActive(member.familyId)) {
-      throw new Error("Active subscription required for Storybook generation");
+    // ADR-0023 / issue 91: server-side entitlement gate (403 on unentitled).
+    this.entitlements.requireEntitled(member.familyId);
+    if ((brief.voiceClipIds?.length ?? 0) > 0 || brief.lullabyClipId) {
+      this.entitlements.requireCapability(member.familyId, "narrate");
     }
 
     const sourceTale = this.classicCatalog.getById(classicId);
@@ -484,6 +496,12 @@ export class StorybookService {
               run: async () => {
                 const modOutcome = (await this.blobs.get(moderationKey))?.toString();
                 if (modOutcome !== "allowed") return;
+                // ADR-0023: video is a Plus-only, credit-metered feature. The
+                // capability + credit gate (requireCapability("video") + ledger
+                // debit, refund-on-failure) is enforced by issue 94's metering,
+                // which owns the Plus-only boundary + the 2-included/credit
+                // overage. The adapter is null in production (issue 91 leaves
+                // the boundary to the metering layer, not this auto-step).
                 const videoKey = `books/${storybook.familyId}/${storybook.id}/page-${pageIndex}.mp4`;
                 if (await this.blobs.get(videoKey)) return;
                 const result = await this.video!.generatePageClip(blobKey, pageData.text, {
