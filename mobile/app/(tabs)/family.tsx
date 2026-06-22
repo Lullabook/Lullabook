@@ -79,7 +79,7 @@ export default function FamilyTab() {
         ) : (
           <View style={{ gap: 12, marginTop: 8 }}>
             {personas.map((p) => (
-              <View key={p.id} style={st.personaRow}>
+              <Pressable key={p.id} style={st.personaRow} onPress={() => router.push(`/family/${p.id}` as never)}>
                 <RosterAvatar
                   name={p.displayName}
                   initial={p.displayName.charAt(0)}
@@ -91,7 +91,8 @@ export default function FamilyTab() {
                   <Text style={st.item}>{p.displayName}</Text>
                   <Text style={st.metaInline}>{p.status}</Text>
                 </View>
-              </View>
+                <Text style={st.chev}>›</Text>
+              </Pressable>
             ))}
           </View>
         )}
@@ -140,6 +141,7 @@ const st = StyleSheet.create({
   emptyNote: { fontSize: 14, color: C.soft, fontFamily: F.body, lineHeight: 20, marginTop: 4 },
   personaRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   metaInline: { fontSize: 13, color: C.muted, fontFamily: F.body, marginTop: 1 },
+  chev: { color: C.soft, fontSize: 22, fontFamily: F.bodyBold },
   addBtn: {
     marginTop: 14,
     paddingVertical: 12,

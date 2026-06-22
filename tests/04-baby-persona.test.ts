@@ -13,7 +13,7 @@ describe("04 — baby persona creation", () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);
     const invite = ctx.family.inviteMember(guardian.id, "member@example.com");
-    const member = ctx.family.acceptInvite(invite.inviteId, "auth-member");
+    const member = ctx.family.acceptInvite(invite.token, "auth-member");
 
     await expect(
       ctx.personas.createBaby({

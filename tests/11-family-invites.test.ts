@@ -5,13 +5,13 @@ describe("11 — family invites & multi-member", () => {
   it("lets guardians invite and remove members", () => {
     const ctx = createTestContext();
     const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-inv", "inv@example.com");
-    const { inviteId: firstInvite } = ctx.family.inviteMember(guardian.id, "non@example.com");
-    const nonGuardian = ctx.family.acceptInvite(firstInvite, "auth-non");
+    const { token: firstToken } = ctx.family.inviteMember(guardian.id, "non@example.com");
+    const nonGuardian = ctx.family.acceptInvite(firstToken, "auth-non");
 
     expect(() => ctx.family.inviteMember(nonGuardian.id, "x@example.com")).toThrow(/guardian/i);
 
-    const { inviteId } = ctx.family.inviteMember(guardian.id, "grandma@example.com");
-    const grandma = ctx.family.acceptInvite(inviteId, "auth-grandma");
+    const { token } = ctx.family.inviteMember(guardian.id, "grandma@example.com");
+    const grandma = ctx.family.acceptInvite(token, "auth-grandma");
     expect(grandma.familyId).toBe(guardian.familyId);
 
     ctx.family.removeMember(guardian.id, grandma.id);
@@ -21,8 +21,8 @@ describe("11 — family invites & multi-member", () => {
   it("links self persona and defaults brief starring", async () => {
     const ctx = createTestContext();
     const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-self", "self@example.com");
-    const { inviteId } = ctx.family.inviteMember(guardian.id, "gma@example.com");
-    const grandma = ctx.family.acceptInvite(inviteId, "auth-gma");
+    const { token } = ctx.family.inviteMember(guardian.id, "gma@example.com");
+    const grandma = ctx.family.acceptInvite(token, "auth-gma");
 
     const self = await ctx.personas.createAdult({
       memberId: grandma.id,

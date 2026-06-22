@@ -172,6 +172,7 @@ export interface StorybookPageWire {
   generationStatus: import("@domain/types").PageGenerationStatus;
   illustrationBlobKey: string | null;
   hasIllustration: boolean;
+  voiceClipId: string | null;
   candidates: { id: string; kind: string; content: string; selected: boolean }[];
 }
 
@@ -200,6 +201,52 @@ export function selectPageCandidate(candidateId: string): Promise<{ selected: bo
   return apiFetch(`/api/storybooks/candidates/${encodeURIComponent(candidateId)}/select`, {
     method: "POST",
     body: JSON.stringify({}),
+  });
+}
+
+// Issue 109/111 — Family invites
+export function sendInvite(email: string): Promise<{ inviteId: string; token: string }> {
+  return apiFetch("/api/family/invite", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function acceptInvite(token: string): Promise<{ memberId: string; familyId: string }> {
+  return apiFetch("/api/family/accept", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+// Issue 112/113 — Voice clips
+export function uploadVoiceClip(input: {
+  personaId: string;
+  label: string;
+  transcript: string;
+  durationSecs: number;
+  audioBytes: string; // base64
+}): Promise<{ clip: { id: string; label: string; transcript: string; durationSecs: number } }> {
+  return apiFetch("/api/voice/clip", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listVoiceClips(personaId: string): Promise<{
+  clips: { id: string; label: string; transcript: string; durationSecs: number }[];
+}> {
+  return apiFetch(`/api/voice/list?personaId=${encodeURIComponent(personaId)}`);
+}
+
+export function getVoicePlaybackUrl(clipId: string): Promise<{ url: string }> {
+  return apiFetch(`/api/voice/playback?clipId=${encodeURIComponent(clipId)}`);
+}
+
+export function revokeVoiceConsent(personaId: string): Promise<{ revoked: boolean }> {
+  return apiFetch("/api/voice/revoke", {
+    method: "POST",
+    body: JSON.stringify({ personaId }),
   });
 }
 

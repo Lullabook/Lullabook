@@ -65,7 +65,7 @@ describe("07 — curate draft", () => {
     const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-fin", "fin@example.com");
     withActiveSubscription(ctx, guardian);
     const invite = ctx.family.inviteMember(guardian.id, "other@example.com");
-    const other = ctx.family.acceptInvite(invite.inviteId, "auth-other");
+    const other = ctx.family.acceptInvite(invite.token, "auth-other");
 
     const persona = await ctx.personas.createAdult({
       memberId: guardian.id,

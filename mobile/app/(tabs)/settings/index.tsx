@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "rea
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Card, PrimaryButton, GhostButton, Field } from "@/components/maya-ui";
 import { C, F } from "@/constants/theme";
-import { fetchHome, hardDeleteAccount, type HomeResponse } from "@/lib/api";
+import { fetchHome, hardDeleteAccount, sendInvite as apiSendInvite, type HomeResponse } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 
 const PERKS = [
@@ -34,11 +34,17 @@ export default function AccountScreen() {
     router.replace("/sign-in");
   }
 
-  function sendInvite() {
+  async function sendInvite() {
     const email = invite.trim();
     if (!email) return;
     setInvite("");
-    setNotice(`Invite ready for ${email}. The native invite endpoint is next, but this button is now wired for the flow.`);
+    setNotice(null);
+    try {
+      await apiSendInvite(email);
+      setNotice(`✓ Invite sent to ${email}`);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Could not send invite");
+    }
   }
 
   function confirmHardDelete() {

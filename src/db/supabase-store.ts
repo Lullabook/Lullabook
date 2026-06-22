@@ -298,6 +298,13 @@ export class SupabaseDataStore extends DataStore {
         familyId: r.family_id,
         email: r.email,
         invitedBy: r.invited_by,
+        token: r.token ?? "",
+        role: "member",
+        status: (r.status as "pending" | "accepted" | "expired") ?? "pending",
+        createdAt: new Date(r.created_at ?? Date.now()),
+        expiresAt: new Date(r.expires_at ?? Date.now() + 7 * 24 * 60 * 60 * 1000),
+        acceptedAt: r.accepted_at ? new Date(r.accepted_at) : null,
+        acceptedByAuthUserId: r.accepted_by_auth_user_id ?? null,
       });
       this.snap("invites", r.id);
     }
@@ -827,6 +834,13 @@ export class SupabaseDataStore extends DataStore {
           family_id: i.familyId,
           email: i.email,
           invited_by: i.invitedBy,
+          token: i.token,
+          role: i.role,
+          status: i.status,
+          created_at: i.createdAt.toISOString(),
+          expires_at: i.expiresAt.toISOString(),
+          accepted_at: i.acceptedAt?.toISOString() ?? null,
+          accepted_by_auth_user_id: i.acceptedByAuthUserId,
         }))
       ),
       () => upsert(

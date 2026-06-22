@@ -76,7 +76,7 @@ export function createTestContext() {
   const characters = new CharacterService(store, anthropic, childSafety);
   const babies = new BabyService(store);
   const familyRoster = new FamilyRosterService(store);
-  const voiceClips = new VoiceClipService(store, blobs, entitlements);
+  const voiceClips = new VoiceClipService(store, blobs, entitlements, undefined, notifications);
   const moments = new MomentService(store);
   const journalNudges = new JournalNudgeService(store, moments);
   const pastStorySummary = new PastStorySummaryService(store);
@@ -112,7 +112,7 @@ export function createTestContext() {
     entitlements
   );
   const sharing = new SharingService(store);
-  const family = new FamilyService(store);
+  const family = new FamilyService(store, notifications);
   const hardDelete = new HardDeleteService(store, blobs, notifications);
   const exportSvc = new ExportService(store, pdf);
   const coldStart = new ColdStartService(store, storybooks);

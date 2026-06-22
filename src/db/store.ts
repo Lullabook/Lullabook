@@ -27,6 +27,7 @@ import type {
   BabyAutoContextWatermark,
   BabyPastStorySummary,
   JournalNudgeState,
+  Invite,
 } from "@/domain/types";
 
 export class DataStore {
@@ -43,7 +44,7 @@ export class DataStore {
   shareLinks = new Map<string, ShareLink>();
   moderationAudit = new Map<string, ModerationAuditEntry>();
   pendingBriefs = new Map<string, PendingBrief>();
-  invites = new Map<string, { id: string; familyId: string; email: string; invitedBy: string }>();
+  invites = new Map<string, Invite>();
   bannedAccounts = new Set<string>();
   purgeScheduled = new Map<string, { familyId: string; purgeAt: Date }>();
   persistedGenerations = new Map<string, PersistedGeneration>();
