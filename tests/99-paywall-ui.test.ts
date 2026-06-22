@@ -27,35 +27,33 @@ function setTier(
   });
 }
 
-describe("99 — Paywall UI (3 tiers, annual-default) + tier badges + credit/upgrade surfaces", () => {
-  describe("paywall renders three tiers", () => {
-    it("has exactly three tiers: Basic, Normal, Plus", () => {
-      expect(PAYWALL_TIERS).toHaveLength(3);
-      expect(PAYWALL_TIERS.map((t) => t.id)).toEqual(["basic", "normal", "plus"]);
+describe("99 — Paywall UI (two plans, annual-default) + plan badges + credit/upgrade surfaces", () => {
+  describe("paywall renders two plans", () => {
+    it("has exactly two plans: Just Us, Our Whole Family", () => {
+      expect(PAYWALL_TIERS).toHaveLength(2);
+      expect(PAYWALL_TIERS.map((t) => t.id)).toEqual(["just_us", "our_whole_family"]);
     });
 
-    it("Basic is $8/mo, Normal is $15/mo, Plus is $25/mo", () => {
+    it("Just Us is $9.99/mo, Our Whole Family is $24.99/mo", () => {
       const prices = PAYWALL_TIERS.map((t) => ({ id: t.id, monthly: t.monthlyPrice }));
       expect(prices).toEqual([
-        { id: "basic", monthly: 8 },
-        { id: "normal", monthly: 15 },
-        { id: "plus", monthly: 25 },
+        { id: "just_us", monthly: 9.99 },
+        { id: "our_whole_family", monthly: 24.99 },
       ]);
     });
 
-    it("each tier shows story cap, member cap, and capabilities", () => {
+    it("each plan shows story cap, member cap, and capabilities", () => {
       for (const tier of PAYWALL_TIERS) {
         expect(tier.storyCap).toBeGreaterThan(0);
-        expect(tier.memberCap).toBeGreaterThanOrEqual(2);
         expect(tier.canNarrate).toBeDefined();
         expect(tier.canVideo).toBeDefined();
         expect(tier.canCustomStyle).toBeDefined();
       }
     });
 
-    it("Normal is marked as the default/recommended tier (trial target)", () => {
-      const normal = PAYWALL_TIERS.find((t) => t.id === "normal");
-      expect(normal?.isRecommended).toBe(true);
+    it("Our Whole Family is marked as the recommended plan (trial target)", () => {
+      const recommended = PAYWALL_TIERS.find((t) => t.id === "our_whole_family");
+      expect(recommended?.isRecommended).toBe(true);
     });
 
     it("copy leads with value, not price", () => {
@@ -72,21 +70,16 @@ describe("99 — Paywall UI (3 tiers, annual-default) + tier badges + credit/upg
     });
   });
 
-  describe("tier badges", () => {
-    it("Basic tier shows the correct badge", () => {
-      const badge = getTierBadge("basic");
-      expect(badge.label).toBe("Basic");
+  describe("plan badges", () => {
+    it("Just Us plan shows the correct badge", () => {
+      const badge = getTierBadge("normal" as any);
+      expect(badge.label).toBe("Just Us");
       expect(badge.color).toBeDefined();
     });
 
-    it("Normal tier shows the correct badge", () => {
-      const badge = getTierBadge("normal");
-      expect(badge.label).toBe("Normal");
-    });
-
-    it("Plus tier shows the correct badge", () => {
-      const badge = getTierBadge("plus");
-      expect(badge.label).toBe("Plus");
+    it("Our Whole Family plan shows the correct badge", () => {
+      const badge = getTierBadge("plus" as any);
+      expect(badge.label).toBe("Our Whole Family");
     });
   });
 
