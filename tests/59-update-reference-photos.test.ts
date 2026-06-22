@@ -36,8 +36,8 @@ describe("59 — update reference photos → retrain → regenerate avatar", () 
     const ctx = createTestContext();
     const owner = ctx.onboarding.ensureFamilyForNewUser("auth-owner", "owner@example.com");
     const spouseEmail = "spouse@example.com";
-    const { inviteId } = ctx.family.inviteMember(owner.id, spouseEmail);
-    const spouse = ctx.family.acceptInvite(inviteId, "auth-spouse");
+    const { token: inviteToken } = ctx.family.inviteMember(owner.id, spouseEmail);
+    const spouse = ctx.family.acceptInvite(inviteToken, "auth-spouse");
     const persona = await createReadyAdult(ctx, owner, "Owner");
 
     await expect(

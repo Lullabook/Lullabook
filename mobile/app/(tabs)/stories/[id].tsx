@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Audio } from "expo-av";
 import { router, useLocalSearchParams } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton } from "@/components/maya-ui";
 import {
@@ -15,10 +16,47 @@ import {
   illustrationSource,
   rerollPageImage,
   selectPageCandidate,
+  getVoicePlaybackUrl,
   type StorybookDetailWire,
   type StorybookPageWire,
 } from "@/lib/api";
 import { C, F } from "@/constants/theme";
+
+/** Issue 114 — Voice clip playback (lullaby/narration). Starts < 1s from cache. */
+function VoicePlayback({ clipId }: { clipId: string }) {
+  const [playing, setPlaying] = useState(false);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+
+  async function play() {
+    try {
+      const { url } = await getVoicePlaybackUrl(clipId);
+      if (sound) await sound.unloadAsync();
+      const { sound: newSound } = await Audio.Sound.createAsync({ uri: url });
+      setSound(newSound);
+      setPlaying(true);
+      await newSound.playAsync();
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if ("didJustFinish" in status && status.didJustFinish) {
+          setPlaying(false);
+        }
+      });
+    } catch {
+      setPlaying(false);
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (sound) sound.unloadAsync();
+    };
+  }, [sound]);
+
+  return (
+    <Pressable style={st.voiceBtn} onPress={play} disabled={playing}>
+      <Text style={st.voiceBtnText}>{playing ? "⏸ Playing…" : "▶ Play narration"}</Text>
+    </Pressable>
+  );
+}
 
 function PageIllustration({ page }: { page: StorybookPageWire }) {
   const [source, setSource] = useState<{ uri: string; headers?: Record<string, string> } | null>(null);
@@ -210,6 +248,8 @@ export default function StorybookReaderScreen() {
             <Text style={st.pageLabel}>Page {page.index + 1} of {pages.length}</Text>
             <PageIllustration page={page} />
             <Text style={st.pageText}>{page.text || "…"}</Text>
+            {/* Issue 114: voice clip playback for narration/lullaby */}
+            {page.voiceClipId ? <VoicePlayback clipId={page.voiceClipId} /> : null}
           </Card>
 
           {page.generationStatus === "failed" ? (
@@ -283,4 +323,16 @@ const st = StyleSheet.create({
   candidateText: { fontFamily: F.bodyBold, color: C.primary, fontSize: 13 },
   errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
   errorText: { color: C.danger, fontFamily: F.bodyBold },
+  voiceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: C.primaryBg,
+    alignSelf: "flex-start",
+  },
+  voiceBtnText: { color: C.primary, fontFamily: F.bodyBold, fontSize: 14 },
 });

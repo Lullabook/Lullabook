@@ -34,6 +34,7 @@ export async function GET(
     generationStatus: p.generationStatus,
     illustrationBlobKey: p.illustrationBlobKey,
     hasIllustration: !!p.illustrationBlobKey || !!p.illustrationUrl,
+    voiceClipId: p.voiceClipId ?? null,
     candidates: ctx.store.getCandidatesForPage(p.id).map((c) => ({
       id: c.id,
       kind: c.kind,

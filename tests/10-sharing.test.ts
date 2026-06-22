@@ -6,7 +6,7 @@ describe("10 — sharing", () => {
     const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-share", "share@example.com");
     withActiveSubscription(ctx, guardian);
     const invite = ctx.family.inviteMember(guardian.id, "fam@example.com");
-    const other = ctx.family.acceptInvite(invite.inviteId, "auth-fam");
+    const other = ctx.family.acceptInvite(invite.token, "auth-fam");
     const persona = await ctx.personas.createAdult({
       memberId: guardian.id,
       displayName: "Star",

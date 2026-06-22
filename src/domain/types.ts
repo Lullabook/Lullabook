@@ -41,6 +41,31 @@ export interface Member {
   createdAt: Date;
 }
 
+/** Invite lifecycle status (ADR-0024). */
+export type InviteStatus = "pending" | "accepted" | "expired";
+
+/**
+ * ADR-0024 — Household invite. Opaque single-use token, expiry, fixed `member`
+ * role (never attacker-chosen). Guardian-only creation; acceptance consumes the
+ * token and creates the invitee as a non-Guardian Member in the inviter's
+ * Household.
+ */
+export interface Invite {
+  id: string;
+  familyId: string;
+  email: string;
+  invitedBy: string;
+  /** Opaque single-use secret, distinct from the PK. */
+  token: string;
+  role: "member";
+  status: InviteStatus;
+  createdAt: Date;
+  expiresAt: Date;
+  acceptedAt: Date | null;
+  /** Auth user id of the acceptor (set on accept). */
+  acceptedByAuthUserId: string | null;
+}
+
 /** Household account boundary (internal: `Family`). One or more Babies. */
 export interface Baby {
   id: string;

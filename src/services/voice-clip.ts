@@ -1,5 +1,5 @@
 import { v4 as uuid } from "uuid";
-import type { BlobStore } from "@/adapters/types";
+import type { BlobStore, NotificationAdapter } from "@/adapters/types";
 import type { DataStore } from "@/db/store";
 import type { VoiceClip, VoiceConsentReceipt } from "@/domain/types";
 import type { EntitlementService } from "@/services/entitlement";
@@ -19,7 +19,8 @@ export class VoiceClipService {
     private readonly store: DataStore,
     private readonly blobs: BlobStore,
     private readonly entitlements: EntitlementService,
-    private readonly consentEngine: ConsentEngine = new ConsentEngine()
+    private readonly consentEngine: ConsentEngine = new ConsentEngine(),
+    private readonly notifications: NotificationAdapter | null = null
   ) {}
 
   recordConsent(memberId: string, personaId: string): VoiceConsentReceipt {
@@ -79,6 +80,25 @@ export class VoiceClipService {
       createdAt: new Date(),
     };
     this.store.saveVoiceClip(clip);
+
+    // Issue 115 / ADR-0024: a Voice message posts immediately and notifies the
+    // parents (guardians) of the Household. Best-effort — a notification
+    // failure does NOT block the post.
+    if (this.notifications) {
+      const guardians = [...this.store.members.values()].filter(
+        (m) => m.familyId === member.familyId && m.role === "guardian" && m.id !== input.memberId
+      );
+      for (const g of guardians) {
+        this.notifications
+          .sendWebPush(
+            g.id,
+            "💛 New voice message",
+            `A new voice clip "${input.label}" was added to the family.`
+          )
+          .catch(() => {});
+      }
+    }
+
     return clip;
   }
 
