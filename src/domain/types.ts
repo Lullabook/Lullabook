@@ -19,8 +19,15 @@ export type StorybookStatus = "generating" | "draft" | "finalized" | "failed";
 
 export type SubscriptionStatus = "none" | "active" | "canceled" | "past_due";
 
-/** Paid tier per ADR-0023 (Basic $8 / Normal $15 / Plus $25). */
+/** Paid tier per ADR-0023 (Basic $8 / Normal $15 / Plus $25). Superseded by Plan. */
 export type Tier = "basic" | "normal" | "plus";
+
+/**
+ * ADR-0025 — Two-plan model (Just Us / Our Whole Family). Supersedes the
+ * three-tier model. Just Us = one creator, view-only invitees, no voice/video;
+ * Our Whole Family = everyone creates, voice + video + custom style.
+ */
+export type Plan = "just_us" | "our_whole_family";
 
 export type PageGenerationStatus = "pending" | "ready" | "quarantined" | "failed";
 

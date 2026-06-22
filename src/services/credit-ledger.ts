@@ -78,9 +78,6 @@ function nextResetDate(date = new Date()): string {
 }
 
 export class CreditLedgerService {
-  private ledger = new Map<string, LedgerEntry[]>();
-  private purchasedCredits = new Map<string, number>();
-
   constructor(
     private readonly store: DataStore,
     private readonly entitlements: EntitlementService
@@ -91,8 +88,8 @@ export class CreditLedgerService {
     const tier = this.entitlements.getTier(familyId) as Tier;
     const included = INCLUDED_PER_TIER[tier] ?? { video: 0, customStyle: 0, reroll: 0 };
     const period = periodKey();
-    const entries = (this.ledger.get(familyId) ?? []).filter(
-      (e) => e.createdAt.toISOString().slice(0, 7) === period
+    const entries = [...this.store.creditLedgerEntries.values()].filter(
+      (e) => e.familyId === familyId && e.createdAt.toISOString().slice(0, 7) === period
     );
 
     const used = { video: 0, customStyle: 0, reroll: 0 };
@@ -100,21 +97,20 @@ export class CreditLedgerService {
     for (const entry of entries) {
       const key = `${entry.action}:${entry.idempotencyKey}`;
       if (entry.type === "debit" && !debitedKeys.has(key)) {
-        used[entry.action] += 1;
+        used[entry.action as MeteredAction] += 1;
         debitedKeys.add(key);
       }
       if (entry.type === "refund" && debitedKeys.has(key)) {
-        used[entry.action] -= 1;
+        used[entry.action as MeteredAction] -= 1;
         debitedKeys.delete(key);
       }
     }
 
-    // Included credits absorb debits per-action first; overflow goes to purchased.
     const videoOverflow = Math.max(0, used.video - included.video);
     const customStyleOverflow = Math.max(0, used.customStyle - included.customStyle);
     const rerollOverflow = Math.max(0, used.reroll - included.reroll);
     const overflowIntoPurchased = videoOverflow + customStyleOverflow + rerollOverflow;
-    const purchasedTotal = this.purchasedCredits.get(familyId) ?? 0;
+    const purchasedTotal = this.store.creditPurchasedBalances.get(familyId) ?? 0;
     const purchasedRemaining = Math.max(0, purchasedTotal - overflowIntoPurchased);
 
     return {
@@ -131,15 +127,15 @@ export class CreditLedgerService {
 
   /** Debit one credit for the given action. Idempotent by idempotencyKey. */
   debit(familyId: string, action: MeteredAction, idempotencyKey: string): void {
-    // Idempotency: check if already debited
-    const entries = this.ledger.get(familyId) ?? [];
+    const entries = [...this.store.creditLedgerEntries.values()].filter(
+      (e) => e.familyId === familyId
+    );
     const key = `${action}:${idempotencyKey}`;
     const alreadyDebited = entries.some(
       (e) => e.type === "debit" && `${e.action}:${e.idempotencyKey}` === key
     );
-    if (alreadyDebited) return; // replay — no double-charge
+    if (alreadyDebited) return;
 
-    // Check balance — included for this action + purchased pool
     const balance = this.getBalance(familyId);
     const includedAvailable = balance[`${action}Included` as keyof CreditBalance] as number;
     const totalAvailable = includedAvailable + balance.purchased;
@@ -147,48 +143,52 @@ export class CreditLedgerService {
       throw new CreditError(balance);
     }
 
-    // Record debit
-    const entry: LedgerEntry = {
+    const entry = {
       id: uuid(),
       familyId,
       action,
       idempotencyKey,
-      type: "debit",
+      type: "debit" as const,
       amount: 1,
       createdAt: new Date(),
     };
-    this.ledger.set(familyId, [...entries, entry]);
+    this.store.creditLedgerEntries.set(entry.id, entry);
   }
 
   /** Refund a debit (failure path). Idempotent — double refund doesn't double-credit. */
   refund(familyId: string, action: MeteredAction, idempotencyKey: string): void {
-    const entries = this.ledger.get(familyId) ?? [];
+    const entries = [...this.store.creditLedgerEntries.values()].filter(
+      (e) => e.familyId === familyId
+    );
     const key = `${action}:${idempotencyKey}`;
     const alreadyRefunded = entries.some(
       (e) => e.type === "refund" && `${e.action}:${e.idempotencyKey}` === key
     );
-    if (alreadyRefunded) return; // replay — no double-refund
+    if (alreadyRefunded) return;
 
-    const entry: LedgerEntry = {
+    const entry = {
       id: uuid(),
       familyId,
       action,
       idempotencyKey,
-      type: "refund",
+      type: "refund" as const,
       amount: 1,
       createdAt: new Date(),
     };
-    this.ledger.set(familyId, [...entries, entry]);
+    this.store.creditLedgerEntries.set(entry.id, entry);
   }
 
   /** Add purchased credits (server-side only, after IAP). */
   addPurchasedCredits(familyId: string, amount: number): void {
-    const current = this.purchasedCredits.get(familyId) ?? 0;
-    this.purchasedCredits.set(familyId, current + amount);
+    const current = this.store.creditPurchasedBalances.get(familyId) ?? 0;
+    this.store.creditPurchasedBalances.set(familyId, current + amount);
   }
 
-  /** Test-only: reset the ledger for a family (simulates monthly reset). */
+  /** Test-only: reset the ledger for a family. */
   resetForTesting(familyId: string): void {
-    this.ledger.delete(familyId);
+    for (const [id, e] of this.store.creditLedgerEntries) {
+      if (e.familyId === familyId) this.store.creditLedgerEntries.delete(id);
+    }
+    this.store.creditPurchasedBalances.delete(familyId);
   }
 }

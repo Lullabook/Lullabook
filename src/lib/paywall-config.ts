@@ -1,22 +1,23 @@
-import type { Tier } from "@/domain/types";
+import type { Plan, Tier } from "@/domain/types";
 import type { StoryCapUsage } from "@/services/story-cap";
 import type { CreditBalance } from "@/services/credit-ledger";
 
 /**
- * Paywall UI config + tier badges + credit/upgrade surfaces (issue 99 / ADR-0023).
+ * Paywall UI config + plan badges + credit/upgrade surfaces (ADR-0025).
  *
- * The customer-facing monetization surfaces that present the model from issues
- * 91–94. **The server 403 (issue 91) remains the boundary** — UI gating is the
- * prompt, not the gate.
+ * Two plans on a collaboration axis: Just Us / Our Whole Family. The server 403
+ * (EntitlementService) remains the boundary — UI gating is the prompt, not the
+ * gate.
  */
 
-export interface PaywallTier {
-  id: Tier;
+export interface PaywallPlan {
+  id: Plan;
   label: string;
   monthlyPrice: number;
   annualPrice: number;
   storyCap: number;
   memberCap: number;
+  memberLoginCap: number;
   canNarrate: boolean;
   canVideo: boolean;
   canCustomStyle: boolean;
@@ -24,64 +25,61 @@ export interface PaywallTier {
   valueProp: string;
 }
 
-export const PAYWALL_TIERS: PaywallTier[] = [
+export const PAYWALL_PLANS: PaywallPlan[] = [
   {
-    id: "basic",
-    label: "Basic",
-    monthlyPrice: 8,
-    annualPrice: 80,
-    storyCap: 4,
-    memberCap: 2,
+    id: "just_us",
+    label: "Just Us",
+    monthlyPrice: 9.99,
+    annualPrice: 79.99,
+    storyCap: 8,
+    memberCap: 3,
+    memberLoginCap: 2,
     canNarrate: false,
     canVideo: false,
     canCustomStyle: false,
-    valueProp: "Illustrated stories starring your family — the essentials.",
+    valueProp: "One creating parent, illustrated stories starring your family.",
   },
   {
-    id: "normal",
-    label: "Normal",
-    monthlyPrice: 15,
-    annualPrice: 150,
-    storyCap: 8,
-    memberCap: 4,
-    canNarrate: true,
-    canVideo: false,
-    canCustomStyle: false,
-    isRecommended: true,
-    valueProp: "Narration + voice clips bring stories to life. The sweet spot.",
-  },
-  {
-    id: "plus",
-    label: "Plus",
-    monthlyPrice: 25,
-    annualPrice: 250,
+    id: "our_whole_family",
+    label: "Our Whole Family",
+    monthlyPrice: 24.99,
+    annualPrice: 199.99,
     storyCap: 20,
     memberCap: Infinity,
+    memberLoginCap: Infinity,
     canNarrate: true,
     canVideo: true,
     canCustomStyle: true,
-    valueProp: "Video pages, custom art styles, and unlimited family members.",
+    isRecommended: true,
+    valueProp: "Everyone creates, voice messages, video pages, and custom art styles.",
   },
 ];
 
-/** Annual billing is the default option (ADR-0023). */
+/** Legacy compat: PAYWALL_TIERS maps to the new plans. */
+export const PAYWALL_TIERS = PAYWALL_PLANS;
+
+/** Annual billing is the default option (ADR-0025). */
 export function isAnnualDefault(): boolean {
   return true;
 }
 
-export interface TierBadge {
+export interface PlanBadge {
   label: string;
   color: string;
 }
 
-const TIER_BADGES: Record<Tier, TierBadge> = {
-  basic: { label: "Basic", color: "#8B7AB8" },
-  normal: { label: "Normal", color: "#9B6DC4" },
-  plus: { label: "Plus", color: "#F5A623" },
+const PLAN_BADGES: Record<Plan, PlanBadge> = {
+  just_us: { label: "Just Us", color: "#8B7AB8" },
+  our_whole_family: { label: "Our Whole Family", color: "#F5A623" },
 };
 
-export function getTierBadge(tier: Tier): TierBadge {
-  return TIER_BADGES[tier];
+export function getPlanBadge(plan: Plan): PlanBadge {
+  return PLAN_BADGES[plan];
+}
+
+/** Legacy compat: getTierBadge maps through to plan badges. */
+export function getTierBadge(tier: Tier): PlanBadge {
+  return PLAN_BADGES[tier === "plus" ? "our_whole_family" : "just_us"];
 }
 
 export interface CapUsageState {

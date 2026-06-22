@@ -56,6 +56,9 @@ export class DataStore {
   voiceClips = new Map<string, VoiceClip>();
   voiceConsentReceipts = new Map<string, VoiceConsentReceipt>();
   moments = new Map<string, Moment>();
+  // Issue 119: credit ledger persisted in the durable store (not in-memory).
+  creditLedgerEntries = new Map<string, { id: string; familyId: string; action: string; idempotencyKey: string; type: "debit" | "refund" | "purchase"; amount: number; createdAt: Date }>();
+  creditPurchasedBalances = new Map<string, number>();
   momentPeople = new Map<string, MomentPersonLink>();
   autoContextWatermarks = new Map<string, BabyAutoContextWatermark>();
   babyPastStorySummaries = new Map<string, BabyPastStorySummary>();

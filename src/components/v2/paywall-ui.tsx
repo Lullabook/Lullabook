@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PAYWALL_TIERS, type PaywallTier } from "@/lib/paywall-config";
+import { PAYWALL_TIERS, type PaywallPlan } from "@/lib/paywall-config";
 import { SubmitButton } from "@/components/submit-button";
 import { startCheckoutFormAction } from "@/lib/actions";
 
@@ -26,7 +26,7 @@ function TierCard({
   billing,
   currentTier,
 }: {
-  tier: PaywallTier;
+  tier: PaywallPlan;
   billing: "monthly" | "annual";
   currentTier?: string;
 }) {
@@ -42,7 +42,7 @@ function TierCard({
     tier.canNarrate ? "Narration + voice clips" : "—",
     tier.canVideo ? "Video pages (2 included)" : "—",
     tier.canCustomStyle ? "Custom art style (1 training included)" : "—",
-  ].filter((f) => !f.startsWith("—") || tier.id === "basic");
+  ].filter((f) => !f.startsWith("—") || tier.id === "just_us");
 
   return (
     <div style={isRecommended ? recommendedStyle : cardStyle}>
@@ -142,7 +142,7 @@ function TierCard({
         <form action={startCheckoutFormAction}>
           <SubmitButton
             className={`v2-btn ${isRecommended ? "v2-btn--primary" : "v2-btn--outline"}`}
-            label={tier.id === "normal" ? "Start 7-day free trial" : `Choose ${tier.label}`}
+            label={tier.id === "our_whole_family" ? "Start 7-day free trial" : `Choose ${tier.label}`}
             pendingLabel="Redirecting…"
           />
         </form>

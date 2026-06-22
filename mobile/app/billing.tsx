@@ -4,13 +4,14 @@ import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
 
-interface TierInfo {
+/** ADR-0025 — Two-plan config (shared shape with web paywall-config). */
+interface PlanInfo {
   id: string;
   label: string;
   monthlyPrice: number;
   annualPrice: number;
   storyCap: number;
-  memberCap: number;
+  memberLoginCap: number;
   canNarrate: boolean;
   canVideo: boolean;
   canCustomStyle: boolean;
@@ -18,82 +19,70 @@ interface TierInfo {
   valueProp: string;
 }
 
-const TIERS: TierInfo[] = [
+const PLANS: PlanInfo[] = [
   {
-    id: "basic",
-    label: "Basic",
-    monthlyPrice: 8,
-    annualPrice: 80,
-    storyCap: 4,
-    memberCap: 2,
+    id: "just_us",
+    label: "Just Us",
+    monthlyPrice: 9.99,
+    annualPrice: 79.99,
+    storyCap: 8,
+    memberLoginCap: 2,
     canNarrate: false,
     canVideo: false,
     canCustomStyle: false,
-    valueProp: "Illustrated stories starring your family — the essentials.",
+    valueProp: "One creating parent, illustrated stories starring your family.",
   },
   {
-    id: "normal",
-    label: "Normal",
-    monthlyPrice: 15,
-    annualPrice: 150,
-    storyCap: 8,
-    memberCap: 4,
-    canNarrate: true,
-    canVideo: false,
-    canCustomStyle: false,
-    isRecommended: true,
-    valueProp: "Narration + voice clips bring stories to life. The sweet spot.",
-  },
-  {
-    id: "plus",
-    label: "Plus",
-    monthlyPrice: 25,
-    annualPrice: 250,
+    id: "our_whole_family",
+    label: "Our Whole Family",
+    monthlyPrice: 24.99,
+    annualPrice: 199.99,
     storyCap: 20,
-    memberCap: Infinity,
+    memberLoginCap: Infinity,
     canNarrate: true,
     canVideo: true,
     canCustomStyle: true,
-    valueProp: "Video pages, custom art styles, and unlimited family members.",
+    isRecommended: true,
+    valueProp: "Everyone creates, voice messages, video pages, and custom art styles.",
   },
 ];
 
-function TierCard({
-  tier,
+function PlanCard({
+  plan,
   billing,
 }: {
-  tier: TierInfo;
+  plan: PlanInfo;
   billing: "monthly" | "annual";
 }) {
-  const price = billing === "annual" ? tier.annualPrice : tier.monthlyPrice;
+  const price = billing === "annual" ? plan.annualPrice : plan.monthlyPrice;
   const priceLabel = billing === "annual" ? `$${price}/yr` : `$${price}/mo`;
   const features = [
-    `${tier.storyCap} stories/mo`,
-    tier.memberCap === Infinity ? "Unlimited members" : `${tier.memberCap} members`,
+    `${plan.storyCap} stories/mo`,
+    plan.memberLoginCap === Infinity ? "Whole family" : `${plan.memberLoginCap} logins`,
     "Illustrated books",
-    tier.canNarrate ? "Narration + voice" : null,
-    tier.canVideo ? "Video pages" : null,
-    tier.canCustomStyle ? "Custom art style" : null,
+    plan.canNarrate ? "Voice messages + narration" : null,
+    plan.canVideo ? "Video pages" : null,
+    plan.canCustomStyle ? "Custom art style" : null,
   ].filter(Boolean);
 
   return (
     <View
       style={[
         st.tierCard,
-        tier.isRecommended && {
+        plan.isRecommended && {
           borderColor: C.primary,
           borderWidth: 2,
           backgroundColor: C.primaryBg,
         },
       ]}
     >
-      {tier.isRecommended ? (
+      {plan.isRecommended ? (
         <View style={st.badgeRec}>
           <Text style={st.badgeRecText}>✨ Recommended</Text>
         </View>
       ) : null}
-      <Text style={st.tierLabel}>{tier.label}</Text>
-      <Text style={st.tierValue}>{tier.valueProp}</Text>
+      <Text style={st.tierLabel}>{plan.label}</Text>
+      <Text style={st.tierValue}>{plan.valueProp}</Text>
       <Text style={st.tierPrice}>{priceLabel}</Text>
       {billing === "annual" ? (
         <Text style={st.save}>Save ~17%</Text>
@@ -107,13 +96,13 @@ function TierCard({
         ))}
       </View>
       <Pressable
-        style={[st.chooseBtn, tier.isRecommended ? { backgroundColor: C.primary } : { borderColor: C.primary, borderWidth: 1 }]}
+        style={[st.chooseBtn, plan.isRecommended ? { backgroundColor: C.primary } : { borderColor: C.primary, borderWidth: 1 }]}
         onPress={() => router.dismiss()}
         accessibilityRole="button"
-        accessibilityLabel={`Choose ${tier.label}`}
+        accessibilityLabel={`Choose ${plan.label}`}
       >
-        <Text style={[st.chooseBtnText, tier.isRecommended ? { color: "#FFFDF9" } : { color: C.primary }]}>
-          {tier.id === "normal" ? "Start 7-day free trial" : `Choose ${tier.label}`}
+        <Text style={[st.chooseBtnText, plan.isRecommended ? { color: "#FFFDF9" } : { color: C.primary }]}>
+          {plan.id === "our_whole_family" ? "Start 7-day free trial" : `Choose ${plan.label}`}
         </Text>
       </Pressable>
     </View>
@@ -128,7 +117,7 @@ export default function PaywallScreen() {
       <View>
         <Eyebrow>✨ Plans</Eyebrow>
         <PageTitle>Choose your plan</PageTitle>
-        <Lead>Every plan starts with a 7-day free trial. Cancel anytime.</Lead>
+        <Lead>Every plan starts with a 7-day free trial of the full experience. Cancel anytime.</Lead>
       </View>
 
       {/* Billing toggle */}
@@ -152,8 +141,8 @@ export default function PaywallScreen() {
       </View>
 
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-        {TIERS.map((tier) => (
-          <TierCard key={tier.id} tier={tier} billing={billing} />
+        {PLANS.map((plan) => (
+          <PlanCard key={plan.id} plan={plan} billing={billing} />
         ))}
         <Text style={st.foundingNote}>
           💛 Founding families get the first month free after the trial.

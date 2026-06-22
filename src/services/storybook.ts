@@ -25,6 +25,7 @@ import {
 import type { EntitlementService } from "@/services/entitlement";
 import { EntitlementService as EntitlementServiceImpl } from "@/services/entitlement";
 import type { SubscriptionService } from "@/services/subscription";
+import { StoryCapService } from "@/services/story-cap";
 
 const FREE_REROLL_BUDGET = 5;
 
@@ -43,6 +44,7 @@ export class StorybookService {
   private readonly pastStorySummary: PastStorySummaryService;
   private readonly contextSelector: ContextSelector;
   private readonly entitlements: EntitlementService;
+  private readonly storyCap: StoryCapService;
 
   constructor(
     private readonly store: DataStore,
@@ -59,14 +61,10 @@ export class StorybookService {
     pastStorySummary: PastStorySummaryService | null = null,
     entitlements: EntitlementService | null = null
   ) {
-    // ADR-0022: the Story Context Engine generalizes the ADR-0019 Moments
-    // auto-context layer. AutoContextService keeps owning the watermark; the
-    // selector composes it and layers roster/age/firsts/past-story/vision-text.
-    // Issue 90: the past-Story summary provider is wired by default so the
-    // anti-repeat section lights up once Stories are finalized.
     this.autoContext = new AutoContextService(store);
     this.pastStorySummary = pastStorySummary ?? new PastStorySummaryService(store);
     this.entitlements = entitlements ?? new EntitlementServiceImpl(store, subscriptions);
+    this.storyCap = new StoryCapService(store, this.entitlements);
     this.contextSelector =
       contextSelector ??
       new StoryContextSelector(
@@ -112,6 +110,13 @@ export class StorybookService {
     // ADR-0023 / issue 91: server-side entitlement gate. An unentitled Household
     // is rejected with 403 (EntitlementError) — the client UI gate is UX only.
     this.entitlements.requireEntitled(member.familyId);
+    // ADR-0025 / issue 117: per-member create-rights gate. Just Us → Guardian
+    // only; Our Whole Family → any Member. The actor memberId comes from the
+    // verified Bearer JWT, never the request body.
+    this.entitlements.requireCanCreate(member.familyId, memberId);
+    // ADR-0025 / issue 118: enforce the monthly Story cap (shared Household
+    // pool, idempotent by storybookId, resets monthly).
+    this.storyCap.requireUnderCap(member.familyId, memberId);
     // Narration (real-voice weave) is a Normal+ capability: a Brief that carries
     // voice clips is rejected 403 on Basic.
     if ((brief.voiceClipIds?.length ?? 0) > 0 || brief.lullabyClipId) {
@@ -165,6 +170,9 @@ export class StorybookService {
 
     // ADR-0023 / issue 91: server-side entitlement gate (403 on unentitled).
     this.entitlements.requireEntitled(member.familyId);
+    // ADR-0025 / issue 117: per-member create-rights gate.
+    this.entitlements.requireCanCreate(member.familyId, memberId);
+    this.storyCap.requireUnderCap(member.familyId, memberId);
     if ((brief.voiceClipIds?.length ?? 0) > 0 || brief.lullabyClipId) {
       this.entitlements.requireCapability(member.familyId, "narrate");
     }
