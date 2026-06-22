@@ -40,7 +40,7 @@ describe("88 — mobile FormData builder (issue 70 wiring proof)", () => {
     const form = new FormData();
     const keys: string[] = [];
     const origAppend = form.append.bind(form);
-    vi.spyOn(form, "append").mockImplementation((key: string, value: unknown) => {
+    vi.spyOn(form, "append").mockImplementation((key: string, value: string | Blob) => {
       keys.push(key);
       return origAppend(key, value);
     });

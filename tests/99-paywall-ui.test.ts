@@ -8,7 +8,8 @@ import {
   getCreditUsageState,
   isAnnualDefault,
 } from "@/lib/paywall-config";
-import type { StoryCapUsage, CreditBalance } from "@/services/story-cap";
+import type { StoryCapUsage } from "@/services/story-cap";
+import type { CreditBalance } from "@/services/credit-ledger";
 
 function setTier(
   ctx: ReturnType<typeof createTestContext>,

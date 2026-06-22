@@ -226,7 +226,7 @@ export default function DailyScreen() {
                 <Text style={st.momentText}>{m.body}</Text>
                 <Pressable
                   onPress={() =>
-                    router.push({ pathname: "/storybooks/new", params: { theme: m.body } } as never)
+                    router.push({ pathname: "/create", params: { theme: m.body } } as never)
                   }
                   style={st.turnBtn}
                 >

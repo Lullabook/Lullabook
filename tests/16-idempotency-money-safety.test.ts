@@ -123,7 +123,7 @@ describe("16 — idempotency & money-safety", () => {
     expect(ctx.fal.imageCalls).toBe(0);
   });
 
-  it("flips Storybook to failed when ready Pages are below the configured floor", async () => {
+  it("degrades to text-viewable draft (not failed) when all illustrations fail but text is present (issue 102)", async () => {
     const ctx = createTestContext();
     const { member, persona } = await readyPersona(ctx);
     ctx.fal.failPages = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
@@ -150,10 +150,15 @@ describe("16 — idempotency & money-safety", () => {
     await ctx.workflow.drain();
 
     const finished = ctx.store.getStorybook(book.id, member.id)!;
-    expect(finished.status).toBe("failed");
+    // Issue 102: text-viewable fallback — all illustrations failed but text
+    // pages exist, so the book is a readable `draft`, not uniformly `failed`.
+    expect(finished.status).toBe("draft");
     expect(
       ctx.store.getPagesForStorybook(book.id).filter((p) => p.generationStatus === "ready")
     ).toHaveLength(0);
+    expect(
+      ctx.store.getPagesForStorybook(book.id).filter((p) => p.text.length > 0)
+    ).toHaveLength(12);
   });
 
   it("recoverPage regenerates a failed Page without decrementing re-roll budget", async () => {

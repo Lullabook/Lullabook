@@ -23,6 +23,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       await ctx.persist();
       return jsonOk({ storybookId: book.id, status: book.status }, 201);
     } catch (err) {
+      // Issue 100: the service forces a failed generation terminal in-memory
+      // (runGenerationBody backstop). Persist that terminal state so a fresh
+      // reader poll on a new request context never sees a stranded `generating`
+      // book. Best-effort — never mask the original error.
+      try {
+        await ctx.persist();
+      } catch {
+        /* ignore sync failure; surface the original error */
+      }
       const message = err instanceof Error ? err.message : "Failed";
       const status = message.includes("subscription") ? 402 : 400;
       return jsonError(message, status);

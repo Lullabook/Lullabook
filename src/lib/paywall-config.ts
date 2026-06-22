@@ -1,5 +1,6 @@
 import type { Tier } from "@/domain/types";
-import type { StoryCapUsage, CreditBalance } from "@/services/story-cap";
+import type { StoryCapUsage } from "@/services/story-cap";
+import type { CreditBalance } from "@/services/credit-ledger";
 
 /**
  * Paywall UI config + tier badges + credit/upgrade surfaces (issue 99 / ADR-0023).

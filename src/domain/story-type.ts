@@ -1,4 +1,4 @@
-import type { StoryType } from "@/domain/types";
+import type { StoryType } from "./types";
 
 export type CanonicalStoryType = Exclude<StoryType, "learning">;
 

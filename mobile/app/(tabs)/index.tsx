@@ -57,7 +57,7 @@ export default function HomeScreen() {
         <Text style={st.heroLead}>
           A whole world of stories starring {babyName} — and everyone who loves them.
         </Text>
-        <Pressable style={st.heroCta} onPress={() => router.push("/storybooks/new")}>
+        <Pressable style={st.heroCta} onPress={() => router.push("/create" as never)}>
           <Text style={st.heroCtaText}>✨ Start a new story</Text>
         </Pressable>
       </View>
@@ -68,12 +68,30 @@ export default function HomeScreen() {
         </Card>
       ) : null}
 
+      {/* Issue 106: Daily-life / Journal as a first-class destination — a
+          prominent full-width featured card above the dashboard grid, not
+          buried behind one Home card. */}
+      <Pressable
+        style={st.journalHero}
+        onPress={() => router.push("/daily")}
+        accessibilityRole="button"
+        accessibilityLabel="Open Maya's Journal"
+      >
+        <View style={st.journalIcon}>
+          <Text style={st.journalIconText}>📖</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={st.journalLabel}>✨ {babyName}&apos;s Journal</Text>
+          <Text style={st.journalSub}>Log a moment, see the timeline, make it a story →</Text>
+        </View>
+      </Pressable>
+
       {/* Dashboard cards */}
       <View style={st.cardGrid}>
         {/* Continue reading */}
         <Pressable
           style={st.dashCard}
-          onPress={() => router.push("/storybooks")}
+          onPress={() => router.push("/stories" as never)}
           accessibilityRole="button"
           accessibilityLabel="Continue reading"
         >
@@ -105,7 +123,7 @@ export default function HomeScreen() {
         {/* This week */}
         <Pressable
           style={st.dashCard}
-          onPress={() => router.push("/storybooks")}
+          onPress={() => router.push("/stories" as never)}
           accessibilityRole="button"
           accessibilityLabel="This week"
         >
@@ -206,6 +224,26 @@ const st = StyleSheet.create({
     color: C.primary,
   },
   cardGrid: { gap: 12 },
+  journalHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    backgroundColor: C.accent,
+    borderRadius: R.card,
+    padding: 18,
+    marginBottom: 4,
+  },
+  journalIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,253,249,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  journalIconText: { fontSize: 24 },
+  journalLabel: { fontFamily: F.displayBold, fontSize: 17, color: "#FFFDF9" },
+  journalSub: { fontFamily: F.body, fontSize: 13, color: "rgba(255,253,249,0.85)", marginTop: 2, lineHeight: 18 },
   dashCard: {
     flexDirection: "row",
     alignItems: "center",

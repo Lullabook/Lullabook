@@ -430,9 +430,54 @@ by a token budget; significant [Moments](#moment) always win on trim; the per-Ba
 advances only on a generation that reaches Story text. See
 [ADR-0022](docs/adr/0022-story-context-engine.md).
 
+## v13 "Working app + family accounts + 2-plan pricing" — incoming language (PRD v13)
+
+> Grilled 2026-06-22 (hands-on Simulator testing). Supersedes the Tier naming where it
+> conflicts: ADR-0025 supersedes ADR-0023, ADR-0024 extends ADR-0006. Code rename not
+> done yet. See `planning/prd-v13-working-app-family-accounts-pricing.md`,
+> [ADR-0024](docs/adr/0024-family-accounts-collaborative-creation.md),
+> [ADR-0025](docs/adr/0025-two-plan-monetization.md).
+
+- **Just Us** — the entry plan ($9.99/mo, $79.99/yr). **One creating parent** (the
+  [Guardian](#guardian)); other people may be invited as **view-only**
+  [Members](#member). Illustrated [Stories](#story); **no [Voice clip](#voice-clip), no
+  Video page**. Replaces the Basic/Normal tier naming.
+- **Our Whole Family** — the premium plan ($24.99/mo, $199.99/yr). **Multiple invited
+  [Members](#member) who can all create** Stories for the [Baby](#baby); includes
+  **[Voice message](#voice-message)** weave + AI narration and **Video pages**
+  (credit-metered), plus [Custom art style](#custom-art-style). The "profitable" tier;
+  replaces Plus. _Avoid_: "Solo"/"Family" as the literal plan names; "Basic/Normal/Plus"
+  (retired).
+- **Invited Member** — a real person (e.g. a grandparent) given their own login in the
+  [Household](#household) by attaching an **email to a roster person** and sending an
+  invite (Guardian-only). On accept they become a **non-Guardian** [Member](#member)
+  linked to their own [Adult Persona](#persona) (their Self Persona) via **self-consent**
+  (ADR-0014). This is the case ADR-0014 deferred ("a persona of another adult who won't
+  make an account") — resolved by having them *make an account*. See ADR-0024.
+- **Member-login cap** — the per-plan limit on how many Member **logins** a Household may
+  have (Just Us = the parent; Our Whole Family = the whole family). **Distinct from** the
+  likeness/[Persona](#persona) cap (which guards LoRA-training cost). The collaboration
+  lever that the Family plan sells.
+- **Create-rights** — whether a given [Member](#member) may generate a Story, derived
+  **server-side** from the Household plan + the Member's role (Just Us → only the
+  Guardian; Our Whole Family → every Member). The per-member generation gate.
+- **Voice message** — an [Invited Member](#invited-member)'s recorded [Voice
+  clip](#voice-clip) contribution. Because the recorder self-consents to their own voice,
+  it posts to the Baby's [World](#world) **immediately** and **notifies** the parents;
+  eligible for the lullaby weave / narration right away. Recorded only — no cloning.
+  Our-Whole-Family only.
+- **Generation terminal state** — a [Storybook](#storybook) generation **always** ends in
+  a terminal status (`draft` | `failed`) on **every** workflow path (including local-dev),
+  never stranded in `generating`/"Illustrating". When illustration is unavailable, the
+  book degrades to a **text-viewable** draft rather than an endless spinner. (Lifecycle
+  per [ADR-0004](docs/adr/0004-curated-versioned-storybook.md).)
+
 ---
 
-_Last updated 2026-06-21: added PRD v12 language (Tier [Basic/Normal/Plus], Trial-as-entry
+_Last updated 2026-06-22: added PRD v13 language (Just Us / Our Whole Family two-plan
+model superseding the Basic/Normal/Plus Tier; Invited Member, Member-login cap,
+Create-rights, Voice message, Generation terminal state; ADR-0024 family accounts extends
+ADR-0006, ADR-0025 monetization supersedes ADR-0023). Prior update 2026-06-21: added PRD v12 language (Tier [Basic/Normal/Plus], Trial-as-entry
 [no free tier], Story cap, Credit, Custom art style [Style LoRA], Story Context Engine;
 ADR-0022 supersedes ADR-0019, ADR-0023 supersedes ADR-0009 + parts of ADR-0016 and updates
 ADR-0008). Prior update 2026-06-16: added PRD v9 language (mobile feature wave — parity

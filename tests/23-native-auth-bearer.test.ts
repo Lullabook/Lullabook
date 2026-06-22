@@ -7,6 +7,7 @@ import {
 } from "@/lib/bearer-auth";
 import { HomeRosterService } from "@/services/home-roster";
 import { createTestContext } from "@/test/fixtures";
+import type { RequestContext } from "@/lib/context";
 
 function fakeVerifier(sub: string, email = "parent@example.com"): JwtVerifier {
   return {
@@ -31,7 +32,7 @@ describe("23 — native auth bearer backend", () => {
     const { member } = await requireBearerMember(
       bearerRequest("good"),
       fakeVerifier("auth-native-1"),
-      () => ctx
+      () => ctx as unknown as RequestContext
     );
 
     expect(member.authUserId).toBe("auth-native-1");
@@ -44,7 +45,7 @@ describe("23 — native auth bearer backend", () => {
     const { member } = await requireBearerMember(
       bearerRequest("good"),
       fakeVerifier("auth-new", "new@example.com"),
-      () => ctx
+      () => ctx as unknown as RequestContext
     );
 
     expect(member.email).toBe("new@example.com");
@@ -56,11 +57,11 @@ describe("23 — native auth bearer backend", () => {
     ctx.onboarding.ensureFamilyForNewUser("auth-a", "a@example.com");
 
     await expect(
-      requireBearerMember(new Request("http://localhost/api/home"), fakeVerifier("auth-a"), () => ctx)
+      requireBearerMember(new Request("http://localhost/api/home"), fakeVerifier("auth-a"), () => ctx as unknown as RequestContext)
     ).rejects.toThrow(BearerAuthError);
 
     await expect(
-      requireBearerMember(bearerRequest("bad"), fakeVerifier("auth-a"), () => ctx)
+      requireBearerMember(bearerRequest("bad"), fakeVerifier("auth-a"), () => ctx as unknown as RequestContext)
     ).rejects.toThrow(BearerAuthError);
   });
 

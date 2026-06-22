@@ -28,6 +28,14 @@ import type { SubscriptionService } from "@/services/subscription";
 
 const FREE_REROLL_BUDGET = 5;
 
+/**
+ * Watchdog budget: a Storybook may not remain in `generating` longer than this
+ * before the reaper forces it `failed` (PRD v13 / issue 100 — generation
+ * always reaches a terminal state within a bounded window). Configurable via
+ * the `reapStrandedGenerations` parameter; ~5 min default per the PRD.
+ */
+export const DEFAULT_GENERATION_WATCHDOG_BUDGET_MS = 5 * 60 * 1000;
+
 type PersonaRecord = NonNullable<ReturnType<DataStore["getPersona"]>>;
 
 export class StorybookService {
@@ -207,8 +215,56 @@ export class StorybookService {
    * The durable workflow body for the generate path. Reconstructs everything
    * from persisted state (PRD v2: no in-process variables cross the queue
    * boundary) and branches original-vs-classic on the Storybook's classicId.
+   *
+   * ADR-0004 / PRD v13 (issue 100): the "never strand in `generating`"
+   * backstop lives HERE, in the service, so it holds on EVERY workflow
+   * adapter (Inngest, LocalDevWorkflowAdapter, FakeWorkflow) — not just the
+   * Inngest function. Any throw anywhere in the pipeline forces the book to a
+   * terminal `failed` if it is still `generating`, then re-throws so the
+   * caller (POST route / Inngest function) can surface the error. The reader
+   * treats `failed` as the re-rollable floor, never an infinite "Illustrating".
    */
   async runGenerationBody(memberId: string, storybookId: string): Promise<void> {
+    try {
+      await this.runGenerationBodyInner(memberId, storybookId);
+    } catch (err) {
+      this.markFailedIfGenerating(storybookId);
+      throw err;
+    }
+  }
+
+  /** Forces a still-`generating` book to `failed`; leaves already-terminal books untouched. */
+  private markFailedIfGenerating(storybookId: string): void {
+    const storybook = this.store.storybooks.get(storybookId);
+    if (storybook && storybook.status === "generating") {
+      storybook.status = "failed";
+      this.store.saveStorybook(storybook);
+    }
+  }
+
+  /**
+   * Watchdog: mark every Storybook still in `generating` past the budget as
+   * `failed`. Defends against a run that never completes (process crash, hung
+   * step, lost job). Returns the count reaped. Caller is responsible for
+   * persisting (the reader poll calls `ctx.persist()` when this returns > 0).
+   */
+  reapStrandedGenerations(
+    now: Date = new Date(),
+    budgetMs: number = DEFAULT_GENERATION_WATCHDOG_BUDGET_MS
+  ): number {
+    let reaped = 0;
+    for (const storybook of this.store.storybooks.values()) {
+      if (storybook.status !== "generating") continue;
+      if (now.getTime() - storybook.createdAt.getTime() > budgetMs) {
+        storybook.status = "failed";
+        this.store.saveStorybook(storybook);
+        reaped++;
+      }
+    }
+    return reaped;
+  }
+
+  private async runGenerationBodyInner(memberId: string, storybookId: string): Promise<void> {
     const storybook = this.store.storybooks.get(storybookId);
     if (!storybook) return;
 
@@ -565,10 +621,22 @@ export class StorybookService {
     const readyCount = pages.filter((p) => p.generationStatus === "ready").length;
     const floor = readyPageFloor(resolvePageCount(storybook.brief));
 
-    if (readyCount < floor) {
-      storybook.status = "failed";
-    } else {
+    if (readyCount >= floor) {
       storybook.status = "draft";
+    } else {
+      // Issue 102: text-viewable fallback. When illustrations are unavailable
+      // (fal/blob store down), every page lands `failed` for the image but the
+      // generated story text is still present on each Page. A book with enough
+      // text-bearing pages degrades to a readable text-viewable `draft` rather
+      // than uniformly `failed` — the reader renders page text gracefully when
+      // `illustrationBlobKey` is null. Only a book with NO text pages (claude
+      // pass produced nothing) stays `failed`.
+      const textPageCount = pages.filter((p) => p.text && p.text.length > 0).length;
+      if (textPageCount >= floor) {
+        storybook.status = "draft";
+      } else {
+        storybook.status = "failed";
+      }
     }
     this.store.saveStorybook(storybook);
   }

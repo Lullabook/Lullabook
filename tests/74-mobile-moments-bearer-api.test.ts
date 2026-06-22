@@ -64,7 +64,7 @@ describe("74 — mobile moments bearer API", () => {
 
   it("creates a moment and lists it for the baby", async () => {
     harness.authSub = "guardian";
-    const ctx = harness.ctx as RequestContext;
+    const ctx = harness.ctx!;
     const { baby } = await householdWithBaby(ctx, "Maya");
 
     const createRes = await POST(
@@ -96,7 +96,7 @@ describe("74 — mobile moments bearer API", () => {
   });
 
   it("never lists another family's moments", async () => {
-    const ctx = harness.ctx as RequestContext;
+    const ctx = harness.ctx!;
     const memberA = ctx.onboarding.ensureFamilyForNewUser(harness.authSub, "a@example.com");
     const memberB = ctx.onboarding.ensureFamilyForNewUser("moments-auth-b", "b@example.com");
     const babyB = ctx.babies.addBaby({ memberId: memberB.id, displayName: "Baby B" });

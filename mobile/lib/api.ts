@@ -101,6 +101,16 @@ export function hardDeleteAccount(): Promise<{ deleted: boolean }> {
   });
 }
 
+/** Issue 107: dev-only demo seed (double-gated server-side). */
+export function seedDemo(): Promise<{
+  alreadySeeded: boolean;
+  personas: number;
+  characters: number;
+  books: number;
+}> {
+  return apiFetch("/api/dev/seed", { method: "POST" });
+}
+
 export interface MomentWire {
   id: string;
   familyId: string;

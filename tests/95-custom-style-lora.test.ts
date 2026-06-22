@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestContext, subscribedGuardian, householdWithBaby, goodPhoto } from "@/test/fixtures";
 import type { Tier } from "@/domain/types";
-import { CustomStyleService, CustomStyleStatus } from "@/services/custom-style";
+import { CustomStyleService } from "@/services/custom-style";
 import { EntitlementError } from "@/services/entitlement";
 import { CreditError } from "@/services/credit-ledger";
 
@@ -158,7 +158,7 @@ describe("95 — Custom art-style trained Style-LoRA pipeline (Plus, ADR-0023)",
 
       // Emit the fal training failure event so the workflow sees it
       const falWebhook = ctx.fal.getWebhook(`job-${ctx.fal.trainCalls}`);
-      await ctx.workflow.emitEvent("fal.training.complete", falWebhook);
+      await ctx.workflow.emitEvent("fal.training.complete", falWebhook!);
       await ctx.workflow.drain();
 
       // After failure: status=failed, credit refunded

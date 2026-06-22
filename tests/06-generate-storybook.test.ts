@@ -51,10 +51,10 @@ describe("06 — generate storybook (single persona)", () => {
     expect(pages.filter((p) => p.generationStatus === "ready")).toHaveLength(11);
     expect(book.status).toBe("draft");
   });
-  it("recovers a failed book to draft when enough pages are recovered", async () => {
+  it("recovers a failed page to ready on a text-viewable draft when enough pages are recovered", async () => {
     const ctx = createTestContext();
     const { member, persona } = await readyPersona(ctx);
-    ctx.fal.failPages = new Set([3, 4, 5]); // 3 failed pages
+    ctx.fal.failPages = new Set([3, 4, 5]); // 3 failed illustration pages
     ctx.fal.currentPage = 0;
 
     const book = await generateAndWait(ctx, member.id, {
@@ -63,16 +63,22 @@ describe("06 — generate storybook (single persona)", () => {
       theme: "recovery",
     });
 
-    expect(book.status).toBe("failed");
+    // Issue 102: with text-viewable fallback, a book with failed illustrations
+    // but full text reaches `draft` (text-viewable), not `failed`. The failed
+    // pages surface as re-rollable holes, not a blocked book.
+    expect(book.status).toBe("draft");
     
-    // Now recover one page
+    // Now recover one failed illustration page
     const failedPages = ctx.store.getPagesForStorybook(book.id).filter(p => p.generationStatus === "failed");
+    expect(failedPages).toHaveLength(3);
     ctx.fal.failPages = new Set(); // let it succeed
     await ctx.storybooks.recoverPage(member.id, failedPages[0].id);
     await ctx.workflow.drain();
 
     const updatedBook = ctx.store.storybooks.get(book.id)!;
     expect(updatedBook.status).toBe("draft");
+    const recoveredPage = ctx.store.pages.get(failedPages[0].id)!;
+    expect(recoveredPage.generationStatus).toBe("ready");
   });
 
   it("selectCandidate stores moderated blob key and clears raw URL", async () => {
@@ -141,7 +147,7 @@ describe("06 — generate storybook (single persona)", () => {
     const spy = vi.vi.spyOn(contextModule, "createRequestContext").mockReturnValue(ctx as any);
 
     try {
-      await expect(pageRecover.fn({
+      await expect((pageRecover as any).fn({
         event: { data: { pageId: failedPage.id, memberId: member.id, attempt: 1 } },
         step: {
           run: async (_name: string, fn: () => Promise<unknown>) => fn(),

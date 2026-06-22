@@ -15,6 +15,7 @@ import {
 } from "@expo-google-fonts/nunito";
 
 import { useColorScheme } from "@/components/useColorScheme";
+import { BackPill } from "@/components/BackPill";
 import { C, F } from "@/constants/theme";
 
 export { ErrorBoundary } from "expo-router";
@@ -63,9 +64,11 @@ function RootLayoutNav() {
         <Stack.Screen name="characters/new" options={{ title: "New character", ...stackHeader }} />
         <Stack.Screen name="characters/[id]" options={{ title: "Edit character", ...stackHeader }} />
         <Stack.Screen name="family/new" options={{ title: "Add family", ...stackHeader }} />
-        <Stack.Screen name="account" options={{ title: "Account", ...stackHeader }} />
-        <Stack.Screen name="storybooks/new" options={{ title: "New story", ...stackHeader }} />
-        <Stack.Screen name="storybooks/[id]" options={{ title: "Story", ...stackHeader }} />
+        {/* Issue 105: billing is a reachable, dismissible modal. */}
+        <Stack.Screen
+          name="billing"
+          options={{ title: "Billing", presentation: "modal", ...stackHeader }}
+        />
       </Stack>
     </ThemeProvider>
   );
@@ -76,4 +79,6 @@ const stackHeader = {
   headerShadowVisible: false,
   headerTintColor: C.primary,
   headerTitleStyle: { color: C.text, fontFamily: F.displayBold, fontSize: 20 },
+  headerBackVisible: false,
+  headerLeft: () => <BackPill />,
 };
