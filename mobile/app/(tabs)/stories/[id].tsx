@@ -8,8 +8,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { Audio } from "expo-av";
 import { router, useLocalSearchParams } from "expo-router";
+import { getAudio } from "@/lib/audio";
 import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton } from "@/components/maya-ui";
 import {
   getStorybook,
@@ -25,9 +25,14 @@ import { C, F } from "@/constants/theme";
 /** Issue 114 — Voice clip playback (lullaby/narration). Starts < 1s from cache. */
 function VoicePlayback({ clipId }: { clipId: string }) {
   const [playing, setPlaying] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [sound, setSound] = useState<import("expo-av").Audio.Sound | null>(null);
 
   async function play() {
+    const Audio = getAudio();
+    if (!Audio) {
+      setPlaying(false);
+      return;
+    }
     try {
       const { url } = await getVoicePlaybackUrl(clipId);
       if (sound) await sound.unloadAsync();
