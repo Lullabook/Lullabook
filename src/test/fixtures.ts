@@ -12,6 +12,7 @@ import {
   FakeWorkflow,
   InMemoryBlobStore,
 } from "@/adapters/fakes";
+import type { FalAdapter } from "@/adapters/types";
 import { DataStore } from "@/db/store";
 import { BabyService } from "@/services/baby";
 import { CharacterService } from "@/services/character";
@@ -39,11 +40,17 @@ import { CustomStyleService } from "@/services/custom-style";
 import { HomeDashboardService } from "@/services/home-dashboard";
 import { WorldService } from "@/services/world";
 
-export function createTestContext() {
+export function createTestContext<T extends FalAdapter = FakeFal>(options?: {
+  fal?: T;
+}) {
   const store = new DataStore();
   const anthropic = new FakeAnthropic();
   const classicCatalog = new FakeClassicCatalog();
-  const fal = new FakeFal();
+  // Issue 123: an explicit fal override (e.g. DevFalFallbackAdapter) wires
+  // through personas + storybooks so the dev placeholder path is testable
+  // end-to-end without touching the production composition root. The default
+  // generic stays FakeFal so existing tests keep access to its inspector props.
+  const fal = (options?.fal ?? new FakeFal()) as T;
   const video = new FakeVideo();
   const moderation = new FakeModeration();
   const liveness = new FakeLiveness();
@@ -73,6 +80,35 @@ export function createTestContext() {
     childSafety,
     entitlements
   );
+  // Issue 125: wrap the persona service so `createBaby`/`createAdult`/photo
+  // replacement auto-confirm likeness for the test harness — every "ready"
+  // persona is immediately usable by tests that call `ctx.storybooks.generate`
+  // directly. The gate itself is real (enforced in storybook.ts) and is
+  // exercised explicitly in tests/125-likeness-gate.test.ts by calling
+  // `generate` on a persona whose likeness was never accepted.
+  const personasProxy = new Proxy(personas, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (prop !== "createBaby" && prop !== "createAdult" && prop !== "replacePhotos") {
+        return value;
+      }
+      if (typeof value !== "function") return value;
+      return async (...args: unknown[]) => {
+        const persona = await value.apply(target, args);
+        if (persona?.id && persona.status === "ready") {
+          // Issue 125: only a Guardian may confirm likeness (persona service
+          // enforces role). Auto-accept only when the creator is a guardian;
+          // non-guardian creators (e.g. an invited Member making their own
+          // Adult Persona) must have their Guardian confirm separately.
+          const creator = store.members.get(persona.createdByMemberId);
+          if (creator?.role === "guardian") {
+            target.acceptLikeness(persona.id, persona.createdByMemberId);
+          }
+        }
+        return persona;
+      };
+    },
+  });
   const characters = new CharacterService(store, anthropic, childSafety);
   const babies = new BabyService(store);
   const familyRoster = new FamilyRosterService(store);
@@ -137,7 +173,9 @@ export function createTestContext() {
     childSafety,
     subscriptions,
     characters,
-    personas,
+    personas: personasProxy,
+    /** Issue 125: the unwrapped PersonaService — use to create un-confirmed personas for gate tests. */
+    rawPersonas: personas,
     babies,
     familyRoster,
     voiceClips,
@@ -178,6 +216,34 @@ export async function generateAndWait(
   memberId: string,
   brief: import("@/domain/types").Brief
 ) {
+  // Issue 125: auto-accept likeness on every starring persona so the wider
+  // suite is unaffected by the likeness-confirmation gate. Tests that exercise
+  // the gate directly call `ctx.storybooks.generate` instead. Mirror
+  // `normalizeBrief`: a ready Baby Persona for the family is auto-inserted, so
+  // accept it too even when the brief lists no personas.
+  const member = ctx.store.members.get(memberId);
+  const babyPersona = member
+    ? [...ctx.store.personas.values()].find(
+        (p) => p.familyId === member.familyId && p.kind === "baby" && p.status === "ready"
+      )
+    : undefined;
+  const starring = [...brief.starringPersonaIds];
+  if (babyPersona && !starring.includes(babyPersona.id)) {
+    starring.unshift(babyPersona.id);
+  }
+  for (const pid of starring) {
+    const p = ctx.store.getPersona(pid, memberId);
+    if (p && p.status === "ready" && p.likenessConfirmed !== true) {
+      // Issue 125: auto-accept likeness for the test harness. Only a Guardian
+      // may confirm; a non-Guardian member generating from an already-confirmed
+      // persona is fine, but a non-guardian can't be the confirmer — skip those
+      // (the persona's guardian creator confirms via the personasProxy).
+      const actor = ctx.store.members.get(memberId);
+      if (actor?.role === "guardian") {
+        ctx.personas.acceptLikeness(pid, memberId);
+      }
+    }
+  }
   const book = await ctx.storybooks.generate(memberId, brief);
   await ctx.workflow.drain();
   return ctx.store.getStorybook(book.id, memberId)!;
@@ -203,6 +269,24 @@ export async function subscribedGuardian(ctx: ReturnType<typeof createTestContex
 export async function householdWithBaby(ctx: ReturnType<typeof createTestContext>, name = "Maya") {
   const guardian = await subscribedGuardian(ctx);
   const babyPersona = await ctx.personas.createBaby({
+    memberId: guardian.id,
+    displayName: name,
+    photos: [goodPhoto(), goodPhoto(), goodPhoto()],
+  });
+  const baby = ctx.babies.addBaby({ memberId: guardian.id, displayName: name });
+  return { guardian, babyPersona, baby };
+}
+
+/**
+ * Issue 125 — a household whose baby persona is NOT likeness-confirmed, for
+ * gate tests. Uses `rawPersonas` to bypass the test-harness auto-accept.
+ */
+export async function householdWithBabyUnconfirmed(
+  ctx: ReturnType<typeof createTestContext>,
+  name = "Maya"
+) {
+  const guardian = await subscribedGuardian(ctx);
+  const babyPersona = await ctx.rawPersonas.createBaby({
     memberId: guardian.id,
     displayName: name,
     photos: [goodPhoto(), goodPhoto(), goodPhoto()],

@@ -2,12 +2,10 @@ import { RealAnthropicAdapter } from "@/adapters/anthropic";
 import { createBlobStore } from "@/lib/create-blob-store";
 import { CuratedClassicCatalog } from "@/adapters/classic-catalog";
 import { optionalEnv } from "@/adapters/env";
-import { RealFalAdapter } from "@/adapters/fal";
-import { DevFalFallbackAdapter } from "@/adapters/dev-fal-fallback";
 import { FakeLiveness } from "@/adapters/fakes";
 import { createWorkflowAdapter } from "@/lib/create-workflow-adapter";
 import { RekognitionLivenessAdapter } from "@/adapters/liveness";
-import { shouldDevBypassLiveness, shouldDevFalFallback } from "@/lib/dev-bypass";
+import { selectFalAdapter, shouldDevBypassLiveness } from "@/lib/dev-bypass";
 import { PermissiveDevModeration, RealModerationAdapter } from "@/adapters/moderation";
 import { RealNotificationAdapter } from "@/adapters/notifications";
 import { PdfLibAdapter } from "@/adapters/pdf";
@@ -56,13 +54,12 @@ export function createRequestContext() {
 
   const anthropic = new RealAnthropicAdapter();
   const classicCatalog = new CuratedClassicCatalog();
-  // Issue 108: dev fal fallback — in dev with DEV_FAL_FALLBACK=true and no
-  // FAL_API_KEY, wrap the real adapter so training returns a placeholder
-  // `ready` result (persona reaches `ready` without live fal keys). Double-
-  // gated, inert in production.
-  const fal = shouldDevFalFallback() && !optionalEnv("FAL_API_KEY")
-    ? new DevFalFallbackAdapter()
-    : new RealFalAdapter();
+  // Issue 123: dev fal fallback — flag-only (`DEV_FAL_FALLBACK` + non-prod).
+  // A present FAL_API_KEY no longer defeats the explicit flag; the dev .env.local
+  // sets a key, so the old `&& !optionalEnv("FAL_API_KEY")` clause always picked
+  // the real adapter in dev → 100% illustration failure (synthetic LoRA keys
+  // are not real fal paths). Double-gated, inert in production.
+  const fal = selectFalAdapter();
   // ADR-0010: real classifiers in production (fail closed). Locally, when no
   // Sightengine account is configured, fall back to a permissive dev adapter
   // so the app is clickable — never in production.

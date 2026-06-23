@@ -131,6 +131,12 @@ export class StorybookService {
     for (const id of normalized.starringPersonaIds) {
       const p = this.store.getPersona(id, memberId);
       if (!p || p.status !== "ready") throw new Error(`Persona ${id} not ready`);
+      // Issue 125: likeness-confirmation gate — no book spend until the
+      // Guardian has reviewed samples + accepted the trained Persona. `!== true`
+      // (not `=== false`) so legacy/undefined rows also block until confirmed.
+      if (p.likenessConfirmed !== true) {
+        throw new Error(`Persona ${id} likeness not confirmed`);
+      }
     }
 
     const storybook: Storybook = {
@@ -188,6 +194,10 @@ export class StorybookService {
     for (const id of brief.starringPersonaIds) {
       const p = this.store.getPersona(id, memberId);
       if (!p || p.status !== "ready") throw new Error(`Persona ${id} not ready`);
+      // Issue 125: likeness-confirmation gate (`!== true`, same as generate path).
+      if (p.likenessConfirmed !== true) {
+        throw new Error(`Persona ${id} likeness not confirmed`);
+      }
     }
 
     const classicBrief: Brief = {
@@ -507,8 +517,18 @@ export class StorybookService {
             const bytes =
               imageResult.bytes ?? Buffer.from(`fetched:${imageResult.imageUrl}`);
             await this.blobs.put(rawKey, bytes);
-          } catch {
+          } catch (err) {
+            // Issue 122: surface the upstream fal error (status/body) for
+            // diagnosis instead of collapsing it to an opaque "failed". The
+            // page still lands `failed` (a re-rollable hole) and the book
+            // degrades to a text-viewable draft (issue 102); this `.error`
+            // blob parallels the `.raw` key and is the diagnostic record only
+            // — it is never read by the page state machine.
             await this.blobs.put(moderationKey, Buffer.from("failed"));
+            await this.blobs.put(
+              `${blobKey}.attempt-${attempt}.error`,
+              Buffer.from(err instanceof Error ? err.message : String(err))
+            );
           }
         },
       },

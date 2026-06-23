@@ -58,6 +58,23 @@ export const PAYWALL_PLANS: PaywallPlan[] = [
 /** Legacy compat: PAYWALL_TIERS maps to the new plans. */
 export const PAYWALL_TIERS = PAYWALL_PLANS;
 
+/**
+ * Issue 129 / ADR-0025 amendment — R1 ships ONE plan (Just Us + 7-day trial);
+ * "Our Whole Family" is hidden until its features (voice/video/invited members)
+ * exist in R2. The full two-plan model stays in code (PAYWALL_PLANS); this flag
+ * filters the *visible/sellable* set for R1. Inert off — R2 shows both again.
+ */
+export function getR1VisiblePlans(): PaywallPlan[] {
+  return process.env.R1_ONE_PLAN === "true"
+    ? PAYWALL_PLANS.filter((p) => p.id === "just_us")
+    : PAYWALL_PLANS;
+}
+
+/** Whether R1 is hiding the premium plan (amends ADR-0025). */
+export function isR1OnePlan(): boolean {
+  return process.env.R1_ONE_PLAN === "true";
+}
+
 /** Annual billing is the default option (ADR-0025). */
 export function isAnnualDefault(): boolean {
   return true;

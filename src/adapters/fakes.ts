@@ -138,6 +138,8 @@ export class FakeFal implements FalAdapter {
   public failPages = new Set<number>();
   public failTraining = false;
   public currentPage = 0;
+  /** When set, thrown error message for failing image pages (issue 122). */
+  public failImageMessage: string | undefined = undefined;
   private jobs = new Map<string, FalTrainWebhook>();
   private imageResultsByKey = new Map<string, FalImageResult>();
 
@@ -186,7 +188,7 @@ export class FakeFal implements FalAdapter {
       (this.failImageOnPage === this.currentPage ||
         this.failPages.has(this.currentPage))
     ) {
-      throw new Error("Image generation failed");
+      throw new Error(this.failImageMessage ?? "Image generation failed");
     }
     const imageUrl = `https://example.com/${loraKey}/${pageNum}.png`;
     const result = { imageUrl, bytes: Buffer.from(`image-${pageNum}-${idempotencyKey ?? "none"}`) };
@@ -219,8 +221,11 @@ export class FakeModeration implements ModerationAdapter {
   public blockedImageContents: string[] = [];
   public blockedCsamImageContents: string[] = [];
   public audit: ModerationResult[] = [];
+  /** When true, every check throws (issue 133: moderation-service outage). */
+  public failChecks = false;
 
   async checkImage(image: Buffer): Promise<ModerationResult> {
+    if (this.failChecks) throw new Error("Moderation service unavailable (simulated)");
     const content = image.toString();
     if (this.blockedCsamImageContents.some((pattern) => content.includes(pattern))) {
       const result = { allowed: false, reason: "unsafe image", csamDetected: true };
@@ -245,6 +250,7 @@ export class FakeModeration implements ModerationAdapter {
   }
 
   async checkText(text: string): Promise<ModerationResult> {
+    if (this.failChecks) throw new Error("Moderation service unavailable (simulated)");
     if (this.blockedTexts.some((t) => text.includes(t))) {
       const result = { allowed: false, reason: "unsafe text" };
       this.audit.push(result);
@@ -405,8 +411,11 @@ export class FakeWorkflow implements WorkflowAdapter {
 export class FakeNotifications implements NotificationAdapter {
   public emails: { to: string; subject: string }[] = [];
   public pushes: { memberId: string; title: string }[] = [];
+  /** When true, sendEmail throws (issue 127: email-send-failure invariant). */
+  public failEmail = false;
 
   async sendEmail(to: string, subject: string, _body: string): Promise<void> {
+    if (this.failEmail) throw new Error("Email send failed (simulated)");
     this.emails.push({ to, subject });
   }
 

@@ -222,6 +222,8 @@ export class SupabaseDataStore extends DataStore {
         status: r.status,
         loraWeightKey: r.lora_weight_key,
         avatarKey: r.avatar_key ?? null,
+        // Issue 125: persisted likeness-confirmation gate.
+        likenessConfirmed: r.likeness_confirmed ?? false,
         promotedFromCharacterId: r.promoted_from_character_id ?? undefined,
         questionnaire: r.questionnaire ?? undefined,
         createdAt: new Date(r.created_at),
@@ -624,6 +626,8 @@ export class SupabaseDataStore extends DataStore {
           status: p.status,
           lora_weight_key: p.loraWeightKey,
           avatar_key: p.avatarKey,
+          // Issue 125: persisted likeness-confirmation gate.
+          likeness_confirmed: p.likenessConfirmed ?? false,
           promoted_from_character_id: p.promotedFromCharacterId ?? null,
           questionnaire: p.questionnaire ?? null,
           created_at: p.createdAt.toISOString(),

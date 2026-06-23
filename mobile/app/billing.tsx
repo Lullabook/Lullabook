@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
+import { fetchPaywallConfig, type PaywallPlanResponse } from "@/lib/api";
 
-/** ADR-0025 — Two-plan config (shared shape with web paywall-config). */
+/** ADR-0025 / issue 129 — plan shape (shared with web paywall-config). */
 interface PlanInfo {
   id: string;
   label: string;
@@ -19,7 +20,11 @@ interface PlanInfo {
   valueProp: string;
 }
 
-const PLANS: PlanInfo[] = [
+// Issue 129: the visible plans come from the server (/api/paywall-config), so
+// the R1 one-plan collapse (R1_ONE_PLAN) is server-authoritative — mobile never
+// hardcodes the premium tier. A static fallback keeps the screen renderable if
+// the fetch fails before auth.
+const FALLBACK_PLANS: PlanInfo[] = [
   {
     id: "just_us",
     label: "Just Us",
@@ -31,19 +36,6 @@ const PLANS: PlanInfo[] = [
     canVideo: false,
     canCustomStyle: false,
     valueProp: "One creating parent, illustrated stories starring your family.",
-  },
-  {
-    id: "our_whole_family",
-    label: "Our Whole Family",
-    monthlyPrice: 24.99,
-    annualPrice: 199.99,
-    storyCap: 20,
-    memberLoginCap: Infinity,
-    canNarrate: true,
-    canVideo: true,
-    canCustomStyle: true,
-    isRecommended: true,
-    valueProp: "Everyone creates, voice messages, video pages, and custom art styles.",
   },
 ];
 
@@ -109,8 +101,41 @@ function PlanCard({
   );
 }
 
+function toPlanInfo(p: PaywallPlanResponse): PlanInfo {
+  return {
+    id: p.id,
+    label: p.label,
+    monthlyPrice: p.monthlyPrice,
+    annualPrice: p.annualPrice,
+    storyCap: p.storyCap,
+    memberLoginCap: p.memberLoginCap,
+    canNarrate: p.canNarrate,
+    canVideo: p.canVideo,
+    canCustomStyle: p.canCustomStyle,
+    isRecommended: p.isRecommended,
+    valueProp: p.valueProp,
+  };
+}
+
 export default function PaywallScreen() {
   const [billing, setBilling] = useState<"monthly" | "annual">("annual");
+  const [plans, setPlans] = useState<PlanInfo[]>(FALLBACK_PLANS);
+
+  // Issue 129: fetch the R1-visible plans from the server so the one-plan
+  // collapse is server-authoritative (R1_ONE_PLAN), not duplicated here.
+  useEffect(() => {
+    let cancelled = false;
+    fetchPaywallConfig()
+      .then((cfg) => {
+        if (!cancelled) setPlans(cfg.plans.map(toPlanInfo));
+      })
+      .catch(() => {
+        // Keep the fallback — never a red-screen over a config fetch.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <Screen>
@@ -141,7 +166,7 @@ export default function PaywallScreen() {
       </View>
 
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-        {PLANS.map((plan) => (
+        {plans.map((plan) => (
           <PlanCard key={plan.id} plan={plan} billing={billing} />
         ))}
         <Text style={st.foundingNote}>

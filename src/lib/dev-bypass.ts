@@ -5,6 +5,10 @@
  * production — the functions return `false` before any bypass runs.
  */
 
+import { DevFalFallbackAdapter } from "@/adapters/dev-fal-fallback";
+import { RealFalAdapter } from "@/adapters/fal";
+import type { FalAdapter } from "@/adapters/types";
+
 /** Whether the Rekognition liveness check should be bypassed with FakeLiveness. */
 export function shouldDevBypassLiveness(): boolean {
   return (
@@ -19,4 +23,16 @@ export function shouldDevFalFallback(): boolean {
     process.env.NODE_ENV !== "production" &&
     process.env.DEV_FAL_FALLBACK === "true"
   );
+}
+
+/**
+ * Issue 123 — Select the fal adapter by the **flag alone**. A present
+ * `FAL_API_KEY` does NOT defeat an explicit `DEV_FAL_FALLBACK=true`: the dev
+ * `.env.local` sets a key, so the previous `&& !optionalEnv("FAL_API_KEY")`
+ * clause always picked the real adapter in dev → 100% illustration failure
+ * (the LoRA keys synthesized by the dev workflow are not real fal paths). Flag
+ * precedence matches `DEV_FORCE_SUBSCRIPTION`. Inert in production.
+ */
+export function selectFalAdapter(): FalAdapter {
+  return shouldDevFalFallback() ? new DevFalFallbackAdapter() : new RealFalAdapter();
 }

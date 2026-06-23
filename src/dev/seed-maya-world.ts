@@ -1,8 +1,10 @@
 import { v4 as uuid } from "uuid";
 import type { RequestContext } from "@/lib/context";
 import { rosterAvatarBlobKey } from "@/lib/roster-avatar";
+import { shouldDevFalFallback } from "@/lib/dev-bypass";
+import type { StorybookService } from "@/services/storybook";
 import type {
-  Baby,
+  Brief,
   Character,
   Member,
   Persona,
@@ -75,6 +77,28 @@ export interface SeedDemoResult {
   books: number;
 }
 
+/**
+ * Issue 124 — Drive the REAL generation pipeline for one Bedtime book so the
+ * seeded world carries genuine text + illustrations, not page-less display
+ * rows. Works against the dev runtime (real Claude text + DEV_FAL_FALLBACK
+ * placeholder images) and the in-memory test context (fake Claude + DevFal).
+ * `generate` enqueues; `persist()` drains the (inline, local-dev) workflow so
+ * the book reaches a terminal `draft` before this returns.
+ */
+export async function generateRealBedtimeBook(
+  ctx: {
+    storybooks: StorybookService;
+    store: { getStorybook(id: string, memberId: string): Storybook | undefined };
+    persist(): Promise<void>;
+  },
+  memberId: string,
+  brief: Brief
+): Promise<Storybook> {
+  const generated = await ctx.storybooks.generate(memberId, brief);
+  await ctx.persist();
+  return ctx.store.getStorybook(generated.id, memberId)!;
+}
+
 export async function seedMayaWorldRuntime(
   ctx: RequestContext,
   member: Member
@@ -106,6 +130,9 @@ export async function seedMayaWorldRuntime(
     status: "ready",
     loraWeightKey: `demo-lora/${uuid()}`,
     avatarKey: null,
+    // Issue 125: seeded as confirmed so the demo's generateRealBedtimeBook
+    // passes the likeness gate (the demo Guardian "already reviewed" it).
+    likenessConfirmed: true,
     createdAt: now,
   };
   ctx.store.savePersona(babyPersona);
@@ -175,31 +202,52 @@ export async function seedMayaWorldRuntime(
   }
 
   let createdBooks = 0;
-  for (const spec of BOOKS) {
-    const personaIds = [babyPersona.id, ...spec.personas.map((n) => personaByName.get(n)!.id)];
-    const characterIds = (spec.characters ?? []).map((n) => characterByName.get(n)!.id);
-    const book: Storybook = {
-      id: uuid(),
-      familyId,
+  if (shouldDevFalFallback()) {
+    // Issue 124: honest seed — drive the real pipeline for one Bedtime book
+    // (real Claude text + DEV_FAL_FALLBACK placeholder images), so the demo
+    // world carries a genuine illustrated `draft` instead of page-less rows.
+    // The seeded babyPersona is `ready` with a placeholder LoRA key that the
+    // DevFalFallbackAdapter honors; `persist()` drains the inline workflow.
+    const book = await generateRealBedtimeBook(ctx, member.id, {
+      starringPersonaIds: [babyPersona.id],
       babyId: baby.id,
-      createdByMemberId: member.id,
-      status: spec.status,
-      brief: {
-        starringPersonaIds: personaIds,
-        starringCharacterIds: characterIds.length ? characterIds : undefined,
+      storyType: "bedtime",
+      theme: "A Cozy Bedtime Under Maya's Stars",
+    });
+    if (book.status === "draft") {
+      ctx.storybooks.finalize(member.id, book.id);
+    }
+    createdBooks = 1;
+  } else {
+    // No dev fal fallback (prod, or dev without the flag): real generation
+    // can't complete synchronously, so fall back to display-only rows for
+    // shelf demos. These have no Pages — honest limitation, recorded above.
+    for (const spec of BOOKS) {
+      const personaIds = [babyPersona.id, ...spec.personas.map((n) => personaByName.get(n)!.id)];
+      const characterIds = (spec.characters ?? []).map((n) => characterByName.get(n)!.id);
+      const book: Storybook = {
+        id: uuid(),
+        familyId,
         babyId: baby.id,
-        storyType: spec.storyType,
-        theme: spec.theme,
-        pageCount: 12,
-      },
-      styleBible: null,
-      rerollBudgetRemaining: 5,
-      rerollCredits: 0,
-      createdAt: now,
-      finalizedAt: spec.status === "finalized" ? now : null,
-    };
-    ctx.store.saveStorybook(book);
-    createdBooks++;
+        createdByMemberId: member.id,
+        status: spec.status,
+        brief: {
+          starringPersonaIds: personaIds,
+          starringCharacterIds: characterIds.length ? characterIds : undefined,
+          babyId: baby.id,
+          storyType: spec.storyType,
+          theme: spec.theme,
+          pageCount: 12,
+        },
+        styleBible: null,
+        rerollBudgetRemaining: 5,
+        rerollCredits: 0,
+        createdAt: now,
+        finalizedAt: spec.status === "finalized" ? now : null,
+      };
+      ctx.store.saveStorybook(book);
+      createdBooks++;
+    }
   }
 
   await ctx.persist();

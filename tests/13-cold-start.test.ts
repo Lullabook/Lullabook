@@ -33,6 +33,9 @@ describe("13 — cold-start UX", () => {
     trainingPersona.status = "ready";
     trainingPersona.loraWeightKey = "lora/nova";
     ctx.store.savePersona(trainingPersona);
+    // Issue 125: the likeness gate blocks generation until confirmed — the
+    // cold-start auto-start path runs after the Guardian reviews samples.
+    ctx.personas.acceptLikeness(trainingPersona.id, guardian.id);
 
     await ctx.coldStart.onPersonaReady(trainingPersona.id);
     await ctx.workflow.drain();
