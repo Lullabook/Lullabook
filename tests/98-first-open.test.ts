@@ -90,7 +90,9 @@ describe("98 — First-open demo aha + Day-0 paywall", () => {
       const svc = new FirstOpenService();
       const flow = svc.getFlow();
       expect(flow.steps[0].type).toBe("demo");
-      expect(flow.steps[flow.steps.length - 1].type).toBe("paywall");
+      // Issue 131: paywall is no longer the last step (consent + photos follow),
+      // but it must still come after the demo.
+      expect(flow.steps.some((s) => s.type === "paywall")).toBe(true);
     });
 
     it("the paywall appears after the demo, not before", () => {

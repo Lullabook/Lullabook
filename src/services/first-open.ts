@@ -51,7 +51,7 @@ export class DemoStoryService {
 }
 
 export interface FirstOpenStep {
-  type: "demo" | "signup" | "paywall";
+  type: "demo" | "signup" | "paywall" | "consent" | "photos";
   label: string;
 }
 
@@ -65,10 +65,15 @@ export interface FirstOpenFlow {
 export class FirstOpenService {
   getFlow(): FirstOpenFlow {
     return {
+      // Issue 131 — the R1 aha path in order: demo → signup → trial → consent →
+      // photos. Baby Persona creation is gated on consent + entitlement
+      // (server-enforced); the flow makes that ordering explicit.
       steps: [
         { type: "demo", label: "Read a demo story" },
         { type: "signup", label: "Create your family" },
         { type: "paywall", label: "Start your free trial" },
+        { type: "consent", label: "Confirm parental consent" },
+        { type: "photos", label: "Add your baby" },
       ],
       defaultBilling: "annual",
       canSkipToPaywall: false,
@@ -81,6 +86,8 @@ export class FirstOpenService {
       steps: [
         { type: "demo", label: "Read a demo story" },
         { type: "paywall", label: "Start your free trial" },
+        { type: "consent", label: "Confirm parental consent" },
+        { type: "photos", label: "Add your baby" },
       ],
       defaultBilling: "annual",
       canSkipToPaywall: true,

@@ -56,6 +56,37 @@ export function fetchHome(): Promise<HomeResponse> {
   return apiFetch("/api/home");
 }
 
+/** Issue 129 — server-side paywall config (R1 one-plan collapse is server-driven). */
+export interface PaywallPlanResponse {
+  id: string;
+  label: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  storyCap: number;
+  memberLoginCap: number;
+  canNarrate: boolean;
+  canVideo: boolean;
+  canCustomStyle: boolean;
+  isRecommended?: boolean;
+  valueProp: string;
+}
+
+export interface PaywallConfigResponse {
+  plans: PaywallPlanResponse[];
+  annualDefault: boolean;
+}
+
+export function fetchPaywallConfig(): Promise<PaywallConfigResponse> {
+  return apiFetch("/api/paywall-config");
+}
+
+/** Issue 125 — confirm likeness on a trained Persona (mobile route). */
+export function acceptLikeness(personaId: string): Promise<{ ok: boolean; personaId: string }> {
+  return apiFetch(`/api/personas/${encodeURIComponent(personaId)}/accept-likeness`, {
+    method: "POST",
+  });
+}
+
 export function createCharacter(body: {
   questionnaire: import("@domain/types").TraitQuestionnaire;
   attestation?: string;

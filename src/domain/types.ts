@@ -184,6 +184,13 @@ export interface Persona {
   loraWeightKey: string | null;
   /** Generated roster portrait blob key; null ⇒ placeholder (ADR-0020). */
   avatarKey: string | null;
+  /**
+   * Issue 125 — whether the Guardian reviewed the likeness samples and accepted
+   * the trained Persona before any book-generation spend. The gate uses
+   * `!== true` so `false` AND legacy/undefined/seed rows all block until
+   * explicitly confirmed (persisted on the personas row — issue 125).
+   */
+  likenessConfirmed?: boolean;
   promotedFromCharacterId?: string;
   questionnaire?: TraitQuestionnaire;
   createdAt: Date;

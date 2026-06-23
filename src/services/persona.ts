@@ -147,6 +147,9 @@ export class PersonaService {
       status: "training",
       loraWeightKey: null,
       avatarKey: null,
+      // Issue 125: likeness is NOT confirmed on creation — the Guardian must
+      // review samples + accept before any book-generation spend.
+      likenessConfirmed: false,
       promotedFromCharacterId: input.promotedFromCharacterId,
       questionnaire: input.questionnaire,
       createdAt: new Date(),
@@ -224,6 +227,19 @@ export class PersonaService {
   acceptLikeness(personaId: string, actorMemberId: string): Persona {
     const persona = this.store.getPersona(personaId, actorMemberId);
     if (!persona) throw new Error("Persona not found");
+    if (persona.status !== "ready") {
+      throw new Error("Cannot confirm likeness for a persona that is not ready");
+    }
+    // Issue 125 / BUG 6 (red-team): only the Guardian may confirm likeness —
+    // the corollary of "only a Guardian may create a Baby Persona." A non-
+    // Guardian Member of the same family must not flip the generation gate.
+    const member = this.store.members.get(actorMemberId);
+    if (member?.role !== "guardian") {
+      throw new Error("Only guardians may confirm likeness");
+    }
+    // Issue 125: flip the gate so book generation is unlocked for this persona.
+    persona.likenessConfirmed = true;
+    this.store.savePersona(persona);
     return persona;
   }
 }

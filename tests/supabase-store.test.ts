@@ -109,7 +109,22 @@ function fixtureTables(): Record<string, Row[]> {
         created_at: NOW,
       },
     ],
-    personas: [],
+    personas: [
+      {
+        id: "persona-1",
+        family_id: "fam-1",
+        created_by_member_id: "mem-1",
+        kind: "baby",
+        display_name: "Maya",
+        status: "ready",
+        lora_weight_key: "lora/1",
+        avatar_key: "avatars/fam-1/persona-1",
+        likeness_confirmed: false,
+        promoted_from_character_id: null,
+        questionnaire: null,
+        created_at: NOW,
+      },
+    ],
     characters: [],
     subscriptions: [],
     consent_receipts: [],
@@ -215,5 +230,39 @@ describe("SupabaseDataStore", () => {
     await store.hydrateFamily("fam-1"); // second call is a no-op
 
     expect(store.storybooks.has("book-2")).toBe(false);
+  });
+
+  it("persists likeness_confirmed across the Supabase round-trip (issue 125)", async () => {
+    // Regression for the red-team BUG 1: the likeness-confirmation gate must
+    // survive hydrate → mutate → sync → re-hydrate. A field not in the upsert
+    // payload (or not read on hydrate) silently makes the gate a no-op in prod.
+    const tables = fixtureTables();
+    const { client, recorded } = stubClient(tables);
+    const store = new SupabaseDataStore(client);
+    await store.hydrateByAuthUser("auth-1");
+
+    // Hydrated persona starts unconfirmed.
+    expect(store.personas.get("persona-1")?.likenessConfirmed).toBe(false);
+
+    // Confirm likeness through the service seam.
+    const persona = store.personas.get("persona-1")!;
+    persona.likenessConfirmed = true;
+    store.savePersona(persona);
+
+    await store.sync();
+
+    // The upsert payload carries the column.
+    const personaUpsert = recorded.upserts.find((u) => u.table === "personas");
+    expect(personaUpsert?.rows[0].likeness_confirmed).toBe(true);
+
+    // Re-hydrate from the (stubbed) persisted state — the field survives.
+    const store2 = new SupabaseDataStore(
+      stubClient({
+        ...tables,
+        personas: [{ ...tables.personas[0], likeness_confirmed: true }],
+      }).client
+    );
+    await store2.hydrateByAuthUser("auth-1");
+    expect(store2.personas.get("persona-1")?.likenessConfirmed).toBe(true);
   });
 });

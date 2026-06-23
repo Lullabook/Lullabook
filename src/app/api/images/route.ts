@@ -18,6 +18,14 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!key.startsWith(`books/${authed.member.familyId}/`)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // Issue 122 (red-team BUG 5): only serve actual illustration/video page blobs.
+  // The page pipeline also writes diagnostic siblings (`.error`, `.moderation`,
+  // `.raw`) under the same `books/{familyId}/` prefix; those are internal —
+  // never client-servable (they carry raw fal error text / pre-moderation bytes).
+  const isServableBlob = /\.(png|jpg|jpeg|webp|mp4)$/i.test(key);
+  if (!isServableBlob) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   const url = await authed.ctx.blobs.signedUrl(key);
   return NextResponse.redirect(url, 307);
 }
