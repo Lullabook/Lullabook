@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Audio } from "expo-av";
+import { getAudio } from "@/lib/audio";
 import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton } from "@/components/maya-ui";
 import { BackPill } from "@/components/BackPill";
 import { fetchHome, listVoiceClips, uploadVoiceClip, type HomeResponse } from "@/lib/api";
@@ -58,6 +58,11 @@ export default function FamilyMemberDetailScreen() {
 
   useEffect(() => {
     (async () => {
+      const Audio = getAudio();
+      if (!Audio) {
+        setAudioPerm(false);
+        return;
+      }
       try {
         const status = await Audio.requestPermissionsAsync();
         setAudioPerm(status.granted);
@@ -69,12 +74,17 @@ export default function FamilyMemberDetailScreen() {
 
   async function startRecording() {
     setError(null);
+    const Audio = getAudio();
+    if (!Audio) {
+      setError("Voice recording needs a dev build — it isn't available in Expo Go.");
+      return;
+    }
     try {
       await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
       const rec = new Audio.Recording();
       await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
       await rec.startAsync();
-      (recordingRef as { current: Audio.Recording | null }).current = rec;
+      (recordingRef as { current: import("expo-av").Audio.Recording | null }).current = rec;
       setRecording(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not start recording");
@@ -130,7 +140,7 @@ export default function FamilyMemberDetailScreen() {
     }
   }
 
-  const recordingRef = { current: null as Audio.Recording | null };
+  const recordingRef = { current: null as import("expo-av").Audio.Recording | null };
 
   if (loading) {
     return <View style={st.center}><ActivityIndicator size="large" color={C.primary} /></View>;
