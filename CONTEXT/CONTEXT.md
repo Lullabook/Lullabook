@@ -472,9 +472,45 @@ advances only on a generation that reaches Story text. See
   book degrades to a **text-viewable** draft rather than an endless spinner. (Lifecycle
   per [ADR-0004](docs/adr/0004-curated-versioned-storybook.md).)
 
+## R1 simplification + test/observability — incoming language (PRD v16 / v17)
+
+> Grilled 2026-06-23. Two PRDs that sit on top of the R1 release (v14): **v16** cuts R1
+> scope harder and **v17** makes the app verifiable + observable. Decisions/invariants in
+> `planning/r1-simplify-test-logging-invariants.md`. Amends ADR-0024 (solo-only), ADR-0025
+> (solo plan), sequences ADR-0015 (US-only R1.0). Code rename not done yet.
+
+- **Ruthless cut** — the v16 principle: a feature not serving the one R1 promise (a solo
+  parent makes one illustrated Bedtime story starring their baby, kept as a PDF) is *a way to
+  break*, so it is **cut**. R1 cuts **audio** (voice clips/messages, lullaby weave, narration),
+  **multi-family** (invited members, family logins, collaborative plan, multi-baby), and **Asia**
+  (US-only R1.0). Keeps story creation + **Daily Notes**.
+- **Inert, not broken** — the load-bearing v16 invariant: a deferred feature is **gated
+  server-side with no reachable UI** — never a dead button, a 500-ing endpoint, or an endless
+  spinner. The server gate *is* the cut; hiding a button is not. _Avoid_: "hidden" (implies the
+  endpoint still lives).
+- **Daily Notes** — the lightweight daily [Moment](#moment) capture kept in R1 (solo, one baby).
+  Distinct from the deferred heavy machinery ([Story Context Engine](#story-context-engine),
+  Firsts, Birthday Story, weekly suggestion, photo-to-story, auto-context injection).
+- **Verify gate** — the v17 single command (`npm run verify`) that runs the whole suite and
+  **exits non-zero on any real failure**: the machine-checkable "is the app healthy?" gate an
+  agent loops against instead of judging by eye. _Avoid_: "the tests" (this is the one gate over
+  all of them).
+- **Honest seed harness** — a deterministic, double-gated fixture: one command yields a
+  known-good Household + baby + family + a **real illustrated** book, so testing never starts
+  from zero. Generalizes R1 issue 124's seed into a reusable fixture.
+- **Error capture** — automatic runtime-error logging from **both** the Expo app and the
+  Next.js API into **Sentry** (free tier, EU region), scrubbed of all child/PII data, that
+  **fails open** (a logging outage never breaks the app — the deliberate opposite of moderation,
+  which fails closed). Replaces the retired HockeyApp/App Center lineage. A new production error
+  **auto-opens a tracked GitHub issue** (deduped), closing the "bugs vanish" loop.
+  _Avoid_: "telemetry" (broader/analytics-flavored), "monitoring" (this is errors, not uptime).
+
 ---
 
-_Last updated 2026-06-22: added PRD v13 language (Just Us / Our Whole Family two-plan
+_Last updated 2026-06-23: added PRD v16/v17 language (Ruthless cut, Inert-not-broken, Daily
+Notes, Verify gate, Honest seed harness, Error capture [Sentry, fail-open, error→issue]; amends
+ADR-0024 solo-only + ADR-0025 solo plan, sequences ADR-0015 US-only R1.0). Prior update
+2026-06-22: added PRD v13 language (Just Us / Our Whole Family two-plan
 model superseding the Basic/Normal/Plus Tier; Invited Member, Member-login cap,
 Create-rights, Voice message, Generation terminal state; ADR-0024 family accounts extends
 ADR-0006, ADR-0025 monetization supersedes ADR-0023). Prior update 2026-06-21: added PRD v12 language (Tier [Basic/Normal/Plus], Trial-as-entry
