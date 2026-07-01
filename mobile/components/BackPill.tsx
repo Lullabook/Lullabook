@@ -1,6 +1,10 @@
-import { Pressable, Text, View, StyleSheet } from "react-native";
+import { Pressable, Text, StyleSheet } from "react-native";
+import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
 import { C, F, R } from "@/constants/theme";
+import { usePressFeedback } from "@/lib/use-press-feedback";
+
+const AnimatedPressable = createAnimatedComponent(Pressable);
 
 /**
  * Issue 104 — Branded in-app back affordance (Maya UI).
@@ -8,19 +12,26 @@ import { C, F, R } from "@/constants/theme";
  * A pill-shaped back button rendered in the header left slot. Guarded by
  * `router.canGoBack()` — when there's nowhere to go back to, nothing renders
  * (no dead-end, no crash at the stack root). Uses Maya design tokens.
+ *
+ * Issue 136 — wired to the shared press-feedback hook (opacity + spring +
+ * haptics) so it inherits polish for free.
  */
 export function BackPill({ label = "Back" }: { label?: string }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
   if (!router.canGoBack()) return null;
   return (
-    <Pressable
+    <AnimatedPressable
       onPress={() => router.back()}
-      style={st.pill}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      hitSlop={{ top: 8, bottom: 8, left: 12, right: 8 }}
+      style={[st.pill, style]}
       accessibilityRole="button"
       accessibilityLabel="Go back"
     >
       <Text style={st.arrow}>‹</Text>
       <Text style={st.label}>{label}</Text>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

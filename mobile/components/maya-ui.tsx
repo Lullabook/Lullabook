@@ -1,6 +1,11 @@
 /**
  * Small Maya's World UI kit for React Native. Import these in screens so each
  * screen stays short and consistent. Pure RN primitives — no extra deps.
+ *
+ * Issue 136 — PrimaryButton / GhostButton / Chip use the shared
+ * `usePressFeedback` hook (opacity + spring scale via reanimated + haptics).
+ * Reduce-motion degrades the spring to an instant transition; haptics no-op
+ * when unavailable (fail-open). Every shared pressable also gets `hitSlop`.
  */
 import type { ReactNode } from "react";
 import {
@@ -12,8 +17,15 @@ import {
   View,
   type TextInputProps,
 } from "react-native";
+import { createAnimatedComponent } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { C, F, R } from "@/constants/theme";
+import { usePressFeedback } from "@/lib/use-press-feedback";
+
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+// Reanimated v4's Animated namespace doesn't ship a Pressable wrapper; create
+// it once at module scope (never per render).
+const AnimatedPressable = createAnimatedComponent(Pressable);
 
 export function Screen({ children }: { children: ReactNode }) {
   return (
@@ -59,26 +71,48 @@ export function Field({ label, ...props }: { label?: string } & TextInputProps) 
 }
 
 export function PrimaryButton({ title, onPress, disabled }: { title: string; onPress?: () => void; disabled?: boolean }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "impact", style: "Light" });
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[s.btn, disabled ? s.btnDisabled : s.btnPrimary]}>
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      disabled={disabled}
+      hitSlop={HIT_SLOP}
+      style={[s.btn, disabled ? s.btnDisabled : s.btnPrimary, style]}
+    >
       <Text style={[s.btnText, { color: disabled ? C.soft : C.surface }]}>{title}</Text>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
 export function GhostButton({ title, onPress, danger }: { title: string; onPress?: () => void; danger?: boolean }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
   return (
-    <Pressable onPress={onPress} style={[s.btn, s.btnGhost, danger && { borderColor: C.dangerBorder }]}>
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      hitSlop={HIT_SLOP}
+      style={[s.btn, s.btnGhost, danger && { borderColor: C.dangerBorder }, style]}
+    >
       <Text style={[s.btnText, { color: danger ? C.danger : C.primary }]}>{title}</Text>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
 export function Chip({ label, icon, active, onPress }: { label: string; icon?: string; active?: boolean; onPress?: () => void }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
   return (
-    <Pressable onPress={onPress} style={[s.chip, { borderColor: active ? C.primaryLight : C.border, backgroundColor: active ? C.primaryBg : C.surface }]}>
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      hitSlop={HIT_SLOP}
+      style={[s.chip, { borderColor: active ? C.primaryLight : C.border, backgroundColor: active ? C.primaryBg : C.surface }, style]}
+    >
       <Text style={[s.chipText, { color: active ? C.primary : C.muted }]}>{icon ? `${icon}  ` : ""}{label}</Text>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
