@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "db:migrate": "tsx tools/print-db-migrate.ts",
-    "check:runbook": "node scripts/check-hitl-runbook.mjs"
+    "check:runbook": "node scripts/check-hitl-runbook.mjs",
+    "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
