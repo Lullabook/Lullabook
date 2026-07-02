@@ -14,15 +14,15 @@
 import { DevFalFallbackAdapter } from "@/adapters/dev-fal-fallback";
 import { createTestContext, goodPhoto, subscribedGuardian } from "@/test/fixtures";
 import { generateRealBedtimeBook } from "@/dev/seed-maya-world";
-import type { RequestContext } from "@/lib/context";
-import type { Member } from "@/domain/types";
+import type { Member, Storybook } from "@/domain/types";
 
 export interface SeededWorld {
-  ctx: RequestContext;
+  ctx: ReturnType<typeof createTestContext>;
   guardian: Member;
   babyPersonaId: string;
   babyId: string;
   bookId: string;
+  book: Storybook;
 }
 
 /**
@@ -86,6 +86,7 @@ export async function createSeededWorld(seed = "default"): Promise<SeededWorld> 
       babyPersonaId: babyPersona.id,
       babyId: baby.id,
       bookId: book.id,
+      book,
     };
   } catch (err) {
     // Rollback: the in-memory ctx is discarded by the caller (no persistence

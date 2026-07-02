@@ -41,6 +41,11 @@ describe("151 — mobile scrubber strips PII (same COPPA gate as server)", () =>
 
 describe("151 — mobile Sentry activation gate (fail-open)", () => {
   it("shouldMobileSentryBeActive is false when no DSN is set", () => {
-    expect(shouldMobileSentryBeActive()).toBe(false);
+    expect(shouldMobileSentryBeActive(false, false)).toBe(false);
+    expect(shouldMobileSentryBeActive(false, true)).toBe(false);
+  });
+
+  it("shouldMobileSentryBeActive is true when DSN is set and not dev-without-dsn", () => {
+    expect(shouldMobileSentryBeActive(true, false)).toBe(true);
   });
 });
