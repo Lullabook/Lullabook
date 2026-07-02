@@ -3,12 +3,14 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "rea
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Card, PrimaryButton, GhostButton, Field } from "@/components/maya-ui";
 import { C, F } from "@/constants/theme";
-import { fetchHome, hardDeleteAccount, sendInvite as apiSendInvite, type HomeResponse } from "@/lib/api";
+import { fetchHome, hardDeleteAccount, type HomeResponse } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
+import { isR1MultiFamilyEnabled, isR1AudioEnabled, R1_CUT_MESSAGE } from "@/lib/r1-flags";
 
+// Issue 145/146 — cut features are gated off here so no dead surface is reachable.
 const PERKS = [
   { icon: "🎨", title: "Illustrated personas", note: "Family drawn as themselves" },
-  { icon: "🎙️", title: "Real voices", note: "They read every page" },
+  ...(isR1AudioEnabled() ? [{ icon: "🎙️", title: "Real voices", note: "They read every page" }] : []),
   { icon: "📚", title: "Unlimited stories", note: "Make as many as you like" },
   { icon: "⬇️", title: "PDF & print export", note: "Keep them forever" },
 ];
@@ -21,7 +23,6 @@ const PRIVACY = [
 export default function AccountScreen() {
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [invite, setInvite] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -32,19 +33,6 @@ export default function AccountScreen() {
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/sign-in");
-  }
-
-  async function sendInvite() {
-    const email = invite.trim();
-    if (!email) return;
-    setInvite("");
-    setNotice(null);
-    try {
-      await apiSendInvite(email);
-      setNotice(`✓ Invite sent to ${email}`);
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : "Could not send invite");
-    }
   }
 
   function confirmHardDelete() {
@@ -101,7 +89,7 @@ export default function AccountScreen() {
       {/* plan */}
       <Card>
         <Text style={st.cardTitle}>{subscribed ? "✨ Illustrated plan" : "Free plan"}</Text>
-        <Text style={st.cardMeta}>{subscribed ? "$12 / month · renews Jul 7, 2026" : "Upgrade to draw your family and hear their voices."}</Text>
+        <Text style={st.cardMeta}>{subscribed ? "$12 / month · renews Jul 7, 2026" : "Upgrade to draw your family as themselves in every story."}</Text>
         <View style={st.perkGrid}>
           {PERKS.map((p) => (
             <View key={p.title} style={st.perk}>
@@ -120,11 +108,14 @@ export default function AccountScreen() {
         )}
       </Card>
 
-      <Card>
-        <Text style={st.cardTitle}>💛 Family members</Text>
-        <Field label="Invite someone who loves them" placeholder="grandma@example.com" autoCapitalize="none" keyboardType="email-address" value={invite} onChangeText={setInvite} />
-        <PrimaryButton title="Send invite" disabled={!invite.trim()} onPress={sendInvite} />
-      </Card>
+      {/* Issue 146 — invite form gated off when multi-family is cut (no dead surface). */}
+      {isR1MultiFamilyEnabled() ? (
+        <Card>
+          <Text style={st.cardTitle}>💛 Family members</Text>
+          <Field label="Invite someone who loves them" placeholder="grandma@example.com" autoCapitalize="none" keyboardType="email-address" />
+          <PrimaryButton title="Send invite" onPress={() => {}} />
+        </Card>
+      ) : null}
 
       {notice ? (
         <Card style={st.noticeCard}>

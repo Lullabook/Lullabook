@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import {
   scrubValue,
   scrubObject,
+  scrubString,
   beforeSendScrub,
   shouldSentryBeActive,
 } from "@/lib/sentry-scrub";
@@ -77,6 +78,51 @@ describe("150 — scrubber strips all PII / child data / secrets", () => {
     circular.self = circular;
     // Circular references don't crash Object.entries (they just don't recurse).
     expect(() => scrubObject(circular)).not.toThrow();
+  });
+
+  it("C2 fix — redacts the ENTIRE subtree when a parent key matches a PII pattern", () => {
+    const out = scrubObject({ persona: { displayName: "Mom", name: "Maya", dob: "2025-01-01" } }) as Record<string, unknown>;
+    expect(out.persona).toBe("[redacted]");
+  });
+
+  it("C2 fix — redacts nested name/nickname/dob keys", () => {
+    const out = scrubObject({ profile: { name: "Maya", nickname: "Maya-bug", dob: "2025-03-01" } }) as Record<string, unknown>;
+    const profile = out.profile as Record<string, unknown>;
+    expect(profile.name).toBe("[redacted]");
+    expect(profile.nickname).toBe("[redacted]");
+    expect(profile.dob).toBe("[redacted]");
+  });
+});
+
+describe("150 — C1 fix: scrubString strips PII from exception values + messages", () => {
+  it("scrubs email addresses from error messages", () => {
+    expect(scrubString("Failed for parent@x.com")).toBe("Failed for [redacted-email]");
+  });
+
+  it("scrubs child/biometric URLs from error messages", () => {
+    const r1 = scrubString("Error at /voice/clip.webm");
+    expect(r1).not.toContain("/voice/");
+    expect(r1).not.toContain("clip.webm");
+    const r2 = scrubString("Loading /photos/baby-1.png");
+    expect(r2).not.toContain("/photos/");
+    expect(r2).not.toContain("baby-1.png");
+  });
+
+  it("scrubs long base64 blobs from error messages", () => {
+    const blob = "A".repeat(300) + "==";
+    expect(scrubString(`Data: ${blob}`)).toBe("Data: [redacted-blob]");
+  });
+
+  it("beforeSendScrub scrubs exception.values[].value (the GitHub issue body)", () => {
+    const event = {
+      exception: { values: [{ value: "Maya's bedtime book failed for parent@x.com at /voice/clip.webm" }] },
+      message: "Error processing /photos/baby.png",
+    };
+    const out = beforeSendScrub(event) as Record<string, unknown>;
+    const exc = out.exception as { values: Array<{ value: string }> };
+    expect(exc.values[0].value).not.toContain("parent@x.com");
+    expect(exc.values[0].value).not.toContain("/voice/clip.webm");
+    expect(out.message).not.toContain("/photos/baby.png");
   });
 });
 

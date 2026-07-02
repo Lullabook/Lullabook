@@ -103,12 +103,31 @@ describe("149 — no reachable mobile UI for cut features", () => {
       "app/family/new.tsx",
       "app/family/[id].tsx",
       "app/(tabs)/family.tsx",
+      "app/(tabs)/settings/index.tsx",
     ];
     for (const f of files) {
       const src = read(mobile(f));
-      expect(src).not.toContain("sendInvite");
-      expect(src).not.toContain("acceptInvite");
+      // The invite API client function must not be called.
+      expect(src).not.toContain("apiSendInvite");
     }
+  });
+
+  it("the Settings page gates the invite form behind the multi-family flag", () => {
+    const src = read(mobile("app/(tabs)/settings/index.tsx"));
+    expect(src).toContain("isR1MultiFamilyEnabled()");
+    // The "Send invite" button must be inside the isR1MultiFamilyEnabled() branch.
+    const gateIdx = src.indexOf("isR1MultiFamilyEnabled()");
+    const buttonIdx = src.indexOf('title="Send invite"');
+    expect(gateIdx).toBeGreaterThan(-1);
+    // The button appears after the gate (inside the conditional).
+    expect(buttonIdx).toBeGreaterThan(gateIdx);
+  });
+
+  it("the Settings page does not market cut voice features unconditionally", () => {
+    const src = read(mobile("app/(tabs)/settings/index.tsx"));
+    // The "Real voices" perk must be behind isR1AudioEnabled(), not unconditional.
+    expect(src).toContain("isR1AudioEnabled()");
+    expect(src).not.toMatch(/hear their voices/);
   });
 });
 

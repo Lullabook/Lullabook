@@ -10,7 +10,8 @@ const SCRUB_KEYS = [
   /audio/i, /consent/i, /token/i, /secret/i, /password/i, /api[_-]?key/i,
   /service[_-]?role/i, /jwt/i, /bearer/i, /authorization/i, /email/i,
   /birthdate/i, /child/i, /baby/i, /minor/i, /family/i, /member/i,
-  /persona/i, /blob/i, /url/i, /key/i,
+  /persona/i, /blob/i, /url/i, /key/i, /name/i, /displayname/i, /firstname/i,
+  /nickname/i, /dob/i,
 ];
 
 const SCRUB_URL_PATTERNS = [
@@ -33,12 +34,30 @@ function scrubObject(obj: unknown): unknown {
     if (Array.isArray(obj)) return obj.map(scrubObject);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      out[k] = typeof v === "object" ? scrubObject(v) : scrubValue(k, v);
+      // C2 fix — redact the whole subtree when the key matches a PII pattern.
+      if (SCRUB_KEYS.some((re) => re.test(k))) {
+        out[k] = "[redacted]";
+      } else if (typeof v === "object") {
+        out[k] = scrubObject(v);
+      } else {
+        out[k] = scrubValue(k, v);
+      }
     }
     return out;
   } catch {
     return "[scrub-error]";
   }
+}
+
+/** C1 fix — scrub a string that may contain PII (exception values, messages). */
+function scrubString(str: string): string {
+  let out = str;
+  for (const re of SCRUB_URL_PATTERNS) {
+    out = out.replace(new RegExp(re.source, "gi"), "[redacted]");
+  }
+  out = out.replace(/[A-Za-z0-9+/=]{200,}/g, "[redacted-blob]");
+  out = out.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[redacted-email]");
+  return out;
 }
 
 export function beforeEachScrubMobile(event: Record<string, unknown>): Record<string, unknown> | null {
@@ -47,6 +66,12 @@ export function beforeEachScrubMobile(event: Record<string, unknown>): Record<st
     if (event.extra) (event as { extra: Record<string, unknown> }).extra = scrubObject(event.extra) as Record<string, unknown>;
     if (event.breadcrumbs) (event as { breadcrumbs: unknown[] }).breadcrumbs = scrubObject(event.breadcrumbs) as unknown[];
     if (event.contexts) (event as { contexts: Record<string, unknown> }).contexts = scrubObject(event.contexts) as Record<string, unknown>;
+    // C1 fix — scrub exception values + message (the primary payload).
+    if (event.exception) {
+      const exc = event.exception as { values?: Array<{ value?: string }> };
+      if (exc.values) for (const v of exc.values) if (v.value) v.value = scrubString(v.value);
+    }
+    if (typeof event.message === "string") (event as { message: string }).message = scrubString(event.message);
     if (event.user) {
       const u = event.user as Record<string, unknown>;
       delete u.email; delete u.username; delete u.ip_address;
