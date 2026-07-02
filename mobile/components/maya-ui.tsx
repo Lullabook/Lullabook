@@ -11,6 +11,8 @@ import type { ComponentType, ReactNode } from "react";
 import { useEffect } from "react";
 import {
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -31,11 +33,13 @@ import Animated, {
   useReducedMotion,
   withRepeat,
   withSequence,
+  withSpring,
   withTiming,
   Easing,
   FadeInUp,
   FadeIn,
   SlideInRight,
+  Layout,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { C, F, R } from "@/constants/theme";
@@ -90,24 +94,26 @@ export function Screen({
 }) {
   return (
     <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
-      <ScrollView
-        style={s.scroll}
-        contentContainerStyle={s.screen}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[C.primary]}
-              tintColor={C.primary}
-              titleColor={C.muted}
-            />
-          ) : undefined
-        }
-      >
-        {children}
-      </ScrollView>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView
+          style={s.scroll}
+          contentContainerStyle={s.screen}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={[C.primary]}
+                tintColor={C.primary}
+                titleColor={C.muted}
+              />
+            ) : undefined
+          }
+        >
+          {children}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -208,6 +214,104 @@ export function PageTurn({ pageKey, children }: { pageKey: string | number; chil
     <Animated.View key={pageKey} entering={entering}>
       {children}
     </Animated.View>
+  );
+}
+
+/**
+ * Issue 144 — Animated segmented toggle with a sliding indicator (real 44pt
+ * targets). The indicator slides between segments via a measured-width shared
+ * value; reduce-motion degrades to instant. Replaces the static billing toggle.
+ */
+export function AnimatedToggle<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: T; label: string }[];
+  value: T;
+  onChange: (key: T) => void;
+}) {
+  const reduceMotion = useReducedMotion();
+  const width = useSharedValue(0);
+  const x = useSharedValue(0);
+  const idx = Math.max(0, options.findIndex((o) => o.key === value));
+  const move = () => {
+    const seg = width.value / Math.max(1, options.length);
+    x.value = reduceMotion ? seg * idx : withSpring(seg * idx, { damping: 20, stiffness: 320 });
+  };
+  const onLayout = (e: { nativeEvent: { layout: { width: number } } }) => {
+    width.value = e.nativeEvent.layout.width;
+    move();
+  };
+  useEffect(() => {
+    move();
+  });
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: x.value }],
+    width: width.value / Math.max(1, options.length),
+  }));
+  return (
+    <View onLayout={onLayout} style={s.toggleWrap}>
+      <Animated.View style={[s.toggleIndicator, indicatorStyle]} />
+      {options.map((o) => {
+        const active = o.key === value;
+        return (
+          <Pressable
+            key={o.key}
+            onPress={() => onChange(o.key)}
+            style={s.toggleBtn}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={o.label}
+          >
+            <Text style={[s.toggleText, active && { color: C.surface }]} allowFontScaling>
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * Issue 144 — Animated consent checkbox (spring check, 44pt target). The ✓
+ * springs in when checked; reduce-motion degrades to instant.
+ */
+export function AnimatedCheckbox({
+  checked,
+  onPress,
+  label,
+}: {
+  checked: boolean;
+  onPress: () => void;
+  label: string;
+}) {
+  const reduceMotion = useReducedMotion();
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
+  const v = useSharedValue(checked ? 1 : 0);
+  useEffect(() => {
+    v.value = reduceMotion ? (checked ? 1 : 0) : withSpring(checked ? 1 : 0, { damping: 16, stiffness: 320 });
+  }, [checked, reduceMotion]);
+  const checkStyle = useAnimatedStyle(() => ({ transform: [{ scale: v.value }], opacity: v.value }));
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      hitSlop={HIT_SLOP}
+      style={[s.consentRow, style]}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      accessibilityLabel={label}
+    >
+      <View style={[s.checkbox, { backgroundColor: checked ? C.primary : C.surface, borderColor: checked ? C.primary : C.borderDashed }]}>
+        <Animated.Text style={[s.checkmark, checkStyle]}>✓</Animated.Text>
+      </View>
+      <Text style={s.consentText} allowFontScaling>
+        {label}
+      </Text>
+    </AnimatedPressable>
   );
 }
 
@@ -445,22 +549,24 @@ export function ListScreen<T>({
 }) {
   return (
     <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
-      <FlatList
-        data={data}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        ListHeaderComponent={asListComponent(ListHeaderComponent)}
-        ListEmptyComponent={asListComponent(ListEmptyComponent)}
-        ListFooterComponent={asListComponent(ListFooterComponent)}
-        ItemSeparatorComponent={ItemSeparatorComponent}
-        contentContainerStyle={s.screen}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          onRefresh ? (
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} tintColor={C.primary} titleColor={C.muted} />
-          ) : undefined
-        }
-      />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <FlatList
+          data={data}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          ListHeaderComponent={asListComponent(ListHeaderComponent)}
+          ListEmptyComponent={asListComponent(ListEmptyComponent)}
+          ListFooterComponent={asListComponent(ListFooterComponent)}
+          ItemSeparatorComponent={ItemSeparatorComponent}
+          contentContainerStyle={s.screen}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} tintColor={C.primary} titleColor={C.muted} />
+            ) : undefined
+          }
+        />
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -560,4 +666,28 @@ const s = StyleSheet.create({
   emptyHint: { fontFamily: F.body, fontSize: 14, color: C.muted, textAlign: "center", lineHeight: 20 },
   insetSepWrap: { height: 13, justifyContent: "center" },
   insetSep: { height: 1, backgroundColor: C.borderSoft },
+  toggleWrap: {
+    flexDirection: "row",
+    backgroundColor: C.surfaceAlt,
+    borderRadius: R.pill,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignSelf: "flex-start",
+    position: "relative",
+  },
+  toggleIndicator: {
+    position: "absolute",
+    top: 4,
+    bottom: 4,
+    left: 4,
+    backgroundColor: C.primary,
+    borderRadius: R.pill,
+  },
+  toggleBtn: { minHeight: 44, paddingHorizontal: 22, paddingVertical: 10, justifyContent: "center", alignItems: "center" },
+  toggleText: { fontFamily: F.bodyBold, fontSize: 14, color: C.muted },
+  consentRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, minHeight: 44, paddingVertical: 6 },
+  checkbox: { width: 28, height: 28, borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  checkmark: { color: C.surface, fontFamily: F.bodyBold, fontSize: 18 },
+  consentText: { flex: 1, fontFamily: F.body, fontSize: 15, color: C.muted, lineHeight: 21 },
 });
