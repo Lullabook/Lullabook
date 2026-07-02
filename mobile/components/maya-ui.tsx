@@ -27,6 +27,33 @@ const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
 // it once at module scope (never per render).
 const AnimatedPressable = createAnimatedComponent(Pressable);
 
+/**
+ * Issue 137 — expo-linear-gradient, resolved with a **runtime fallback** so a
+ * missing native module never red-screens the app (the expo-av lesson). Metro's
+ * `require` throws synchronously when the native module is absent; the try/catch
+ * collapses to `null` and PrimaryButton renders the flat token fill instead.
+ */
+let LinearGradientImpl: React.ComponentType<{
+  colors: string[];
+  start?: { x: number; y: number };
+  end?: { x: number; y: number };
+  style?: object;
+}> | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require("expo-linear-gradient");
+  LinearGradientImpl = mod.LinearGradient;
+} catch {
+  LinearGradientImpl = null;
+}
+
+// Brand-spec CTA gradients + colored glows (REFERENCE.md §1.3 / §1.5).
+// ctaPurple: 135deg #8B6DF0 → #6A55C9 ; ctaAmber: 135deg #F6C177 → #E79A3C
+const PURPLE_GRAD: [string, string] = ["#8B6DF0", "#6A55C9"];
+const AMBER_GRAD: [string, string] = ["#F6C177", "#E79A3C"];
+const GRAD_END = { x: 1, y: 1 };
+const GRAD_START = { x: 0, y: 0 };
+
 export function Screen({ children }: { children: ReactNode }) {
   return (
     <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
@@ -70,8 +97,28 @@ export function Field({ label, ...props }: { label?: string } & TextInputProps) 
   );
 }
 
-export function PrimaryButton({ title, onPress, disabled }: { title: string; onPress?: () => void; disabled?: boolean }) {
+/**
+ * Issue 137 — PrimaryButton renders the brand-spec **135° gradient + colored
+ * glow** (the single biggest "feels cheap vs premium" fix the port dropped),
+ * with an **amber secondary** variant. Falls back to the flat token fill if
+ * `expo-linear-gradient` is unavailable at runtime (no red-screen).
+ */
+export function PrimaryButton({
+  title,
+  onPress,
+  disabled,
+  variant = "primary",
+}: {
+  title: string;
+  onPress?: () => void;
+  disabled?: boolean;
+  variant?: "primary" | "amber";
+}) {
   const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "impact", style: "Light" });
+  const isAmber = variant === "amber";
+  const glow = isAmber ? s.btnGlowAmber : s.btnGlowPurple;
+  const fallbackFill = isAmber ? s.btnPrimaryAmberFallback : s.btnPrimary;
+  const textColor = disabled ? C.soft : isAmber ? C.accentDark : C.surface;
   return (
     <AnimatedPressable
       onPress={onPress}
@@ -79,9 +126,21 @@ export function PrimaryButton({ title, onPress, disabled }: { title: string; onP
       onPressOut={onPressOut}
       disabled={disabled}
       hitSlop={HIT_SLOP}
-      style={[s.btn, disabled ? s.btnDisabled : s.btnPrimary, style]}
+      style={[s.btn, disabled ? null : glow, style]}
     >
-      <Text style={[s.btnText, { color: disabled ? C.soft : C.surface }]}>{title}</Text>
+      {disabled ? (
+        <View style={[StyleSheet.absoluteFill, s.btnDisabledFill]} />
+      ) : LinearGradientImpl ? (
+        <LinearGradientImpl
+          colors={isAmber ? AMBER_GRAD : PURPLE_GRAD}
+          start={GRAD_START}
+          end={GRAD_END}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, fallbackFill]} />
+      )}
+      <Text style={[s.btnText, { color: textColor }]}>{title}</Text>
     </AnimatedPressable>
   );
 }
@@ -145,16 +204,27 @@ const s = StyleSheet.create({
   },
   label: { fontFamily: F.displayBold, fontSize: 16, color: C.text },
   input: { width: "100%", fontSize: 16, color: C.text, backgroundColor: C.bg, borderColor: C.border, borderWidth: 1, borderRadius: R.input, padding: 13, fontFamily: F.body },
-  btn: { minHeight: 48, borderRadius: R.pill, paddingVertical: 14, paddingHorizontal: 22, alignItems: "center", justifyContent: "center" },
-  btnPrimary: {
-    backgroundColor: C.primary,
-    shadowColor: C.primary,
+  btn: { minHeight: 48, borderRadius: R.pill, paddingVertical: 14, paddingHorizontal: 22, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  // Issue 137 — colored glows per the brand spec (purple + amber).
+  btnGlowPurple: {
+    shadowColor: "#6A55C9",
     shadowOpacity: 0.3,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
+  btnGlowAmber: {
+    shadowColor: "#E79A3C",
+    shadowOpacity: 0.32,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  // Flat fallbacks when expo-linear-gradient is unavailable at runtime.
+  btnPrimary: { backgroundColor: C.primary },
+  btnPrimaryAmberFallback: { backgroundColor: C.accent },
+  btnDisabledFill: { backgroundColor: "#E7DCCB" },
   btnGhost: { backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border },
-  btnDisabled: { backgroundColor: "#E7DCCB" },
   btnText: { fontFamily: F.bodyBold, fontSize: 15 },
   chip: { minHeight: 44, borderRadius: R.chip, borderWidth: 1.5, paddingVertical: 10, paddingHorizontal: 16, justifyContent: "center" },
   chipText: { fontFamily: F.bodyBold, fontSize: 14 },
