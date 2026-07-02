@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
+import { Screen, Eyebrow, Lead } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
 import { fetchPaywallConfig, type PaywallPlanResponse } from "@/lib/api";
 
@@ -141,7 +141,6 @@ export default function PaywallScreen() {
     <Screen>
       <View>
         <Eyebrow>✨ Plans</Eyebrow>
-        <PageTitle>Choose your plan</PageTitle>
         <Lead>Every plan starts with a 7-day free trial of the full experience. Cancel anytime.</Lead>
       </View>
 

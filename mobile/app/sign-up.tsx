@@ -5,7 +5,7 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
 import * as QueryParams from "expo-auth-session/build/QueryParams";
-import { Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
+import { Eyebrow, Lead } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
@@ -91,7 +91,6 @@ export default function SignUpScreen() {
         <Text style={styles.heroMark}>✨</Text>
       </View>
       <Eyebrow>💛 New here</Eyebrow>
-      <PageTitle>Create your Family</PageTitle>
       <Lead>Sign up with Apple or Google — your first Member and Family are created automatically.</Lead>
 
       <View style={styles.form}>

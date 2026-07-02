@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton } from "@/components/maya-ui";
+import { Screen, Eyebrow, Lead, Card, PrimaryButton } from "@/components/maya-ui";
 import { fetchHome, type HomeResponse } from "@/lib/api";
 import { C, F } from "@/constants/theme";
 
@@ -43,7 +43,6 @@ export default function CharactersScreen() {
     <Screen>
       <View>
         <Eyebrow>🐻 Characters</Eyebrow>
-        <PageTitle>Made-up friends</PageTitle>
         <Lead>Photo-free Characters keep the free text-story tier playful, private, and quick to test.</Lead>
       </View>
 

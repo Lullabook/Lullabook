@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton } from "@/components/maya-ui";
+import { Screen, Eyebrow, Lead, Card, Field, Chip, PrimaryButton } from "@/components/maya-ui";
 import { PhotoUploadStatus, RosterAvatar } from "@/components/roster-avatar";
 import { createPersona } from "@/lib/api";
 import { appendNativeFile, setNativeFile, type NativeUploadFile } from "@/lib/form-data";
@@ -124,7 +124,6 @@ export default function AddFamilyScreen() {
     <Screen>
       <View>
         <Eyebrow>💛 Add to the family</Eyebrow>
-        <PageTitle>Add someone who loves them</PageTitle>
         <Lead>Add their photos and we&apos;ll train a private likeness so they&apos;re drawn as themselves in every story. Photos stay encrypted and are never shown back — only the generated roster avatar appears.</Lead>
       </View>
 

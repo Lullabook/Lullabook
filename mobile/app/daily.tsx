@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, Chip, SkeletonCard } from "@/components/maya-ui";
+import { Screen, Eyebrow, Lead, Card, Chip, SkeletonCard } from "@/components/maya-ui";
 import {
   createMoment,
   fetchHome,
@@ -136,7 +136,6 @@ export default function DailyScreen() {
     <Screen onRefresh={load} refreshing={loading}>
       <View>
         <Eyebrow>📔 Their days</Eyebrow>
-        <PageTitle>{filter === "firsts" ? "Firsts" : "Daily life"}</PageTitle>
         <Lead>
           {filter === "firsts"
             ? `Celebrate ${babyName}'s milestones — then turn one into a Story when you're ready.`

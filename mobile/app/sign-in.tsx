@@ -5,7 +5,7 @@ import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
 import * as QueryParams from "expo-auth-session/build/QueryParams";
-import { Eyebrow, Field, PageTitle, Lead } from "@/components/maya-ui";
+import { Eyebrow, Field, Lead } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
@@ -162,7 +162,6 @@ export default function SignInScreen() {
         <Text style={styles.heroMark}>🌙</Text>
       </View>
       <Eyebrow>💛 Welcome back</Eyebrow>
-      <PageTitle>Welcome to Lullabook</PageTitle>
       <Lead>Sign in with Apple or Google to make bedtime Storybooks starring your family.</Lead>
 
       <View style={styles.form}>

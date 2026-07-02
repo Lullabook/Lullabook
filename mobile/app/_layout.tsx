@@ -60,14 +60,14 @@ function RootLayoutNav() {
         <Stack.Screen name="sign-in" options={{ title: "Sign in", ...stackHeader }} />
         <Stack.Screen name="sign-up" options={{ title: "Sign up", ...stackHeader }} />
         <Stack.Screen name="daily" options={{ title: "Daily life", ...stackHeader }} />
-        <Stack.Screen name="characters/index" options={{ title: "Characters", ...stackHeader }} />
+        <Stack.Screen name="characters/index" options={{ title: "Made-up friends", ...stackHeader }} />
         <Stack.Screen name="characters/new" options={{ title: "New character", ...stackHeader }} />
         <Stack.Screen name="characters/[id]" options={{ title: "Edit character", ...stackHeader }} />
-        <Stack.Screen name="family/new" options={{ title: "Add family", ...stackHeader }} />
+        <Stack.Screen name="family/new" options={{ title: "Add someone who loves them", ...stackHeader }} />
         {/* Issue 105: billing is a reachable, dismissible modal. */}
         <Stack.Screen
           name="billing"
-          options={{ title: "Billing", presentation: "modal", ...stackHeader }}
+          options={{ title: "Choose your plan", presentation: "modal", ...stackHeader }}
         />
       </Stack>
     </ThemeProvider>
@@ -79,6 +79,13 @@ const stackHeader = {
   headerShadowVisible: false,
   headerTintColor: C.primary,
   headerTitleStyle: { color: C.text, fontFamily: F.displayBold, fontSize: 20 },
+  // Issue 141 — native large titles rendered in Baloo 2 (keep the storybook
+  // type, gain native large-title scroll behavior). The large title now covers
+  // the screen title, so the in-content PageTitle is dropped on stack screens
+  // to resolve the duplicate-title problem.
+  headerLargeTitle: true,
+  headerLargeTitleStyle: { color: C.text, fontFamily: F.display, fontSize: 34, letterSpacing: -0.5 },
+  headerLargeTitleShadowVisible: false,
   headerBackVisible: false,
   headerLeft: () => <BackPill />,
 };
