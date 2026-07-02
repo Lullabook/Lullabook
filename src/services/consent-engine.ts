@@ -1,4 +1,5 @@
 import type { JurisdictionConfig, MemberRole } from "@/domain/types";
+import { isR1UsOnly, R1_US_MARKETS, isMarketEnabled } from "@/lib/r1-config";
 
 export type ConsentAction =
   | "create_baby_persona"
@@ -96,13 +97,40 @@ export class ConsentEngine {
     return Object.values(JURISDICTIONS);
   }
 
+  /**
+   * Issue 147 — the markets enabled *for this release*. When R1_US_ONLY is set,
+   * only the US markets (US / US_IOS) are enabled; the Asia slots (IN/KR/SG/JP)
+   * stay in the config table (flag-disabled) so R1.1 enables them by data
+   * change, not a rebuild. ADR-0015: config-driven, never hardcoded.
+   */
+  static listEnabledJurisdictions(): JurisdictionConfig[] {
+    return Object.values(JURISDICTIONS).filter((j) => isMarketEnabled(j.code, j.enabled));
+  }
+
+  /**
+   * Issue 147 — a non-US request rides the same config path: clean "not
+   * available in your region", never a crash. Falls back to the US default
+   * config so a caller never gets an undefined market (the residency/notice
+   * still resolve). The *enabled* decision is the gate.
+   */
+  static resolveMarketOrDefault(code: string): { config: JurisdictionConfig; enabled: boolean } {
+    const config = JURISDICTIONS[code] ?? JURISDICTIONS.US;
+    return { config, enabled: isMarketEnabled(config.code) };
+  }
+
   check(input: ConsentCheckInput): ConsentCheckResult {
     const config = JURISDICTIONS[input.jurisdiction];
     if (!config) {
-      return { allowed: false, reason: "Unknown jurisdiction" };
+      // Issue 147 — unknown jurisdiction never crashes; resolves to the US
+      // default config but is gated as not-enabled under US-only.
+      const resolved = ConsentEngine.resolveMarketOrDefault(input.jurisdiction);
+      return {
+        allowed: false,
+        reason: resolved.enabled ? "Unknown jurisdiction" : "Market not available in your region",
+      };
     }
-    if (!config.enabled && input.action === "signup") {
-      return { allowed: false, reason: "Market not enabled" };
+    if (!isMarketEnabled(config.code, config.enabled) && input.action === "signup") {
+      return { allowed: false, reason: "Market not available in your region" };
     }
 
     if (input.action === "create_baby_persona") {
@@ -161,7 +189,7 @@ export class ConsentEngine {
       return { allowed: true, requiredMethod: config.characterConsentMethod };
     }
 
-    return { allowed: config.enabled };
+    return { allowed: isMarketEnabled(config.code, config.enabled) };
   }
 
   childAgeThreshold(jurisdiction: string): number {

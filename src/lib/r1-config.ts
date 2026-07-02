@@ -42,6 +42,18 @@ export function isR1UsOnly(): boolean {
 export const R1_US_MARKETS = new Set(["US", "US_IOS"]);
 
 /**
+ * Issue 147 — whether a market code is enabled *for this release*. When R1_US_ONLY
+ * is set, only the US markets are enabled; all others (Asia slots) are flag-disabled
+ * by the same config path. When the flag is off (R2 / pre-cut), the per-market
+ * `enabled` flag in `ConsentEngine` governs — caller passes that in. Never crashes:
+ * an unknown code is treated as not-enabled under US-only.
+ */
+export function isMarketEnabled(code: string, perMarketEnabled = true): boolean {
+  if (isR1UsOnly()) return R1_US_MARKETS.has(code);
+  return perMarketEnabled;
+}
+
+/**
  * Issue 148 — Heavy Journal machinery (Story Context Engine / auto-context
  * injection, Firsts, Birthday Story, weekly suggestion, photo-to-story). Daily
  * Notes capture stays enabled regardless of this flag.
