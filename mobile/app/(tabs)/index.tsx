@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View, Pressable } from "react-native";
 import { router } from "expo-router";
-import { Screen, Card, PrimaryButton } from "@/components/maya-ui";
+import { Screen, Card } from "@/components/maya-ui";
 import { fetchHome, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
@@ -46,7 +46,7 @@ export default function HomeScreen() {
   const storyCount = home?.personas?.length ?? 0;
 
   return (
-    <Screen>
+    <Screen onRefresh={load} refreshing={loading}>
       {/* Hero */}
       <View style={st.hero}>
         <Text style={st.heroEyebrow}>✨ A growing world starring</Text>
@@ -161,8 +161,6 @@ export default function HomeScreen() {
           {home?.subscriptionActive ? "Subscribed" : "Free tier"}
         </Text>
       </View>
-
-      <PrimaryButton title="↻ Refresh" onPress={load} />
     </Screen>
   );
 }

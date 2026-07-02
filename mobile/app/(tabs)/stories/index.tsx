@@ -56,7 +56,7 @@ export default function StorybookLibraryScreen() {
   }
 
   return (
-    <Screen>
+    <Screen onRefresh={load} refreshing={loading}>
       <View>
         <Eyebrow>📚 Library</Eyebrow>
         <PageTitle>Your Storybooks</PageTitle>

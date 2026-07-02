@@ -10,6 +10,7 @@
 import type { ReactNode } from "react";
 import {
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -54,13 +55,38 @@ const AMBER_GRAD: [string, string] = ["#F6C177", "#E79A3C"];
 const GRAD_END = { x: 1, y: 1 };
 const GRAD_START = { x: 0, y: 0 };
 
-export function Screen({ children }: { children: ReactNode }) {
+/**
+ * Issue 138 — `Screen` accepts optional pull-to-refresh props. When `onRefresh`
+ * is provided, a brand-colored `RefreshControl` is attached so every list
+ * screen (home/stories/family/daily) inherits pull-to-refresh and the literal
+ * `↻ Refresh` button is retired. Spinner appears within one frame (PRD v15).
+ */
+export function Screen({
+  children,
+  onRefresh,
+  refreshing = false,
+}: {
+  children: ReactNode;
+  onRefresh?: () => void;
+  refreshing?: boolean;
+}) {
   return (
     <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
       <ScrollView
         style={s.scroll}
         contentContainerStyle={s.screen}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[C.primary]}
+              tintColor={C.primary}
+              titleColor={C.muted}
+            />
+          ) : undefined
+        }
       >
         {children}
       </ScrollView>

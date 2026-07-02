@@ -45,12 +45,14 @@ export const mayaStackHeader = {
 };
 
 const st = StyleSheet.create({
+  // Issue 138 — ≥44pt hit target (minHeight 44, content centered).
   pill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: R.pill,
     backgroundColor: C.primaryBg,
     marginLeft: 4,

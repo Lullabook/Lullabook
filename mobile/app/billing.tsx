@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
@@ -165,14 +165,16 @@ export default function PaywallScreen() {
         </Pressable>
       </View>
 
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+      {/* Issue 138 — removed the nested ScrollView that broke paywall scroll
+          momentum; plans render directly in Screen's scroll view. */}
+      <View>
         {plans.map((plan) => (
           <PlanCard key={plan.id} plan={plan} billing={billing} />
         ))}
         <Text style={st.foundingNote}>
           💛 Founding families get the first month free after the trial.
         </Text>
-      </ScrollView>
+      </View>
     </Screen>
   );
 }

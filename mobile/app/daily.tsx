@@ -132,7 +132,7 @@ export default function DailyScreen() {
   }
 
   return (
-    <Screen>
+    <Screen onRefresh={load} refreshing={loading}>
       <View>
         <Eyebrow>📔 Their days</Eyebrow>
         <PageTitle>{filter === "firsts" ? "Firsts" : "Daily life"}</PageTitle>

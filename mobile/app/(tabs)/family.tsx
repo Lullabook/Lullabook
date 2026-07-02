@@ -65,7 +65,7 @@ export default function FamilyTab() {
   const characters = home?.characters ?? [];
 
   return (
-    <Screen>
+    <Screen onRefresh={load} refreshing={loading}>
       <View>
         <Eyebrow>💛 Family</Eyebrow>
         <PageTitle>Family & Characters</PageTitle>
