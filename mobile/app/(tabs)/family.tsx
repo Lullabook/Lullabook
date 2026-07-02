@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, SkeletonRow, InsetSeparator } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, SkeletonRow, InsetSeparator, MotionCard } from "@/components/maya-ui";
 import { RosterAvatar } from "@/components/roster-avatar";
 import { fetchHome, seedDemo, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
@@ -73,7 +73,7 @@ export default function FamilyTab() {
         <Lead>Everyone who stars in {home?.selectedBaby?.displayName ?? "your baby"}&apos;s stories.</Lead>
       </View>
 
-      <Card>
+      <MotionCard delay={60}>
         <Text style={st.sectionTitle}>💛 Family ({personas.length})</Text>
         <FlatList
           data={personas}
@@ -106,9 +106,9 @@ export default function FamilyTab() {
         <Pressable style={st.addBtn} onPress={() => router.push("/family/new")}>
           <Text style={st.addBtnText}>＋ Add family member</Text>
         </Pressable>
-      </Card>
+      </MotionCard>
 
-      <Card>
+      <MotionCard delay={140}>
         <Text style={st.sectionTitle}>🐻 Characters ({characters.length})</Text>
         <FlatList
           data={characters}
@@ -128,11 +128,11 @@ export default function FamilyTab() {
         <Pressable style={st.addBtn} onPress={() => router.push("/characters")}>
           <Text style={st.addBtnText}>＋ Create character</Text>
         </Pressable>
-      </Card>
+      </MotionCard>
 
       {/* Issue 107: dev-only seed button. __DEV__ is true only in dev builds. */}
       {__DEV__ ? (
-        <Card>
+        <MotionCard delay={220}>
           <Text style={st.sectionTitle}>🧪 Dev tools</Text>
           <Text style={st.emptyNote}>
             Populate the Maya's World demo dataset for this Household (idempotent). Requires the paid backend running with DEV_DEMO_SEED=true.
@@ -141,7 +141,7 @@ export default function FamilyTab() {
             <Text style={st.addBtnText}>{seeding ? "Seeding…" : "🧪 Seed Maya's World"}</Text>
           </Pressable>
           {seedMsg ? <Text style={st.emptyNote}>{seedMsg}</Text> : null}
-        </Card>
+        </MotionCard>
       ) : null}
     </Screen>
   );

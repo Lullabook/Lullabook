@@ -30,8 +30,12 @@ import Animated, {
   useSharedValue,
   useReducedMotion,
   withRepeat,
+  withSequence,
   withTiming,
   Easing,
+  FadeInUp,
+  FadeIn,
+  SlideInRight,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { C, F, R } from "@/constants/theme";
@@ -122,6 +126,89 @@ export function Lead({ children }: { children: ReactNode }) {
 
 export function Card({ children, style }: { children: ReactNode; style?: object }) {
   return <View style={[s.card, style]}>{children}</View>;
+}
+
+/**
+ * Issue 143 — A Card with a `FadeInUp` entrance (reanimated worklet, UI thread,
+ * 60fps). Reduce-motion degrades to a short crossfade. Use for the first paint
+ * of content cards so screens "settle in" instead of popping.
+ */
+export function MotionCard({ children, style, delay = 0 }: { children: ReactNode; style?: object; delay?: number }) {
+  const reduceMotion = useReducedMotion();
+  const entering = reduceMotion ? FadeIn.duration(120) : FadeInUp.delay(delay).duration(380).springify().damping(20);
+  return (
+    <Animated.View entering={entering} style={[s.card, style]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/**
+ * Issue 143 — Twinkling hero star (brand-spec `lbTwinkle`: opacity .25↔1,
+ * scale .8↔1). Reserved for the hero star / sparkles. Reduce-motion → static.
+ */
+export function Twinkle({ children }: { children: ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  const v = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) {
+      v.value = 1;
+      return;
+    }
+    v.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 1400, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+    );
+  }, [reduceMotion]);
+  const aStyle = useAnimatedStyle(() => ({
+    opacity: 0.25 + 0.75 * v.value,
+    transform: [{ scale: 0.8 + 0.2 * v.value }],
+  }));
+  return <Animated.View style={[aStyle]}>{children}</Animated.View>;
+}
+
+/**
+ * Issue 143 — Gently floating element (brand-spec `lbFloat`: translateY
+ * 0↔-6px). For book covers / hero elements. Reduce-motion → static.
+ */
+export function Float({ children }: { children: ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  const v = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) {
+      v.value = 0;
+      return;
+    }
+    v.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 2200, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
+    );
+  }, [reduceMotion]);
+  const aStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -6 * v.value }],
+  }));
+  return <Animated.View style={[aStyle]}>{children}</Animated.View>;
+}
+
+/**
+ * Issue 143 — Animated reader page-turn. `pageKey` changes → the view remounts
+ * and the `SlideInRight` entering re-fires (a real page-turn instead of the
+ * instant `setPageIndex` swap). Reduce-motion → short crossfade.
+ */
+export function PageTurn({ pageKey, children }: { pageKey: string | number; children: ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  const entering = reduceMotion ? FadeIn.duration(120) : SlideInRight.duration(280).springify().damping(24);
+  return (
+    <Animated.View key={pageKey} entering={entering}>
+      {children}
+    </Animated.View>
+  );
 }
 
 export function Label({ children }: { children: ReactNode }) {

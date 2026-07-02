@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { getAudio } from "@/lib/audio";
-import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton, PageTurn } from "@/components/maya-ui";
 import {
   getStorybook,
   illustrationSource,
@@ -249,13 +249,15 @@ export default function StorybookReaderScreen() {
         </Card>
       ) : page ? (
         <>
-          <Card>
-            <Text style={st.pageLabel}>Page {page.index + 1} of {pages.length}</Text>
-            <PageIllustration page={page} />
-            <Text style={st.pageText}>{page.text || "…"}</Text>
-            {/* Issue 114: voice clip playback for narration/lullaby */}
-            {page.voiceClipId ? <VoicePlayback clipId={page.voiceClipId} /> : null}
-          </Card>
+          <PageTurn pageKey={pageIndex}>
+            <Card>
+              <Text style={st.pageLabel}>Page {page.index + 1} of {pages.length}</Text>
+              <PageIllustration page={page} />
+              <Text style={st.pageText}>{page.text || "…"}</Text>
+              {/* Issue 114: voice clip playback for narration/lullaby */}
+              {page.voiceClipId ? <VoicePlayback clipId={page.voiceClipId} /> : null}
+            </Card>
+          </PageTurn>
 
           {page.generationStatus === "failed" ? (
             <PrimaryButton title={actionBusy ? "Re-rolling…" : "🎲 Re-roll illustration"} onPress={rerollCurrent} />

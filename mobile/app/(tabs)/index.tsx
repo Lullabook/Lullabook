@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, View, Pressable } from "react-native";
 import { router } from "expo-router";
-import { Screen, Card, SkeletonCard, SkeletonRow } from "@/components/maya-ui";
+import { Screen, Card, SkeletonCard, SkeletonRow, Twinkle } from "@/components/maya-ui";
 import { fetchHome, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
@@ -53,7 +53,9 @@ export default function HomeScreen() {
       <View style={st.hero}>
         <Text style={st.heroEyebrow}>✨ A growing world starring</Text>
         <View style={st.heroStar}>
-          <Text style={st.heroStarText}>{babyInitial}</Text>
+          <Twinkle>
+            <Text style={st.heroStarText}>{babyInitial}</Text>
+          </Twinkle>
         </View>
         <Text style={st.heroTitle}>{babyName}&apos;s World</Text>
         <Text style={st.heroLead}>
