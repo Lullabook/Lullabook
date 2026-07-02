@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import {
   createTestContext,
   createReadyAdult,
@@ -6,6 +6,11 @@ import {
   householdWithBaby,
 } from "@/test/fixtures";
 import { SHORT_PAGE_COUNT } from "@/domain/story-type";
+
+// Issue 145 — these tests exercise the R2 voice/lullaby path, so opt back into
+// audio (the R1 default is cut). The flag restores the pre-cut narration gate.
+beforeAll(() => { process.env.R1_AUDIO_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_AUDIO_ENABLED; });
 
 describe("39 — voice in stories + lullaby weave", () => {
   it("weaves a lullaby clip into the final page", async () => {

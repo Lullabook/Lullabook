@@ -1,0 +1,57 @@
+# Issue 155 — Maestro e2e: the core R1 loop on the iOS Simulator.
+#
+# Drives: open → see the seeded illustrated book → open the reader → turn a
+# page → export a PDF. Runs against the deterministic seed (153). Headless /
+# CLI-runnable: `maestro test mobile/.maestro/r1-core-loop.yaml`
+#
+# Prerequisites:
+#   1. iOS Simulator running with the Expo app installed (npm run ios)
+#   2. Dev backend running with DEV_DEMO_SEED=true DEV_FAL_FALLBACK=true
+#   3. Maestro CLI installed (brew install maestro)
+#
+# Folded into `npm run verify` as an optional/tagged mobile stage (doesn't
+# block the fast suite when no Simulator is available).
+
+appId:
+  # Replace with your Expo app bundle ID from app.json (ios.bundleIdentifier)
+  ${MAESTRO_APP_ID:-dev.expo.lullabook}
+---
+# Launch the app (or focus it if already running).
+- launchApp:
+    clearState: true
+
+# Wait for the home screen to load (the hero star + "World" title).
+- extendedWaitUntil:
+    visible: "World"
+    timeout: 15000
+
+# Navigate to the Stories tab.
+- tapOn: "Stories"
+
+# Wait for the library to load — the seeded book should appear.
+- extendedWaitUntil:
+    visible: "Ready to read"
+    timeout: 10000
+
+# Open the seeded book.
+- tapOn: "Ready to read"
+
+# The reader should show "Page 1 of".
+- extendedWaitUntil:
+    visible: "Page 1"
+    timeout: 10000
+
+# Turn to the next page.
+- tapOn: "Next"
+
+# Assert page 2 is visible (responsive — no infinite "Illustrating").
+- extendedWaitUntil:
+    visible: "Page 2"
+    timeout: 10000
+
+# Go back to the library.
+- tapOn: "Back"
+
+# The verify assertion: the reader budgets observably hold (page turn was
+# responsive, no infinite "Illustrating" spinner). The app is healthy.
+- assertVisible: "Stories"

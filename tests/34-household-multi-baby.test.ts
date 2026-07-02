@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { createTestContext } from "@/test/fixtures";
+
+// Issue 146 — R1 is solo-only; this suite pins the R2 multi-baby path, so opt
+// back into multi-family (the default cut would block a second baby).
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 describe("34 — household + multi-baby + world", () => {
   it("creates a default baby and selects it", () => {

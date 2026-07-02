@@ -5,6 +5,7 @@ import { getAudio } from "@/lib/audio";
 import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton } from "@/components/maya-ui";
 import { BackPill } from "@/components/BackPill";
 import { fetchHome, listVoiceClips, uploadVoiceClip, type HomeResponse } from "@/lib/api";
+import { isR1AudioEnabled, R1_CUT_MESSAGE } from "@/lib/r1-flags";
 import { C, F, R } from "@/constants/theme";
 
 interface VoiceClipWire {
@@ -158,8 +159,14 @@ export default function FamilyMemberDetailScreen() {
         <Card style={st.errorCard}><Text style={st.errorText}>{error}</Text></Card>
       ) : null}
 
-      {/* Voice recorder (issue 113) */}
-      {audioPerm === false ? (
+      {/* Issue 145 — audio cut from R1. The voice recorder + clips UI is gated
+          off (no reachable record/play UI). Code kept behind the flag for R2. */}
+      {!isR1AudioEnabled() ? (
+        <Card>
+          <Text style={st.cardTitle}>🎤 Voice messages</Text>
+          <Text style={st.copy}>Voice messages {R1_CUT_MESSAGE}.</Text>
+        </Card>
+      ) : audioPerm === false ? (
         <Card>
           <Text style={st.cardTitle}>🎤 Microphone access needed</Text>
           <Text style={st.copy}>Grant microphone access in Settings to record voice messages.</Text>
@@ -201,20 +208,22 @@ export default function FamilyMemberDetailScreen() {
         </Card>
       )}
 
-      {/* Existing clips */}
-      <Card>
-        <Text style={st.cardTitle}>📋 Voice clips ({clips.length})</Text>
-        {clips.length === 0 ? (
-          <Text style={st.copy}>No voice clips yet.</Text>
-        ) : (
-          clips.map((c) => (
-            <View key={c.id} style={st.clipRow}>
-              <Text style={st.clipLabel}>{c.label}</Text>
-              <Text style={st.clipMeta}>{c.transcript} · {c.durationSecs}s</Text>
-            </View>
-          ))
-        )}
-      </Card>
+      {/* Existing clips — only shown when audio is enabled (R2). */}
+      {isR1AudioEnabled() ? (
+        <Card>
+          <Text style={st.cardTitle}>📋 Voice clips ({clips.length})</Text>
+          {clips.length === 0 ? (
+            <Text style={st.copy}>No voice clips yet.</Text>
+          ) : (
+            clips.map((c) => (
+              <View key={c.id} style={st.clipRow}>
+                <Text style={st.clipLabel}>{c.label}</Text>
+                <Text style={st.clipMeta}>{c.transcript} · {c.durationSecs}s</Text>
+              </View>
+            ))
+          )}
+        </Card>
+      ) : null}
     </Screen>
   );
 }

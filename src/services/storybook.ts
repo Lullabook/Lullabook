@@ -26,6 +26,7 @@ import type { EntitlementService } from "@/services/entitlement";
 import { EntitlementService as EntitlementServiceImpl } from "@/services/entitlement";
 import type { SubscriptionService } from "@/services/subscription";
 import { StoryCapService } from "@/services/story-cap";
+import { isR1AudioEnabled, isR1JournalMachineryEnabled } from "@/lib/r1-config";
 
 const FREE_REROLL_BUDGET = 5;
 
@@ -118,8 +119,9 @@ export class StorybookService {
     // pool, idempotent by storybookId, resets monthly).
     this.storyCap.requireUnderCap(member.familyId, memberId);
     // Narration (real-voice weave) is a Normal+ capability: a Brief that carries
-    // voice clips is rejected 403 on Basic.
-    if ((brief.voiceClipIds?.length ?? 0) > 0 || brief.lullabyClipId) {
+    // voice clips is rejected 403 on Basic. Issue 145 — audio is cut from R1, so
+    // the narration gate is skipped (a cut Brief never carries voice anyway).
+    if (isR1AudioEnabled() && ((brief.voiceClipIds?.length ?? 0) > 0 || brief.lullabyClipId)) {
       this.entitlements.requireCapability(member.familyId, "narrate");
     }
 
@@ -298,7 +300,7 @@ export class StorybookService {
       .filter(Boolean) as string[];
 
     let lullabyPhrase: string | undefined;
-    if (brief.lullabyClipId) {
+    if (isR1AudioEnabled() && brief.lullabyClipId) {
       const clip = this.store.getVoiceClip(brief.lullabyClipId, memberId);
       lullabyPhrase = clip?.transcript;
     }
@@ -307,7 +309,10 @@ export class StorybookService {
     const artNote = brief.artStyle ? `Art style: ${brief.artStyle}.` : "";
 
     let momentContext: string | undefined;
-    if (brief.babyId) {
+    // Issue 148 — the Story Context Engine (auto-context injection) is deferred
+    // from R1. When the journal-machinery flag is off, generation does NOT
+    // depend on it — momentContext stays undefined and the book still generates.
+    if (isR1JournalMachineryEnabled() && brief.babyId) {
       const contextSet = await this.contextSelector.selectForBaby(
         memberId,
         brief.babyId,

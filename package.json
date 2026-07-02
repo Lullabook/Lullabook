@@ -14,13 +14,15 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "db:migrate": "tsx tools/print-db-migrate.ts",
-    "check:runbook": "node scripts/check-hitl-runbook.mjs"
+    "check:runbook": "node scripts/check-hitl-runbook.mjs",
+    "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
     "@aws-sdk/client-rekognition": "^3.1066.0",
     "@aws-sdk/client-s3": "^3.1066.0",
     "@aws-sdk/s3-request-presigner": "^3.1066.0",
+    "@sentry/nextjs": "^10.63.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",
     "inngest": "^4.5.1",

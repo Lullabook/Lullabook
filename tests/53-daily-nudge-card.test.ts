@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { createTestContext, householdWithBaby } from "@/test/fixtures";
+
+// Issue 146 — R1 is solo-only; this suite pins the R2 per-baby nudge path.
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 describe("53 — daily nudge card", () => {
   it("shows when no moment logged today and not dismissed", async () => {

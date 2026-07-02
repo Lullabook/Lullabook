@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { createTestContext, createReadyAdult, householdWithBaby } from "@/test/fixtures";
 import { WEEKLY_STORY_MIN_MOMENTS } from "@/services/journal-nudge";
+
+// Issue 148 — R1 defers the weekly suggestion; this suite pins the R2 path.
+beforeAll(() => { process.env.R1_JOURNAL_MACHINERY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_JOURNAL_MACHINERY_ENABLED; });
 
 describe("55 — weekly story suggestion", () => {
   it("shows when weekly threshold is met", async () => {

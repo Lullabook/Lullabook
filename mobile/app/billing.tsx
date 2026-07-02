@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead } from "@/components/maya-ui";
+import { Screen, Eyebrow, Lead, AnimatedToggle } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
 import { fetchPaywallConfig, type PaywallPlanResponse } from "@/lib/api";
 
@@ -141,38 +141,29 @@ export default function PaywallScreen() {
     <Screen>
       <View>
         <Eyebrow>✨ Plans</Eyebrow>
-        <PageTitle>Choose your plan</PageTitle>
         <Lead>Every plan starts with a 7-day free trial of the full experience. Cancel anytime.</Lead>
       </View>
 
-      {/* Billing toggle */}
-      <View style={st.toggleWrap}>
-        <Pressable
-          style={[st.toggleBtn, billing === "annual" && { backgroundColor: C.primary }]}
-          onPress={() => setBilling("annual")}
-        >
-          <Text style={[st.toggleText, billing === "annual" && { color: "#FFFDF9" }]}>
-            Annual (save 17%)
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[st.toggleBtn, billing === "monthly" && { backgroundColor: C.primary }]}
-          onPress={() => setBilling("monthly")}
-        >
-          <Text style={[st.toggleText, billing === "monthly" && { color: "#FFFDF9" }]}>
-            Monthly
-          </Text>
-        </Pressable>
-      </View>
+      {/* Billing toggle — Issue 144: animated segmented control (sliding indicator) */}
+      <AnimatedToggle
+        options={[
+          { key: "annual" as const, label: "Annual (save 17%)" },
+          { key: "monthly" as const, label: "Monthly" },
+        ]}
+        value={billing}
+        onChange={(k) => setBilling(k)}
+      />
 
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+      {/* Issue 138 — removed the nested ScrollView that broke paywall scroll
+          momentum; plans render directly in Screen's scroll view. */}
+      <View>
         {plans.map((plan) => (
           <PlanCard key={plan.id} plan={plan} billing={billing} />
         ))}
         <Text style={st.foundingNote}>
           💛 Founding families get the first month free after the trial.
         </Text>
-      </ScrollView>
+      </View>
     </Screen>
   );
 }

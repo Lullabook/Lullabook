@@ -1,5 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createTestContext, goodPhoto, subscribedGuardian } from "@/test/fixtures";
+
+// Issue 146 — R1 is solo-only (multi-family cut), which independently hides the
+// collaborative plan. The 129 "returns both plans" test pins the R2 path, so
+// opt back into multi-family for this whole file.
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 /**
  * Issues 129 + 125 (red-team BUG 2 + BUG 3) — wire the R1 gates to the mobile
@@ -10,7 +16,6 @@ import { createTestContext, goodPhoto, subscribedGuardian } from "@/test/fixture
  *    likeness from the native app (the gate is real in prod now that
  *    likeness_confirmed is persisted — supabase-store round-trip test).
  */
-
 describe("129 — GET /api/paywall-config returns R1-visible plans", () => {
   const prev = process.env.R1_ONE_PLAN;
   afterEach(() => {

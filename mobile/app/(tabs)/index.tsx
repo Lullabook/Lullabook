@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View, Pressable } from "react-native";
+import { StyleSheet, Text, View, Pressable } from "react-native";
 import { router } from "expo-router";
-import { Screen, Card, PrimaryButton } from "@/components/maya-ui";
+import { Screen, Card, SkeletonCard, SkeletonRow, Twinkle } from "@/components/maya-ui";
 import { fetchHome, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
@@ -35,9 +35,11 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={st.center} accessibilityLabel="Loading home">
-        <ActivityIndicator size="large" color={C.primary} />
-      </View>
+      <Screen>
+        <SkeletonCard />
+        <SkeletonRow />
+        <SkeletonCard lines={2} />
+      </Screen>
     );
   }
 
@@ -46,12 +48,14 @@ export default function HomeScreen() {
   const storyCount = home?.personas?.length ?? 0;
 
   return (
-    <Screen>
+    <Screen onRefresh={load} refreshing={loading}>
       {/* Hero */}
       <View style={st.hero}>
         <Text style={st.heroEyebrow}>✨ A growing world starring</Text>
         <View style={st.heroStar}>
-          <Text style={st.heroStarText}>{babyInitial}</Text>
+          <Twinkle>
+            <Text style={st.heroStarText}>{babyInitial}</Text>
+          </Twinkle>
         </View>
         <Text style={st.heroTitle}>{babyName}&apos;s World</Text>
         <Text style={st.heroLead}>
@@ -161,8 +165,6 @@ export default function HomeScreen() {
           {home?.subscriptionActive ? "Subscribed" : "Free tier"}
         </Text>
       </View>
-
-      <PrimaryButton title="↻ Refresh" onPress={load} />
     </Screen>
   );
 }

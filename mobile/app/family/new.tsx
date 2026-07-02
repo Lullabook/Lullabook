@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton } from "@/components/maya-ui";
+import { Screen, Eyebrow, Lead, Card, Field, Chip, PrimaryButton, AnimatedCheckbox } from "@/components/maya-ui";
 import { PhotoUploadStatus, RosterAvatar } from "@/components/roster-avatar";
 import { createPersona } from "@/lib/api";
 import { appendNativeFile, setNativeFile, type NativeUploadFile } from "@/lib/form-data";
@@ -124,7 +124,6 @@ export default function AddFamilyScreen() {
     <Screen>
       <View>
         <Eyebrow>💛 Add to the family</Eyebrow>
-        <PageTitle>Add someone who loves them</PageTitle>
         <Lead>Add their photos and we&apos;ll train a private likeness so they&apos;re drawn as themselves in every story. Photos stay encrypted and are never shown back — only the generated roster avatar appears.</Lead>
       </View>
 
@@ -198,14 +197,15 @@ export default function AddFamilyScreen() {
       )}
 
       <Card>
-        <Pressable onPress={() => setConsent((v) => !v)} style={st.consentRow}>
-          <View style={[st.checkbox, { backgroundColor: consent ? C.primary : C.surface, borderColor: consent ? C.primary : C.borderDashed }]}>{consent ? <Text style={st.checkmark}>✓</Text> : null}</View>
-          <Text style={st.consentText}>
-            {kind === "baby"
+        <AnimatedCheckbox
+          checked={consent}
+          onPress={() => setConsent((v) => !v)}
+          label={
+            kind === "baby"
               ? "I am this child's Guardian. I consent to training a private likeness model from these photos. On iOS, baby likeness requires Email-Plus consent before training."
-              : "These photos are of me. I consent to training a private likeness model of myself."}
-          </Text>
-        </Pressable>
+              : "These photos are of me. I consent to training a private likeness model of myself."
+          }
+        />
         {error ? <Text style={st.errorText}>{error}</Text> : null}
         <PrimaryButton title={ready ? "✨ Start training (~5 min)" : enough ? "Confirm consent to continue" : `Add ${Math.max(0, 3 - photos.length)} more photo(s)`} disabled={!ready || saving} onPress={submit} />
         {saving ? <ActivityIndicator color={C.primary} /> : null}
@@ -216,7 +216,7 @@ export default function AddFamilyScreen() {
 
 const st = StyleSheet.create({
   h: { fontFamily: F.displayBold, fontSize: 17, color: C.text },
-  help: { color: C.soft, fontFamily: F.body, fontSize: 13, lineHeight: 19 },
+  help: { color: C.muted, fontFamily: F.body, fontSize: 13, lineHeight: 19 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   preview: { flexDirection: "row", gap: 14, alignItems: "center", backgroundColor: C.primary, borderRadius: 24, padding: 18 },

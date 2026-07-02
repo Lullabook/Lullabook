@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import {
   createTestContext,
   generateAndWait,
   householdWithBaby,
 } from "@/test/fixtures";
+
+// Issue 146 — R1 is solo-only; this suite pins the R2 multi-baby path.
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 describe("43 — world + stories on real data", () => {
   it("world home shows real storybooks for selected baby", async () => {

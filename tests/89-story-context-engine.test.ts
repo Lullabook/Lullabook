@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import {
   createReadyAdult,
   createTestContext,
@@ -13,6 +13,17 @@ import {
   STORY_CONTEXT_TOKEN_BUDGET,
   StoryContextSelector,
 } from "@/services/context-selector";
+
+// Issue 146 — R1 is solo-only; this suite pins the R2 multi-baby context path.
+// Issue 148 — R1 defers the Story Context Engine; this suite pins the R2 path.
+beforeAll(() => {
+  process.env.R1_MULTI_FAMILY_ENABLED = "true";
+  process.env.R1_JOURNAL_MACHINERY_ENABLED = "true";
+});
+afterAll(() => {
+  delete process.env.R1_MULTI_FAMILY_ENABLED;
+  delete process.env.R1_JOURNAL_MACHINERY_ENABLED;
+});
 
 const FIXED_NOW = () => new Date("2026-06-21T00:00:00Z");
 
@@ -363,7 +374,17 @@ describe("89 — Story Context Engine core (ADR-0022)", () => {
       | undefined;
     expect(call?.momentContext).toContain("Priya");
     expect(call?.momentContext).toContain("Significant garden moment");
-    expect(call?.momentContext).toContain("15 months");
+    // Age is derived from birthDate (2025-03-01) relative to the real `now` the
+    // storybook service uses — compute the expected months so the assertion
+    // doesn't drift across month boundaries (was a hardcoded "15 months").
+    const ageMonths = (() => {
+      const b = new Date("2025-03-01T00:00:00Z");
+      const n = new Date();
+      let m = (n.getFullYear() - b.getFullYear()) * 12 + (n.getMonth() - b.getMonth());
+      if (n.getDate() < b.getDate()) m -= 1;
+      return Math.max(0, m);
+    })();
+    expect(call?.momentContext).toContain(`${ageMonths} month`);
     expect(ctx.store.getAutoContextWatermark(baby.id)?.lastStoryAt).toBeDefined();
   });
 

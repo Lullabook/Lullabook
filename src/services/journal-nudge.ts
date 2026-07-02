@@ -1,6 +1,7 @@
 import { v4 as uuid } from "uuid";
 import type { DataStore } from "@/db/store";
 import type { Brief } from "@/domain/types";
+import { isR1JournalMachineryEnabled } from "@/lib/r1-config";
 import {
   groupMomentsByWeek,
   isCurrentWeek,
@@ -45,6 +46,9 @@ export class JournalNudgeService {
   }
 
   shouldShowWeeklySuggestion(memberId: string, babyId: string, now = new Date()): boolean {
+    // Issue 148 — the weekly Story suggestion is deferred from R1 (journal
+    // machinery cut). Inert: never surfaces, no reachable UI.
+    if (!isR1JournalMachineryEnabled()) return false;
     const weekStart = weekStartMonday(now);
     if (!isCurrentWeek(weekStart, now)) return false;
     if (this.isSuppressed(memberId, babyId, "weekly_seen", weekStart)) return false;

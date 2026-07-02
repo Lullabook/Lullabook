@@ -1,6 +1,7 @@
 import type { Plan, Tier } from "@/domain/types";
 import type { StoryCapUsage } from "@/services/story-cap";
 import type { CreditBalance } from "@/services/credit-ledger";
+import { isR1MultiFamilyEnabled } from "@/lib/r1-config";
 
 /**
  * Paywall UI config + plan badges + credit/upgrade surfaces (ADR-0025).
@@ -63,16 +64,22 @@ export const PAYWALL_TIERS = PAYWALL_PLANS;
  * "Our Whole Family" is hidden until its features (voice/video/invited members)
  * exist in R2. The full two-plan model stays in code (PAYWALL_PLANS); this flag
  * filters the *visible/sellable* set for R1. Inert off — R2 shows both again.
+ *
+ * Issue 146 — the collaborative "Our Whole Family" plan is also hidden whenever
+ * multi-family is cut (R1 solo-only): it cannot be shown or sold when its
+ * features don't exist. Either `R1_ONE_PLAN` or `!isR1MultiFamilyEnabled()`
+ * collapses to the solo plan.
  */
 export function getR1VisiblePlans(): PaywallPlan[] {
-  return process.env.R1_ONE_PLAN === "true"
-    ? PAYWALL_PLANS.filter((p) => p.id === "just_us")
-    : PAYWALL_PLANS;
+  if (process.env.R1_ONE_PLAN === "true" || !isR1MultiFamilyEnabled()) {
+    return PAYWALL_PLANS.filter((p) => p.id === "just_us");
+  }
+  return PAYWALL_PLANS;
 }
 
 /** Whether R1 is hiding the premium plan (amends ADR-0025). */
 export function isR1OnePlan(): boolean {
-  return process.env.R1_ONE_PLAN === "true";
+  return process.env.R1_ONE_PLAN === "true" || !isR1MultiFamilyEnabled();
 }
 
 /** Annual billing is the default option (ADR-0025). */
