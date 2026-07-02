@@ -26,7 +26,7 @@ import type { EntitlementService } from "@/services/entitlement";
 import { EntitlementService as EntitlementServiceImpl } from "@/services/entitlement";
 import type { SubscriptionService } from "@/services/subscription";
 import { StoryCapService } from "@/services/story-cap";
-import { isR1AudioEnabled } from "@/lib/r1-config";
+import { isR1AudioEnabled, isR1JournalMachineryEnabled } from "@/lib/r1-config";
 
 const FREE_REROLL_BUDGET = 5;
 
@@ -309,7 +309,10 @@ export class StorybookService {
     const artNote = brief.artStyle ? `Art style: ${brief.artStyle}.` : "";
 
     let momentContext: string | undefined;
-    if (brief.babyId) {
+    // Issue 148 — the Story Context Engine (auto-context injection) is deferred
+    // from R1. When the journal-machinery flag is off, generation does NOT
+    // depend on it — momentContext stays undefined and the book still generates.
+    if (isR1JournalMachineryEnabled() && brief.babyId) {
       const contextSet = await this.contextSelector.selectForBaby(
         memberId,
         brief.babyId,

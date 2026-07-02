@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { createTestContext, generateAndWait, householdWithBaby, withActiveSubscription } from "@/test/fixtures";
+
+// Issue 148 — R1 defers the Story Context Engine; this suite pins the R2
+// auto-context path, so opt back into the journal machinery.
+beforeAll(() => { process.env.R1_JOURNAL_MACHINERY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_JOURNAL_MACHINERY_ENABLED; });
 
 describe("54 — auto-context personalization layer", () => {
   it("includes all significant moments and ordinary since last Story", async () => {

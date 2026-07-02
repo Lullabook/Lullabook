@@ -15,8 +15,15 @@ import {
 } from "@/services/context-selector";
 
 // Issue 146 — R1 is solo-only; this suite pins the R2 multi-baby context path.
-beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
-afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
+// Issue 148 — R1 defers the Story Context Engine; this suite pins the R2 path.
+beforeAll(() => {
+  process.env.R1_MULTI_FAMILY_ENABLED = "true";
+  process.env.R1_JOURNAL_MACHINERY_ENABLED = "true";
+});
+afterAll(() => {
+  delete process.env.R1_MULTI_FAMILY_ENABLED;
+  delete process.env.R1_JOURNAL_MACHINERY_ENABLED;
+});
 
 const FIXED_NOW = () => new Date("2026-06-21T00:00:00Z");
 

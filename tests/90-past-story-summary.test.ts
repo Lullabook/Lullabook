@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import {
   createReadyAdult,
   createTestContext,
@@ -12,6 +12,11 @@ import {
   ROLLING_SUMMARY_MAX_CHARS,
 } from "@/services/past-story-summary";
 import type { BabyPastStorySummary } from "@/domain/types";
+
+// Issue 148 — R1 defers the Story Context Engine (which consumes the past-story
+// summary); this suite pins the R2 anti-repeat path, so opt back in.
+beforeAll(() => { process.env.R1_JOURNAL_MACHINERY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_JOURNAL_MACHINERY_ENABLED; });
 
 describe("90 — Past-Story continuity summary (anti-repeat)", () => {
   it("finalizing a Storybook writes a bounded summary with theme + cast", async () => {

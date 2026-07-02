@@ -9,6 +9,7 @@ import {
   type HomeResponse,
   type MomentWire,
 } from "@/lib/api";
+import { isR1JournalMachineryEnabled } from "@/lib/r1-flags";
 import { C, F } from "@/constants/theme";
 import type { MomentType } from "@domain/daily-types";
 
@@ -177,7 +178,11 @@ export default function DailyScreen() {
 
           <View style={st.filterRow}>
             <Chip icon="📔" label="All moments" active={filter === "all"} onPress={() => setFilter("all")} />
-            <Chip icon="✨" label="Firsts" active={filter === "firsts"} onPress={() => setFilter("firsts")} />
+            {/* Issue 148 — Firsts view deferred from R1 (journal machinery cut).
+                The chip is gated off so the deferred surface has no reachable UI. */}
+            {isR1JournalMachineryEnabled() ? (
+              <Chip icon="✨" label="Firsts" active={filter === "firsts"} onPress={() => setFilter("firsts")} />
+            ) : null}
           </View>
 
           {error ? (
