@@ -17,6 +17,7 @@ import {
 import { useColorScheme } from "@/components/useColorScheme";
 import { BackPill } from "@/components/BackPill";
 import { C, F } from "@/constants/theme";
+import { initMobileSentry } from "@/lib/sentry-init";
 
 export { ErrorBoundary } from "expo-router";
 
@@ -25,6 +26,9 @@ export const unstable_settings = {
 };
 
 SplashScreen.preventAutoHideAsync();
+
+// Issue 151 — Sentry crash capture (fail-open; no DSN in test/dev → no-op).
+initMobileSentry();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
