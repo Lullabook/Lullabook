@@ -254,8 +254,8 @@ export default function StorybookReaderScreen() {
               <Text style={st.pageLabel}>Page {page.index + 1} of {pages.length}</Text>
               <PageIllustration page={page} />
               <Text style={st.pageText}>{page.text || "…"}</Text>
-              {/* Issue 114: voice clip playback for narration/lullaby */}
-              {page.voiceClipId ? <VoicePlayback clipId={page.voiceClipId} /> : null}
+              {/* Issue 145 — audio cut from R1: voice clip playback UI removed.
+                  Kept behind config (R1_AUDIO_ENABLED) for R2 re-enable. */}
             </Card>
           </PageTurn>
 

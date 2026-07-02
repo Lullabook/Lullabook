@@ -240,6 +240,11 @@ describe("91 — Tier & entitlement model (ADR-0023)", () => {
 
   describe("wired gates (service seam, real 403 boundary)", () => {
     it("Storybook generation with a voice brief on Basic → 403 narration gate; on Normal → proceeds", async () => {
+      // Issue 145 — audio is cut from R1 by default; opt back in to exercise the
+      // narration entitlement gate (the R2 path this test pins).
+      const prev = process.env.R1_AUDIO_ENABLED;
+      process.env.R1_AUDIO_ENABLED = "true";
+      try {
       const ctx = createTestContext();
       const { guardian, baby, babyPersona } = await householdWithBaby(ctx, "Maya");
       const priya = await createReadyAdult(ctx, guardian, "Priya");
@@ -281,6 +286,10 @@ describe("91 — Tier & entitlement model (ADR-0023)", () => {
         voiceClipIds: [clip.id],
       });
       expect(book.status).toBe("generating");
+      } finally {
+        if (prev === undefined) delete process.env.R1_AUDIO_ENABLED;
+        else process.env.R1_AUDIO_ENABLED = prev;
+      }
     });
 
     it("an unentitled family cannot generate a Storybook at all (403, not just a hidden button)", async () => {

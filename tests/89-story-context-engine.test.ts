@@ -363,7 +363,17 @@ describe("89 — Story Context Engine core (ADR-0022)", () => {
       | undefined;
     expect(call?.momentContext).toContain("Priya");
     expect(call?.momentContext).toContain("Significant garden moment");
-    expect(call?.momentContext).toContain("15 months");
+    // Age is derived from birthDate (2025-03-01) relative to the real `now` the
+    // storybook service uses — compute the expected months so the assertion
+    // doesn't drift across month boundaries (was a hardcoded "15 months").
+    const ageMonths = (() => {
+      const b = new Date("2025-03-01T00:00:00Z");
+      const n = new Date();
+      let m = (n.getFullYear() - b.getFullYear()) * 12 + (n.getMonth() - b.getMonth());
+      if (n.getDate() < b.getDate()) m -= 1;
+      return Math.max(0, m);
+    })();
+    expect(call?.momentContext).toContain(`${ageMonths} month`);
     expect(ctx.store.getAutoContextWatermark(baby.id)?.lastStoryAt).toBeDefined();
   });
 
