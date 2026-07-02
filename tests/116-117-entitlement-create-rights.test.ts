@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { createTestContext, goodPhoto, withActiveSubscription } from "@/test/fixtures";
 import { EntitlementError, PLAN_ENTITLEMENTS, tierToPlan } from "@/services/entitlement";
+
+// Issue 146 — R1 is solo-only; this suite pins the R2 two-plan + multi-member
+// create-rights path, so opt back into multi-family.
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 /**
  * Issues 116 + 117 — Two-plan entitlement model + per-member create-rights gate.

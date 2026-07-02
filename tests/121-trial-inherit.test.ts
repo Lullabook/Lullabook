@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { createTestContext, withActiveSubscription } from "@/test/fixtures";
+
+// Issue 146 — R1 is solo-only; this suite pins the R2 two-plan trial/inherit path.
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 /**
  * Issue 121 — Trial-of-Family + RevenueCat/Stripe product mapping + inherit-on-login.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import {
   createReadyAdult,
   createTestContext,
@@ -13,6 +13,10 @@ import {
   STORY_CONTEXT_TOKEN_BUDGET,
   StoryContextSelector,
 } from "@/services/context-selector";
+
+// Issue 146 — R1 is solo-only; this suite pins the R2 multi-baby context path.
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 const FIXED_NOW = () => new Date("2026-06-21T00:00:00Z");
 

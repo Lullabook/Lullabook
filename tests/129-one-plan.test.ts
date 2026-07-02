@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   PAYWALL_PLANS,
   getR1VisiblePlans,
@@ -11,7 +11,13 @@ import {
  * R1 shows exactly ONE plan (Just Us + 7-day trial); "Our Whole Family" is
  * hidden until its features exist (R2). The two-plan model stays in code
  * (`PAYWALL_PLANS`) behind the `R1_ONE_PLAN` flag — no entitlement regressions.
+ *
+ * Issue 146 — multi-family is also cut in R1, which independently hides the
+ * collaborative plan. This suite pins the R2 two-plan path, so opt back into
+ * multi-family here; the `R1_ONE_PLAN` flag is still exercised per-test below.
  */
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 describe("129 — R1 one-plan collapse (flag-driven, two-plan model retained)", () => {
   const prev = process.env.R1_ONE_PLAN;

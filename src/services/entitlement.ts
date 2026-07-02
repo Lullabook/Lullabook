@@ -1,6 +1,7 @@
 import type { DataStore } from "@/db/store";
 import type { Plan, Tier } from "@/domain/types";
 import type { SubscriptionService } from "@/services/subscription";
+import { isR1MultiFamilyEnabled } from "@/lib/r1-config";
 
 /**
  * Tier & entitlement model (ADR-0025 supersedes ADR-0023).
@@ -212,6 +213,15 @@ export class EntitlementService {
       }
     }
     // Our Whole Family → any Member may create (no further check).
+    // Issue 146 — R1 is solo-only: when multi-family is cut, create-rights
+    // resolve to Guardian-only regardless of plan (a non-Guardian / invited
+    // path cannot generate). Cutting multi-family closes authz, not opens it.
+    if (!isR1MultiFamilyEnabled() && member.role !== "guardian") {
+      throw new EntitlementError(
+        "Only the guardian can create stories in this release",
+        "create_not_allowed"
+      );
+    }
   }
 
   /** The Household's resolved tier (incl. `none` when unentitled). */
