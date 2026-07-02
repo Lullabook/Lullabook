@@ -8,6 +8,7 @@
  * when unavailable (fail-open). Every shared pressable also gets `hitSlop`.
  */
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -18,7 +19,15 @@ import {
   View,
   type TextInputProps,
 } from "react-native";
-import { createAnimatedComponent } from "react-native-reanimated";
+import Animated, {
+  createAnimatedComponent,
+  useAnimatedStyle,
+  useSharedValue,
+  useReducedMotion,
+  withRepeat,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { C, F, R } from "@/constants/theme";
 import { usePressFeedback } from "@/lib/use-press-feedback";
@@ -209,6 +218,93 @@ export function Avatar({ initial, size = 50, color = C.primaryLight }: { initial
   );
 }
 
+/**
+ * Issue 139 — Reusable shimmer skeleton. Pulses opacity 0.45↔0.85 on the UI
+ * thread (reanimated worklet, 60fps); reduce-motion degrades to a static fill.
+ * Renders immediately on mount (no blank/`ActivityIndicator` flash).
+ */
+export function Skeleton({
+  width = "100%",
+  height = 16,
+  radius = 8,
+  style,
+}: {
+  width?: number | string;
+  height?: number | string;
+  radius?: number;
+  style?: object;
+}) {
+  const reduceMotion = useReducedMotion();
+  const opacity = useSharedValue(0.45);
+  useEffect(() => {
+    if (reduceMotion) {
+      opacity.value = 0.6;
+      return;
+    }
+    opacity.value = withRepeat(withTiming(0.85, { duration: 1000, easing: Easing.inOut(Easing.ease) }), -1, true);
+  }, [reduceMotion]);
+  const aStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View
+      style={[{ width, height, borderRadius: radius, backgroundColor: C.borderSoft }, aStyle, style] as object}
+    />
+  );
+}
+
+/** A card-shaped skeleton mirroring the final `Card` layout. */
+export function SkeletonCard({ lines = 3 }: { lines?: number }) {
+  return (
+    <View style={s.card}>
+      <Skeleton width="60%" height={20} />
+      <View style={{ gap: 10, marginTop: 4 }}>
+        {Array.from({ length: lines }).map((_, i) => (
+          <Skeleton key={i} height={14} radius={7} width={i === lines - 1 ? "70%" : "100%"} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** A list-row skeleton mirroring a roster/library row (avatar + two lines). */
+export function SkeletonRow() {
+  return (
+    <View style={[s.card, { flexDirection: "row", alignItems: "center", gap: 14, padding: 16 }]}>
+      <Skeleton width={44} height={44} radius={22} />
+      <View style={{ flex: 1, gap: 8 }}>
+        <Skeleton width="55%" height={15} />
+        <Skeleton width="35%" height={12} radius={6} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Issue 139 — Illustrated empty state (large emoji + title + optional CTA),
+ * replacing one-line gray text. Actionable, not a dead-end.
+ */
+export function EmptyState({
+  emoji,
+  title,
+  hint,
+  cta,
+  onCta,
+}: {
+  emoji: string;
+  title: string;
+  hint?: string;
+  cta?: string;
+  onCta?: () => void;
+}) {
+  return (
+    <Card style={s.emptyState}>
+      <Text style={s.emptyEmoji}>{emoji}</Text>
+      <Text style={s.emptyTitle}>{title}</Text>
+      {hint ? <Text style={s.emptyHint}>{hint}</Text> : null}
+      {cta && onCta ? <PrimaryButton title={cta} onPress={onCta} /> : null}
+    </Card>
+  );
+}
+
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
   scroll: { flex: 1, backgroundColor: C.bg },
@@ -254,4 +350,8 @@ const s = StyleSheet.create({
   btnText: { fontFamily: F.bodyBold, fontSize: 15 },
   chip: { minHeight: 44, borderRadius: R.chip, borderWidth: 1.5, paddingVertical: 10, paddingHorizontal: 16, justifyContent: "center" },
   chipText: { fontFamily: F.bodyBold, fontSize: 14 },
+  emptyState: { alignItems: "center", gap: 12, paddingVertical: 30 },
+  emptyEmoji: { fontSize: 48 },
+  emptyTitle: { fontFamily: F.display, fontSize: 20, color: C.text, textAlign: "center" },
+  emptyHint: { fontFamily: F.body, fontSize: 14, color: C.muted, textAlign: "center", lineHeight: 20 },
 });

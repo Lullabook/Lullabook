@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, SkeletonRow } from "@/components/maya-ui";
 import { RosterAvatar } from "@/components/roster-avatar";
 import { fetchHome, seedDemo, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
@@ -55,9 +55,10 @@ export default function FamilyTab() {
 
   if (loading) {
     return (
-      <View style={st.center}>
-        <ActivityIndicator size="large" color={C.primary} />
-      </View>
+      <Screen>
+        <SkeletonRow />
+        <SkeletonRow />
+      </Screen>
     );
   }
 
@@ -75,7 +76,10 @@ export default function FamilyTab() {
       <Card>
         <Text style={st.sectionTitle}>💛 Family ({personas.length})</Text>
         {personas.length === 0 ? (
-          <Text style={st.emptyNote}>Add someone who loves them to draw your family.</Text>
+          <View style={st.emptyInline}>
+            <Text style={st.emptyEmoji}>💛</Text>
+            <Text style={st.emptyNote}>Add someone who loves {home?.selectedBaby?.displayName ?? "them"} to draw your family.</Text>
+          </View>
         ) : (
           <View style={{ gap: 12, marginTop: 8 }}>
             {personas.map((p) => (
@@ -104,7 +108,10 @@ export default function FamilyTab() {
       <Card>
         <Text style={st.sectionTitle}>🐻 Characters ({characters.length})</Text>
         {characters.length === 0 ? (
-          <Text style={st.emptyNote}>Invent a free, text-only friend.</Text>
+          <View style={st.emptyInline}>
+            <Text style={st.emptyEmoji}>🐻</Text>
+            <Text style={st.emptyNote}>Invent a free, text-only friend — no photos, no consent gate.</Text>
+          </View>
         ) : (
           <View style={{ gap: 8, marginTop: 8 }}>
             {characters.map((c) => (
@@ -138,7 +145,9 @@ const st = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: C.bg },
   sectionTitle: { fontSize: 18, fontFamily: F.displayBold, color: C.text },
   item: { fontSize: 16, color: C.text, fontFamily: F.bodyBold },
-  emptyNote: { fontSize: 14, color: C.soft, fontFamily: F.body, lineHeight: 20, marginTop: 4 },
+  emptyInline: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },
+  emptyEmoji: { fontSize: 28 },
+  emptyNote: { flex: 1, fontSize: 14, color: C.muted, fontFamily: F.body, lineHeight: 20, marginTop: 4 },
   personaRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   metaInline: { fontSize: 13, color: C.muted, fontFamily: F.body, marginTop: 1 },
   chev: { color: C.soft, fontSize: 22, fontFamily: F.bodyBold },

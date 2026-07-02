@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View, Pressable } from "react-native";
+import { StyleSheet, Text, View, Pressable } from "react-native";
 import { router } from "expo-router";
-import { Screen, Card } from "@/components/maya-ui";
+import { Screen, Card, SkeletonCard, SkeletonRow } from "@/components/maya-ui";
 import { fetchHome, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
@@ -35,9 +35,11 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={st.center} accessibilityLabel="Loading home">
-        <ActivityIndicator size="large" color={C.primary} />
-      </View>
+      <Screen>
+        <SkeletonCard />
+        <SkeletonRow />
+        <SkeletonCard lines={2} />
+      </Screen>
     );
   }
 

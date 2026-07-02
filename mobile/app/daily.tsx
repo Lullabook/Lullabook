@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, Chip } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, Chip, SkeletonCard } from "@/components/maya-ui";
 import {
   createMoment,
   fetchHome,
@@ -125,9 +125,10 @@ export default function DailyScreen() {
 
   if (loading) {
     return (
-      <View style={st.center}>
-        <ActivityIndicator size="large" color={C.primary} />
-      </View>
+      <Screen>
+        <SkeletonCard />
+        <SkeletonCard lines={2} />
+      </Screen>
     );
   }
 

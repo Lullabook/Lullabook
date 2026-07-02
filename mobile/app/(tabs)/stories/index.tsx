@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, SkeletonRow, EmptyState } from "@/components/maya-ui";
 import { listStorybooks, type StorybookSummary } from "@/lib/api";
 import { C, F } from "@/constants/theme";
 
@@ -49,9 +49,11 @@ export default function StorybookLibraryScreen() {
 
   if (loading) {
     return (
-      <View style={st.center}>
-        <ActivityIndicator size="large" color={C.primary} />
-      </View>
+      <Screen>
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
+      </Screen>
     );
   }
 
@@ -72,9 +74,13 @@ export default function StorybookLibraryScreen() {
       ) : null}
 
       {books.length === 0 ? (
-        <Card>
-          <Text style={st.copy}>No Storybooks yet — start from a Moment or create a new Brief.</Text>
-        </Card>
+        <EmptyState
+          emoji="📚"
+          title="No Storybooks yet"
+          hint="Start from a Moment or create a new Brief — your first illustrated book appears here."
+          cta="✨ New Storybook"
+          onCta={() => router.push("/create" as never)}
+        />
       ) : (
         books.map((book) => (
           <Pressable
