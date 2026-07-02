@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, SkeletonRow, EmptyState } from "@/components/maya-ui";
+import {
+  Screen,
+  Eyebrow,
+  PageTitle,
+  Lead,
+  Card,
+  PrimaryButton,
+  SkeletonRow,
+  EmptyState,
+  ListScreen,
+  InsetSeparator,
+} from "@/components/maya-ui";
 import { listStorybooks, type StorybookSummary } from "@/lib/api";
 import { C, F } from "@/constants/theme";
 
@@ -58,22 +69,40 @@ export default function StorybookLibraryScreen() {
   }
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
-      <View>
-        <Eyebrow>📚 Library</Eyebrow>
-        <PageTitle>Your Storybooks</PageTitle>
-        <Lead>Illustrated books you&apos;ve generated — tap to read or watch them finish.</Lead>
-      </View>
-
-      <PrimaryButton title="✨ New Storybook" onPress={() => router.push("/create" as never)} />
-
-      {error ? (
-        <Card style={st.errorCard}>
-          <Text style={st.errorText}>{error}</Text>
-        </Card>
-      ) : null}
-
-      {books.length === 0 ? (
+    <ListScreen
+      data={books}
+      keyExtractor={(book) => book.id}
+      renderItem={({ item: book }) => (
+        <Pressable
+          onPress={() => router.push(`/stories/${book.id}` as never)}
+          style={st.row}
+        >
+          <View style={st.cover}>
+            <Text style={st.coverEmoji}>📖</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.title}>{book.theme}</Text>
+            <Text style={st.meta}>{statusLabel(book.status)} · {book.storyType}</Text>
+          </View>
+          <Text style={st.chev}>›</Text>
+        </Pressable>
+      )}
+      ListHeaderComponent={
+        <>
+          <View>
+            <Eyebrow>📚 Library</Eyebrow>
+            <PageTitle>Your Storybooks</PageTitle>
+            <Lead>Illustrated books you&apos;ve generated — tap to read or watch them finish.</Lead>
+          </View>
+          <PrimaryButton title="✨ New Storybook" onPress={() => router.push("/create" as never)} />
+          {error ? (
+            <Card style={st.errorCard}>
+              <Text style={st.errorText}>{error}</Text>
+            </Card>
+          ) : null}
+        </>
+      }
+      ListEmptyComponent={
         <EmptyState
           emoji="📚"
           title="No Storybooks yet"
@@ -81,25 +110,11 @@ export default function StorybookLibraryScreen() {
           cta="✨ New Storybook"
           onCta={() => router.push("/create" as never)}
         />
-      ) : (
-        books.map((book) => (
-          <Pressable
-            key={book.id}
-            onPress={() => router.push(`/stories/${book.id}` as never)}
-            style={st.row}
-          >
-            <View style={st.cover}>
-              <Text style={st.coverEmoji}>📖</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={st.title}>{book.theme}</Text>
-              <Text style={st.meta}>{statusLabel(book.status)} · {book.storyType}</Text>
-            </View>
-            <Text style={st.chev}>›</Text>
-          </Pressable>
-        ))
-      )}
-    </Screen>
+      }
+      ItemSeparatorComponent={() => <InsetSeparator indent={66} />}
+      onRefresh={load}
+      refreshing={loading}
+    />
   );
 }
 

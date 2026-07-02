@@ -7,16 +7,21 @@
  * Reduce-motion degrades the spring to an instant transition; haptics no-op
  * when unavailable (fail-open). Every shared pressable also gets `hitSlop`.
  */
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import { useEffect } from "react";
 import {
+  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
   View,
+  type FlatListProps,
+  type ListRenderItem,
+  type SectionListProps,
   type TextInputProps,
 } from "react-native";
 import Animated, {
@@ -305,6 +310,118 @@ export function EmptyState({
   );
 }
 
+/**
+ * Issue 142 — Inset separator for native list spacing (a hairline divider
+ * indented to sit under content, not edge-to-edge).
+ */
+export function InsetSeparator({ indent = 58 }: { indent?: number }) {
+  return (
+    <View style={[s.insetSepWrap, { paddingLeft: indent }]}>
+      <View style={s.insetSep} />
+    </View>
+  );
+}
+
+/** Wrap a ReactNode into a component for FlatList/SectionList List* props. */
+function asListComponent(node: ReactNode): ComponentType<unknown> | undefined {
+  if (node == null) return undefined;
+  const Component = () => <>{node}</>;
+  return Component;
+}
+
+/**
+ * Issue 142 — A FlatList-rooted screen so list rows recycle smoothly (no
+ * `.map()`-in-ScrollView). The chrome (eyebrow/lead/cards) goes in
+ * `ListHeaderComponent`; the empty state in `ListEmptyComponent`. Pull-to-
+ * refresh and keyboard handling are inherited. Mirrors `Screen`'s padding.
+ */
+export function ListScreen<T>({
+  data,
+  renderItem,
+  keyExtractor,
+  ListHeaderComponent,
+  ListEmptyComponent,
+  ListFooterComponent,
+  ItemSeparatorComponent,
+  onRefresh,
+  refreshing = false,
+}: {
+  data: T[];
+  renderItem: ListRenderItem<T>;
+  keyExtractor: (item: T) => string;
+  ListHeaderComponent?: ReactNode;
+  ListEmptyComponent?: ReactNode;
+  ListFooterComponent?: ReactNode;
+  ItemSeparatorComponent?: FlatListProps<T>["ItemSeparatorComponent"];
+  onRefresh?: () => void;
+  refreshing?: boolean;
+}) {
+  return (
+    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+      <FlatList
+        data={data}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={asListComponent(ListHeaderComponent)}
+        ListEmptyComponent={asListComponent(ListEmptyComponent)}
+        ListFooterComponent={asListComponent(ListFooterComponent)}
+        ItemSeparatorComponent={ItemSeparatorComponent}
+        contentContainerStyle={s.screen}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} tintColor={C.primary} titleColor={C.muted} />
+          ) : undefined
+        }
+      />
+    </SafeAreaView>
+  );
+}
+
+/** Issue 142 — A SectionList-rooted screen (for screens with grouped sections). */
+export function SectionListScreen<T, S extends { title: string; data: T[] }>({
+  sections,
+  renderItem,
+  keyExtractor,
+  renderSectionHeader,
+  ListHeaderComponent,
+  ListFooterComponent,
+  ItemSeparatorComponent,
+  onRefresh,
+  refreshing = false,
+}: {
+  sections: S[];
+  renderItem: ListRenderItem<T>;
+  keyExtractor: (item: T) => string;
+  renderSectionHeader?: (info: { section: S }) => ReactNode;
+  ListHeaderComponent?: ReactNode;
+  ListFooterComponent?: ReactNode;
+  ItemSeparatorComponent?: SectionListProps<S>["ItemSeparatorComponent"];
+  onRefresh?: () => void;
+  refreshing?: boolean;
+}) {
+  return (
+    <SafeAreaView style={s.safe} edges={["top", "left", "right"]}>
+      <SectionList
+        sections={sections}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        renderSectionHeader={renderSectionHeader ? (info: { section: S }) => <>{renderSectionHeader(info)}</> : undefined}
+        ListHeaderComponent={asListComponent(ListHeaderComponent)}
+        ListFooterComponent={asListComponent(ListFooterComponent)}
+        ItemSeparatorComponent={ItemSeparatorComponent}
+        contentContainerStyle={s.screen}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} tintColor={C.primary} titleColor={C.muted} />
+          ) : undefined
+        }
+      />
+    </SafeAreaView>
+  );
+}
+
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
   scroll: { flex: 1, backgroundColor: C.bg },
@@ -354,4 +471,6 @@ const s = StyleSheet.create({
   emptyEmoji: { fontSize: 48 },
   emptyTitle: { fontFamily: F.display, fontSize: 20, color: C.text, textAlign: "center" },
   emptyHint: { fontFamily: F.body, fontSize: 14, color: C.muted, textAlign: "center", lineHeight: 20 },
+  insetSepWrap: { height: 13, justifyContent: "center" },
+  insetSep: { height: 1, backgroundColor: C.borderSoft },
 });

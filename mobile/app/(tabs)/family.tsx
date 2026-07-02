@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, SkeletonRow } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, SkeletonRow, InsetSeparator } from "@/components/maya-ui";
 import { RosterAvatar } from "@/components/roster-avatar";
 import { fetchHome, seedDemo, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
@@ -75,31 +75,34 @@ export default function FamilyTab() {
 
       <Card>
         <Text style={st.sectionTitle}>💛 Family ({personas.length})</Text>
-        {personas.length === 0 ? (
-          <View style={st.emptyInline}>
-            <Text style={st.emptyEmoji}>💛</Text>
-            <Text style={st.emptyNote}>Add someone who loves {home?.selectedBaby?.displayName ?? "them"} to draw your family.</Text>
-          </View>
-        ) : (
-          <View style={{ gap: 12, marginTop: 8 }}>
-            {personas.map((p) => (
-              <Pressable key={p.id} style={st.personaRow} onPress={() => router.push(`/family/${p.id}` as never)}>
-                <RosterAvatar
-                  name={p.displayName}
-                  initial={p.displayName.charAt(0)}
-                  status={p.status}
-                  avatarKey={p.avatarKey}
-                  size={44}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={st.item}>{p.displayName}</Text>
-                  <Text style={st.metaInline}>{p.status}</Text>
-                </View>
-                <Text style={st.chev}>›</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+        <FlatList
+          data={personas}
+          keyExtractor={(p) => p.id}
+          scrollEnabled={false}
+          ItemSeparatorComponent={() => <InsetSeparator indent={56} />}
+          ListEmptyComponent={
+            <View style={st.emptyInline}>
+              <Text style={st.emptyEmoji}>💛</Text>
+              <Text style={st.emptyNote}>Add someone who loves {home?.selectedBaby?.displayName ?? "them"} to draw your family.</Text>
+            </View>
+          }
+          renderItem={({ item: p }) => (
+            <Pressable style={st.personaRow} onPress={() => router.push(`/family/${p.id}` as never)}>
+              <RosterAvatar
+                name={p.displayName}
+                initial={p.displayName.charAt(0)}
+                status={p.status}
+                avatarKey={p.avatarKey}
+                size={44}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={st.item}>{p.displayName}</Text>
+                <Text style={st.metaInline}>{p.status}</Text>
+              </View>
+              <Text style={st.chev}>›</Text>
+            </Pressable>
+          )}
+        />
         <Pressable style={st.addBtn} onPress={() => router.push("/family/new")}>
           <Text style={st.addBtnText}>＋ Add family member</Text>
         </Pressable>
@@ -107,18 +110,21 @@ export default function FamilyTab() {
 
       <Card>
         <Text style={st.sectionTitle}>🐻 Characters ({characters.length})</Text>
-        {characters.length === 0 ? (
-          <View style={st.emptyInline}>
-            <Text style={st.emptyEmoji}>🐻</Text>
-            <Text style={st.emptyNote}>Invent a free, text-only friend — no photos, no consent gate.</Text>
-          </View>
-        ) : (
-          <View style={{ gap: 8, marginTop: 8 }}>
-            {characters.map((c) => (
-              <Text key={c.id} style={st.item}>{c.displayName}</Text>
-            ))}
-          </View>
-        )}
+        <FlatList
+          data={characters}
+          keyExtractor={(c) => c.id}
+          scrollEnabled={false}
+          ItemSeparatorComponent={() => <InsetSeparator indent={0} />}
+          ListEmptyComponent={
+            <View style={st.emptyInline}>
+              <Text style={st.emptyEmoji}>🐻</Text>
+              <Text style={st.emptyNote}>Invent a free, text-only friend — no photos, no consent gate.</Text>
+            </View>
+          }
+          renderItem={({ item: c }) => (
+            <Text style={st.item}>{c.displayName}</Text>
+          )}
+        />
         <Pressable style={st.addBtn} onPress={() => router.push("/characters")}>
           <Text style={st.addBtnText}>＋ Create character</Text>
         </Pressable>
