@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -9,59 +8,33 @@ import {
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { getAudio } from "@/lib/audio";
-import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton, PageTurn } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton, PageTurn, Skeleton, SkeletonCard, Twinkle } from "@/components/maya-ui";
 import {
   getStorybook,
   illustrationSource,
   rerollPageImage,
   selectPageCandidate,
-  getVoicePlaybackUrl,
   type StorybookDetailWire,
   type StorybookPageWire,
 } from "@/lib/api";
 import { C, F } from "@/constants/theme";
 
-/** Issue 114 — Voice clip playback (lullaby/narration). Starts < 1s from cache. */
-function VoicePlayback({ clipId }: { clipId: string }) {
-  const [playing, setPlaying] = useState(false);
-  const [sound, setSound] = useState<import("expo-av").Audio.Sound | null>(null);
+// Issue 145 — audio is cut from R1: the VoicePlayback component (issue 114)
+// was removed with it; it returns from git history when R2 re-enables audio.
 
-  async function play() {
-    const Audio = getAudio();
-    if (!Audio) {
-      setPlaying(false);
-      return;
-    }
-    try {
-      const { url } = await getVoicePlaybackUrl(clipId);
-      if (sound) await sound.unloadAsync();
-      const { sound: newSound } = await Audio.Sound.createAsync({ uri: url });
-      setSound(newSound);
-      setPlaying(true);
-      await newSound.playAsync();
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if ("didJustFinish" in status && status.didJustFinish) {
-          setPlaying(false);
-        }
-      });
-    } catch {
-      setPlaying(false);
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      if (sound) sound.unloadAsync();
-    };
-  }, [sound]);
-
-  return (
-    <Pressable style={st.voiceBtn} onPress={play} disabled={playing}>
-      <Text style={st.voiceBtnText}>{playing ? "⏸ Playing…" : "▶ Play narration"}</Text>
-    </Pressable>
-  );
-}
+/** Parent-facing labels — raw status/type enums never reach the screen. */
+const STATUS_LABEL: Record<string, string> = {
+  generating: "Illustrating…",
+  draft: "Ready to read",
+  finalized: "Finalized",
+  failed: "Needs attention",
+};
+const TYPE_LABEL: Record<string, string> = {
+  bedtime: "Bedtime story",
+  adventure: "Adventure story",
+  silly: "Silly story",
+  learning: "Learning story",
+};
 
 function PageIllustration({ page }: { page: StorybookPageWire }) {
   const [source, setSource] = useState<{ uri: string; headers?: Record<string, string> } | null>(null);
@@ -83,11 +56,7 @@ function PageIllustration({ page }: { page: StorybookPageWire }) {
   }
 
   if (!source) {
-    return (
-      <View style={st.illPlaceholder}>
-        <ActivityIndicator color={C.primary} />
-      </View>
-    );
+    return <Skeleton width="100%" height={220} radius={18} />;
   }
 
   return <Image source={source} style={st.illustration} accessibilityLabel="Story illustration" />;
@@ -177,22 +146,34 @@ export default function StorybookReaderScreen() {
   }
 
   if (loading) {
+    // Skeleton mirrors the reader layout (page card with an illustration
+    // block) — renders immediately, no bare-spinner flash (issue 139).
     return (
-      <View style={st.center}>
-        <ActivityIndicator size="large" color={C.primary} />
-      </View>
+      <Screen>
+        <View style={{ gap: 10 }}>
+          <Skeleton width="30%" height={12} radius={6} />
+          <Skeleton width="75%" height={28} radius={10} />
+        </View>
+        <View style={st.skeletonPage}>
+          <Skeleton width="100%" height={220} radius={18} />
+          <SkeletonCard lines={3} />
+        </View>
+      </Screen>
     );
   }
 
   if (!book) {
     return (
       <Screen>
-        <Text style={st.errorText}>{error ?? "Storybook not found"}</Text>
+        <Card style={st.errorCard}>
+          <Text style={st.errorText}>{error ?? "We couldn't find this Storybook."}</Text>
+          <GhostButton title="← Back to the library" onPress={() => router.back()} />
+        </Card>
       </Screen>
     );
   }
 
-  const pages = book.pages.sort((a, b) => a.index - b.index);
+  const pages = [...book.pages].sort((a, b) => a.index - b.index);
   const page = pages[pageIndex];
   const generating = book.status === "generating";
   const failed = book.status === "failed";
@@ -206,7 +187,7 @@ export default function StorybookReaderScreen() {
         <Lead>
           {generating
             ? "Illustrating your pages — this usually takes a minute."
-            : `${book.storyType} · ${book.status}`}
+            : `${TYPE_LABEL[book.storyType] ?? "Story"} · ${STATUS_LABEL[book.status] ?? book.status}`}
         </Lead>
       </View>
 
@@ -222,7 +203,7 @@ export default function StorybookReaderScreen() {
       {failed ? (
         <Card style={st.errorCard}>
           <Text style={st.errorText}>
-            This Storybook couldn't be finished. Some pages may still be readable below, and you can try loading again.
+            This Storybook couldn&apos;t be finished. Some pages may still be readable below, and you can try loading again.
           </Text>
           <PrimaryButton title={actionBusy ? "Retrying…" : "↻ Try again"} onPress={load} />
         </Card>
@@ -244,8 +225,15 @@ export default function StorybookReaderScreen() {
 
       {generating && !pollTimedOut ? (
         <Card>
-          <ActivityIndicator color={C.primary} />
-          <Text style={st.copy}>Generating page {pages.filter((p) => p.generationStatus === "ready").length + 1}…</Text>
+          <View style={st.generatingRow}>
+            <Twinkle>
+              <Text style={{ fontSize: 26 }}>✨</Text>
+            </Twinkle>
+            <Text style={st.copy}>
+              Painting page {pages.filter((p) => p.generationStatus === "ready").length + 1} of your book…
+            </Text>
+          </View>
+          <Skeleton width="100%" height={140} radius={18} />
         </Card>
       ) : page ? (
         <>
@@ -267,9 +255,15 @@ export default function StorybookReaderScreen() {
             <Card>
               <Text style={st.cardTitle}>Pick a look</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.candidateRow}>
-                {imageCandidates.map((c) => (
-                  <Pressable key={c.id} onPress={() => pickCandidate(c.id)} style={st.candidateChip}>
-                    <Text style={st.candidateText}>Option</Text>
+                {imageCandidates.map((c, i) => (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => pickCandidate(c.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Choose look ${i + 1}`}
+                    style={({ pressed }) => [st.candidateChip, pressed && { opacity: 0.8 }]}
+                  >
+                    <Text style={st.candidateText}>🎨 Look {i + 1}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -277,13 +271,21 @@ export default function StorybookReaderScreen() {
           ) : null}
 
           <View style={st.navRow}>
-            <GhostButton title="← Prev" onPress={() => setPageIndex((i) => Math.max(0, i - 1))} />
-            <GhostButton title="Next →" onPress={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))} />
+            <GhostButton
+              title="← Prev"
+              disabled={pageIndex === 0}
+              onPress={() => setPageIndex((i) => Math.max(0, i - 1))}
+            />
+            <GhostButton
+              title="Next →"
+              disabled={pageIndex >= pages.length - 1}
+              onPress={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))}
+            />
           </View>
         </>
       ) : (
         <Card>
-          <Text style={st.copy}>No pages yet.</Text>
+          <Text style={st.copy}>No pages yet — they&apos;ll appear here as the book comes together.</Text>
         </Card>
       )}
     </Screen>
@@ -291,20 +293,11 @@ export default function StorybookReaderScreen() {
 }
 
 const st = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: C.bg },
   copy: { fontFamily: F.body, fontSize: 15, color: C.muted, marginTop: 8 },
   cardTitle: { fontFamily: F.displayBold, fontSize: 17, color: C.text },
   pageLabel: { fontFamily: F.bodyBold, fontSize: 13, color: C.soft, marginBottom: 10 },
   pageText: { fontFamily: F.body, fontSize: 17, lineHeight: 26, color: C.text, marginTop: 14 },
   illustration: { width: "100%", height: 220, borderRadius: 18, backgroundColor: C.surfaceAlt },
-  illPlaceholder: {
-    width: "100%",
-    height: 220,
-    borderRadius: 18,
-    backgroundColor: C.surfaceAlt,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   illHole: {
     width: "100%",
     height: 220,
@@ -320,6 +313,8 @@ const st = StyleSheet.create({
   navRow: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   candidateRow: { gap: 10, paddingVertical: 4 },
   candidateChip: {
+    minHeight: 44,
+    justifyContent: "center",
     borderRadius: 14,
     borderWidth: 1,
     borderColor: C.border,
@@ -330,16 +325,6 @@ const st = StyleSheet.create({
   candidateText: { fontFamily: F.bodyBold, color: C.primary, fontSize: 13 },
   errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
   errorText: { color: C.danger, fontFamily: F.bodyBold },
-  voiceBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 999,
-    backgroundColor: C.primaryBg,
-    alignSelf: "flex-start",
-  },
-  voiceBtnText: { color: C.primary, fontFamily: F.bodyBold, fontSize: 14 },
+  skeletonPage: { gap: 14 },
+  generatingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
 });

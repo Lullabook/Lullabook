@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { CharacterForm, type CharacterFormValues } from "@/components/character-form";
+import { EmptyState, Screen, SkeletonCard } from "@/components/maya-ui";
 import { fetchCharacter } from "@/lib/api";
-import { C } from "@/constants/theme";
 
 function toFormValues(character: {
   questionnaire: import("@domain/types").TraitQuestionnaire;
@@ -49,14 +48,26 @@ export default function EditCharacterScreen() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: C.bg }}>
-        <ActivityIndicator size="large" color={C.primary} />
-      </View>
+      <Screen>
+        <SkeletonCard lines={2} />
+        <SkeletonCard lines={4} />
+      </Screen>
     );
   }
 
   if (!initial || !characterId) {
-    return null;
+    // Never a blank screen — a warm dead-end with a way back.
+    return (
+      <Screen>
+        <EmptyState
+          emoji="🐻"
+          title="We couldn't find this character"
+          hint="They may have wandered into another story. Head back and try again."
+          cta="← Back to characters"
+          onCta={() => router.replace("/characters" as never)}
+        />
+      </Screen>
+    );
   }
 
   return <CharacterForm initial={initial} isEdit characterId={characterId} key={characterId} />;

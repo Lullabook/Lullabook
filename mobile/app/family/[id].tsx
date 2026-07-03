@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { getAudio } from "@/lib/audio";
-import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton } from "@/components/maya-ui";
-import { BackPill } from "@/components/BackPill";
+import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton, SkeletonCard, SkeletonRow } from "@/components/maya-ui";
+import { RosterAvatar } from "@/components/roster-avatar";
 import { fetchHome, listVoiceClips, uploadVoiceClip, type HomeResponse } from "@/lib/api";
 import { isR1AudioEnabled, R1_CUT_MESSAGE } from "@/lib/r1-flags";
 import { C, F, R } from "@/constants/theme";
+import type { PersonaStatus } from "@domain/types";
+
+/** Parent-facing likeness-training labels — raw enums never reach the screen. */
+const STATUS_LABEL: Record<PersonaStatus, string> = {
+  training: "✨ Learning their look…",
+  ready: "Ready to star in stories",
+  failed: "Training needs a retry",
+};
 
 interface VoiceClipWire {
   id: string;
@@ -58,6 +66,12 @@ export default function FamilyMemberDetailScreen() {
   }, [load]);
 
   useEffect(() => {
+    // Issue 145 — audio is cut from R1: never prompt for microphone access on
+    // behalf of a feature that isn't reachable (App Review + parent trust).
+    if (!isR1AudioEnabled()) {
+      setAudioPerm(false);
+      return;
+    }
     (async () => {
       const Audio = getAudio();
       if (!Audio) {
@@ -144,7 +158,12 @@ export default function FamilyMemberDetailScreen() {
   const recordingRef = { current: null as import("expo-av").Audio.Recording | null };
 
   if (loading) {
-    return <View style={st.center}><ActivityIndicator size="large" color={C.primary} /></View>;
+    return (
+      <Screen>
+        <SkeletonRow />
+        <SkeletonCard lines={2} />
+      </Screen>
+    );
   }
 
   return (
@@ -152,11 +171,33 @@ export default function FamilyMemberDetailScreen() {
       <View>
         <Eyebrow>💛 Family member</Eyebrow>
         <PageTitle>{persona?.displayName ?? "Member"}</PageTitle>
-        <Lead>Record a voice message for stories. The recorder self-consents to their own voice.</Lead>
+        <Lead>
+          {isR1AudioEnabled()
+            ? "Record a voice message for stories. The recorder self-consents to their own voice."
+            : `Part of the cast — drawn as themselves in every story they star in.`}
+        </Lead>
       </View>
 
       {error ? (
         <Card style={st.errorCard}><Text style={st.errorText}>{error}</Text></Card>
+      ) : null}
+
+      {persona ? (
+        <Card>
+          <View style={st.personaRow}>
+            <RosterAvatar
+              name={persona.displayName}
+              initial={persona.displayName.charAt(0)}
+              status={persona.status}
+              avatarKey={persona.avatarKey}
+              size={56}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={st.personaName}>{persona.displayName}</Text>
+              <Text style={st.personaStatus}>{STATUS_LABEL[persona.status] ?? persona.status}</Text>
+            </View>
+          </View>
+        </Card>
       ) : null}
 
       {/* Issue 145 — audio cut from R1. The voice recorder + clips UI is gated
@@ -164,7 +205,7 @@ export default function FamilyMemberDetailScreen() {
       {!isR1AudioEnabled() ? (
         <Card>
           <Text style={st.cardTitle}>🎤 Voice messages</Text>
-          <Text style={st.copy}>Voice messages {R1_CUT_MESSAGE}.</Text>
+          <Text style={st.copy}>Recording voice messages {R1_CUT_MESSAGE} — it&apos;s coming back soon.</Text>
         </Card>
       ) : audioPerm === false ? (
         <Card>
@@ -229,8 +270,10 @@ export default function FamilyMemberDetailScreen() {
 }
 
 const st = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: C.bg },
   cardTitle: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
+  personaRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  personaName: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
+  personaStatus: { fontFamily: F.body, fontSize: 14, color: C.muted, marginTop: 2 },
   copy: { fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 20, marginTop: 4 },
   ready: { fontFamily: F.bodyBold, fontSize: 14, color: C.greenText, marginTop: 10 },
   input: {

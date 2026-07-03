@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
-import { Screen, Eyebrow, Lead, Card, Chip, SkeletonCard, ListScreen, InsetSeparator } from "@/components/maya-ui";
+import { Screen, Eyebrow, Lead, Card, Chip, EmptyState, PrimaryButton, SkeletonCard, ListScreen, InsetSeparator } from "@/components/maya-ui";
+import { usePressFeedback } from "@/lib/use-press-feedback";
 import {
   createMoment,
   fetchHome,
@@ -28,6 +30,7 @@ function meta(t: MomentType) {
     case "first":
       return { icon: "✨", label: "A first", bg: "#FBEBCE", fg: "#9A6B1E" };
     case "funny":
+      // Canonical rose tag family (design REFERENCE §small tag color families).
       return { icon: "😄", label: "Funny", bg: "#FCE4EC", fg: "#B5618A" };
     case "tough":
       return { icon: "🫂", label: "Tough day", bg: "#E1F1E8", fg: "#3E7A5A" };
@@ -45,16 +48,41 @@ function formatWhen(m: MomentWire): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-const ROUTINE = [
-  { time: "6:45 AM", icon: "🌅", label: "Wakes up, cuddles" },
-  { time: "7:30 AM", icon: "🥣", label: "Breakfast" },
-  { time: "9:30 AM", icon: "😴", label: "Morning nap" },
-  { time: "11:00 AM", icon: "🧸", label: "Playtime & books" },
-  { time: "1:00 PM", icon: "😴", label: "Afternoon nap" },
-  { time: "5:30 PM", icon: "🍽️", label: "Dinner" },
-  { time: "6:45 PM", icon: "🛁", label: "Bath time" },
-  { time: "7:30 PM", icon: "🌙", label: "Lullaby & bed" },
-];
+const AnimatedPressable = createAnimatedComponent(Pressable);
+
+/** A Moment row (needs its own component so the press-feedback hook can run). */
+function MomentRow({ m, mm }: { m: MomentWire; mm: ReturnType<typeof meta> }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
+  return (
+    <View style={[st.moment, m.isSignificant && st.momentSignificant]}>
+      <View style={[st.momentIcon, { backgroundColor: mm.bg }]}>
+        <Text style={{ fontSize: 22 }}>{mm.icon}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={st.momentMetaRow}>
+          <View style={[st.tag, { backgroundColor: mm.bg }]}>
+            <Text style={[st.tagText, { color: mm.fg }]}>{mm.label}</Text>
+          </View>
+          {m.isSignificant ? <Text style={st.spark}>✨</Text> : null}
+          <Text style={st.momentDate}>{formatWhen(m)}</Text>
+        </View>
+        <Text style={st.momentText}>{m.body}</Text>
+        <AnimatedPressable
+          onPress={() =>
+            router.push({ pathname: "/create", params: { theme: m.body } } as never)
+          }
+          onPressIn={onPressIn}
+          onPressOut={onPressOut}
+          accessibilityRole="button"
+          accessibilityLabel="Make this moment a story"
+          style={[st.turnBtn, style]}
+        >
+          <Text style={st.turnBtnText}>✨ Make this a Story</Text>
+        </AnimatedPressable>
+      </View>
+    </View>
+  );
+}
 
 export default function DailyScreen() {
   const [home, setHome] = useState<HomeResponse | null>(null);
@@ -137,34 +165,7 @@ export default function DailyScreen() {
     <ListScreen
       data={visible}
       keyExtractor={(m) => m.id}
-      renderItem={({ item: m }) => {
-        const mm = meta(m.momentType);
-        return (
-          <View style={[st.moment, m.isSignificant && st.momentSignificant]}>
-            <View style={[st.momentIcon, { backgroundColor: mm.bg }]}>
-              <Text style={{ fontSize: 22 }}>{mm.icon}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={st.momentMetaRow}>
-                <View style={[st.tag, { backgroundColor: mm.bg }]}>
-                  <Text style={[st.tagText, { color: mm.fg }]}>{mm.label}</Text>
-                </View>
-                {m.isSignificant ? <Text style={st.spark}>✨</Text> : null}
-                <Text style={st.momentDate}>{formatWhen(m)}</Text>
-              </View>
-              <Text style={st.momentText}>{m.body}</Text>
-              <Pressable
-                onPress={() =>
-                  router.push({ pathname: "/create", params: { theme: m.body } } as never)
-                }
-                style={st.turnBtn}
-              >
-                <Text style={st.turnBtnText}>✨ Make this a Story</Text>
-              </Pressable>
-            </View>
-          </View>
-        );
-      }}
+      renderItem={({ item: m }) => <MomentRow m={m} mm={meta(m.momentType)} />}
       ListHeaderComponent={
         <>
           <View>
@@ -208,30 +209,21 @@ export default function DailyScreen() {
                 style={st.textarea}
               />
               <View style={st.chipRow}>
-                {TYPES.map((t) => {
-                  const active = type === t.key;
-                  return (
-                    <Pressable
-                      key={t.key}
-                      onPress={() => setType(t.key)}
-                      style={[st.chip, { borderColor: active ? C.primaryLight : C.border, backgroundColor: active ? C.primaryBg : C.surface }]}
-                    >
-                      <Text style={[st.chipText, { color: active ? C.primary : C.muted }]}>
-                        {t.icon} {t.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
+                {TYPES.map((t) => (
+                  <Chip
+                    key={t.key}
+                    icon={t.icon}
+                    label={t.label}
+                    active={type === t.key}
+                    onPress={() => setType(t.key)}
+                  />
+                ))}
               </View>
-              <Pressable
-                onPress={add}
+              <PrimaryButton
+                title={saving ? "Saving…" : "＋ Add moment"}
                 disabled={!draft.trim() || saving}
-                style={[st.addBtn, { backgroundColor: draft.trim() && !saving ? C.primary : "#E7DCCB" }]}
-              >
-                <Text style={[st.addBtnText, { color: draft.trim() && !saving ? C.surface : C.soft }]}>
-                  {saving ? "Saving…" : "＋ Add moment"}
-                </Text>
-              </Pressable>
+                onPress={add}
+              />
             </Card>
           )}
 
@@ -239,36 +231,23 @@ export default function DailyScreen() {
         </>
       }
       ListEmptyComponent={
-        <Card>
-          <Text style={st.copy}>
-            {filter === "firsts"
-              ? "No firsts yet — log a ✨ moment and it will show up here."
-              : "No moments yet — jot the first little win above."}
-          </Text>
-        </Card>
+        <EmptyState
+          emoji="📔"
+          title={filter === "firsts" ? "No firsts yet" : "No moments yet"}
+          hint={
+            filter === "firsts"
+              ? "Log a ✨ moment and it will show up here."
+              : "Jot the first little win above — even 'giggled at the ceiling fan' counts."
+          }
+        />
       }
       ListFooterComponent={
-        <>
-          {filter === "all" ? (
-            <Card>
-              <Text style={st.h}>🕒 Their usual day</Text>
-              {ROUTINE.map((r) => (
-                <View key={r.label} style={st.routineRow}>
-                  <Text style={st.routineTime}>{r.time}</Text>
-                  <Text style={{ fontSize: 16 }}>{r.icon}</Text>
-                  <Text style={st.routineLabel}>{r.label}</Text>
-                </View>
-              ))}
-            </Card>
-          ) : null}
-
-          <View style={st.why}>
-            <Text style={st.whyTitle}>Why this helps ✨</Text>
-            <Text style={st.whyText}>
-              Real moments teach Lullabook who {babyName} is — so every Story sounds like their actual life.
-            </Text>
-          </View>
-        </>
+        <View style={st.why}>
+          <Text style={st.whyTitle}>Why this helps ✨</Text>
+          <Text style={st.whyText}>
+            Real moments teach Lullabook who {babyName} is — so every Story sounds like their actual life.
+          </Text>
+        </View>
       }
       ItemSeparatorComponent={() => <InsetSeparator indent={56} />}
       onRefresh={load}
@@ -296,10 +275,6 @@ const st = StyleSheet.create({
     textAlignVertical: "top",
   },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { borderRadius: 999, borderWidth: 1.5, paddingVertical: 8, paddingHorizontal: 13 },
-  chipText: { fontFamily: F.bodyBold, fontSize: 13 },
-  addBtn: { minHeight: 48, borderRadius: 999, paddingVertical: 13, alignItems: "center", justifyContent: "center" },
-  addBtnText: { fontFamily: F.bodyBold, fontSize: 15 },
   section: { fontFamily: F.displayBold, fontSize: 22, color: C.text, marginTop: 4 },
   moment: {
     flexDirection: "row",
@@ -330,19 +305,9 @@ const st = StyleSheet.create({
     justifyContent: "center",
   },
   turnBtnText: { color: C.primary, fontFamily: F.bodyBold, fontSize: 13 },
-  routineRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F4ECDC",
-  },
-  routineTime: { width: 78, fontSize: 13, fontFamily: F.bodyBold, color: C.soft },
-  routineLabel: { fontSize: 15, color: C.text, fontFamily: F.bodyBold },
   why: { backgroundColor: C.primary, borderRadius: 20, padding: 18, gap: 6 },
   whyTitle: { color: C.surface, fontFamily: F.displayBold, fontSize: 16 },
-  whyText: { color: "#FBEAF3", fontFamily: F.body, fontSize: 14, lineHeight: 21 },
+  whyText: { color: "rgba(255,253,249,0.85)", fontFamily: F.body, fontSize: 14, lineHeight: 21 },
   errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
   errorText: { color: C.danger, fontFamily: F.bodyBold },
 });

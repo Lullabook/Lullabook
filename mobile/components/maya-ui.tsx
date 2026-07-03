@@ -61,6 +61,7 @@ let LinearGradientImpl: React.ComponentType<{
   start?: { x: number; y: number };
   end?: { x: number; y: number };
   style?: object;
+  children?: ReactNode;
 }> | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -74,8 +75,37 @@ try {
 // ctaPurple: 135deg #8B6DF0 → #6A55C9 ; ctaAmber: 135deg #F6C177 → #E79A3C
 const PURPLE_GRAD: [string, string] = ["#8B6DF0", "#6A55C9"];
 const AMBER_GRAD: [string, string] = ["#F6C177", "#E79A3C"];
+// Brand hero gradient (REFERENCE.md §1.3): 135deg dusk purple → plum → golden hour.
+export const HERO_GRAD: [string, string, string] = ["#6A55C9", "#B5739E", "#F0A878"];
 const GRAD_END = { x: 1, y: 1 };
 const GRAD_START = { x: 0, y: 0 };
+
+/**
+ * Brand gradient surface with the same runtime fallback as PrimaryButton: if
+ * expo-linear-gradient is unavailable, renders a solid `fallback` fill instead
+ * (never a red-screen). Use for hero bands, book covers, and avatar circles so
+ * screens keep the brand's gradient richness without hand-rolled fills.
+ */
+export function BrandGradient({
+  colors,
+  fallback,
+  style,
+  children,
+}: {
+  colors: string[];
+  fallback?: string;
+  style?: object;
+  children?: ReactNode;
+}) {
+  if (LinearGradientImpl) {
+    return (
+      <LinearGradientImpl colors={colors} start={GRAD_START} end={GRAD_END} style={style}>
+        {children}
+      </LinearGradientImpl>
+    );
+  }
+  return <View style={[{ backgroundColor: fallback ?? colors[0] }, style]}>{children}</View>;
+}
 
 /**
  * Issue 138 — `Screen` accepts optional pull-to-refresh props. When `onRefresh`
@@ -206,10 +236,13 @@ export function Float({ children }: { children: ReactNode }) {
  * Issue 143 — Animated reader page-turn. `pageKey` changes → the view remounts
  * and the `SlideInRight` entering re-fires (a real page-turn instead of the
  * instant `setPageIndex` swap). Reduce-motion → short crossfade.
+ *
+ * R1 latency invariant: page turn completes < 100ms. Timing-based (springify
+ * ignores `duration` and settles in ~400ms, which blew the budget).
  */
 export function PageTurn({ pageKey, children }: { pageKey: string | number; children: ReactNode }) {
   const reduceMotion = useReducedMotion();
-  const entering = reduceMotion ? FadeIn.duration(120) : SlideInRight.duration(280).springify().damping(24);
+  const entering = reduceMotion ? FadeIn.duration(90) : SlideInRight.duration(90).easing(Easing.out(Easing.quad));
   return (
     <Animated.View key={pageKey} entering={entering}>
       {children}
@@ -357,6 +390,8 @@ export function PrimaryButton({
       onPressOut={onPressOut}
       disabled={disabled}
       hitSlop={HIT_SLOP}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
       style={[s.btn, disabled ? null : glow, style]}
     >
       {disabled ? (
@@ -376,15 +411,28 @@ export function PrimaryButton({
   );
 }
 
-export function GhostButton({ title, onPress, danger }: { title: string; onPress?: () => void; danger?: boolean }) {
+export function GhostButton({
+  title,
+  onPress,
+  danger,
+  disabled,
+}: {
+  title: string;
+  onPress?: () => void;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
   const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
   return (
     <AnimatedPressable
       onPress={onPress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
+      disabled={disabled}
       hitSlop={HIT_SLOP}
-      style={[s.btn, s.btnGhost, danger && { borderColor: C.dangerBorder }, style]}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      style={[s.btn, s.btnGhost, danger && { borderColor: C.dangerBorder }, disabled && { opacity: 0.45 }, style]}
     >
       <Text style={[s.btnText, { color: danger ? C.danger : C.primary }]}>{title}</Text>
     </AnimatedPressable>
@@ -399,6 +447,8 @@ export function Chip({ label, icon, active, onPress }: { label: string; icon?: s
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       hitSlop={HIT_SLOP}
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!active }}
       style={[s.chip, { borderColor: active ? C.primaryLight : C.border, backgroundColor: active ? C.primaryBg : C.surface }, style]}
     >
       <Text style={[s.chipText, { color: active ? C.primary : C.muted }]}>{icon ? `${icon}  ` : ""}{label}</Text>
@@ -655,7 +705,7 @@ const s = StyleSheet.create({
   // Flat fallbacks when expo-linear-gradient is unavailable at runtime.
   btnPrimary: { backgroundColor: C.primary },
   btnPrimaryAmberFallback: { backgroundColor: C.accent },
-  btnDisabledFill: { backgroundColor: "#E7DCCB" },
+  btnDisabledFill: { backgroundColor: C.border },
   btnGhost: { backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border },
   btnText: { fontFamily: F.bodyBold, fontSize: 15 },
   chip: { minHeight: 44, borderRadius: R.chip, borderWidth: 1.5, paddingVertical: 10, paddingHorizontal: 16, justifyContent: "center" },

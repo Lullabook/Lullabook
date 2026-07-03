@@ -1,28 +1,78 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead, Card, SkeletonRow, InsetSeparator, MotionCard } from "@/components/maya-ui";
 import { RosterAvatar } from "@/components/roster-avatar";
+import { usePressFeedback } from "@/lib/use-press-feedback";
 import { fetchHome, seedDemo, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
+import type { PersonaStatus } from "@domain/types";
+
+const AnimatedPressable = createAnimatedComponent(Pressable);
+
+/** Parent-facing likeness-training labels — raw enums never reach the screen. */
+const STATUS_LABEL: Record<PersonaStatus, string> = {
+  training: "✨ Learning their look…",
+  ready: "Ready to star",
+  failed: "Training needs a retry",
+};
+
+/** Pill add-button with the shared press feedback + a11y (44pt target). */
+function AddPill({ title, onPress, disabled }: { title: string; onPress: () => void; disabled?: boolean }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      style={[st.addBtn, disabled && { opacity: 0.5 }, style]}
+    >
+      <Text style={st.addBtnText}>{title}</Text>
+    </AnimatedPressable>
+  );
+}
+
+/** Roster row with press feedback + a11y. */
+function PersonaRow({ onPress, label, children }: { onPress: () => void; label: string; children: ReactNode }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={[st.personaRow, style]}
+    >
+      {children}
+    </AnimatedPressable>
+  );
+}
 
 export default function FamilyTab() {
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await fetchHome();
       setHome(data);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to load";
+      const message = e instanceof Error ? e.message : "Could not load your family";
       if (message.includes("Unauthorized") || message.includes("Missing bearer")) {
         router.replace("/sign-in");
         return;
       }
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -73,6 +123,12 @@ export default function FamilyTab() {
         <Lead>Everyone who stars in {home?.selectedBaby?.displayName ?? "your baby"}&apos;s stories.</Lead>
       </View>
 
+      {error ? (
+        <Card style={st.errorCard}>
+          <Text style={st.errorText}>{error}</Text>
+        </Card>
+      ) : null}
+
       <MotionCard delay={60}>
         <Text style={st.sectionTitle}>💛 Family ({personas.length})</Text>
         <FlatList
@@ -87,7 +143,7 @@ export default function FamilyTab() {
             </View>
           }
           renderItem={({ item: p }) => (
-            <Pressable style={st.personaRow} onPress={() => router.push(`/family/${p.id}` as never)}>
+            <PersonaRow onPress={() => router.push(`/family/${p.id}` as never)} label={`Open ${p.displayName}`}>
               <RosterAvatar
                 name={p.displayName}
                 initial={p.displayName.charAt(0)}
@@ -97,15 +153,13 @@ export default function FamilyTab() {
               />
               <View style={{ flex: 1 }}>
                 <Text style={st.item}>{p.displayName}</Text>
-                <Text style={st.metaInline}>{p.status}</Text>
+                <Text style={st.metaInline}>{STATUS_LABEL[p.status] ?? p.status}</Text>
               </View>
               <Text style={st.chev}>›</Text>
-            </Pressable>
+            </PersonaRow>
           )}
         />
-        <Pressable style={st.addBtn} onPress={() => router.push("/family/new")}>
-          <Text style={st.addBtnText}>＋ Add family member</Text>
-        </Pressable>
+        <AddPill title="＋ Add family member" onPress={() => router.push("/family/new")} />
       </MotionCard>
 
       <MotionCard delay={140}>
@@ -125,9 +179,7 @@ export default function FamilyTab() {
             <Text style={st.item}>{c.displayName}</Text>
           )}
         />
-        <Pressable style={st.addBtn} onPress={() => router.push("/characters")}>
-          <Text style={st.addBtnText}>＋ Create character</Text>
-        </Pressable>
+        <AddPill title="＋ Create character" onPress={() => router.push("/characters")} />
       </MotionCard>
 
       {/* Issue 107: dev-only seed button. __DEV__ is true only in dev builds. */}
@@ -135,11 +187,9 @@ export default function FamilyTab() {
         <MotionCard delay={220}>
           <Text style={st.sectionTitle}>🧪 Dev tools</Text>
           <Text style={st.emptyNote}>
-            Populate the Maya's World demo dataset for this Household (idempotent). Requires the paid backend running with DEV_DEMO_SEED=true.
+            Populate the Maya&apos;s World demo dataset for this Household (idempotent). Requires the paid backend running with DEV_DEMO_SEED=true.
           </Text>
-          <Pressable style={st.addBtn} onPress={handleSeed} disabled={seeding}>
-            <Text style={st.addBtnText}>{seeding ? "Seeding…" : "🧪 Seed Maya's World"}</Text>
-          </Pressable>
+          <AddPill title={seeding ? "Seeding…" : "🧪 Seed Maya's World"} onPress={handleSeed} disabled={seeding} />
           {seedMsg ? <Text style={st.emptyNote}>{seedMsg}</Text> : null}
         </MotionCard>
       ) : null}
@@ -159,6 +209,8 @@ const st = StyleSheet.create({
   chev: { color: C.soft, fontSize: 22, fontFamily: F.bodyBold },
   addBtn: {
     marginTop: 14,
+    minHeight: 44,
+    justifyContent: "center",
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderRadius: R.pill,
@@ -166,4 +218,6 @@ const st = StyleSheet.create({
     alignSelf: "flex-start",
   },
   addBtnText: { fontFamily: F.bodyBold, fontSize: 14, color: C.primary },
+  errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
+  errorText: { color: C.danger, fontFamily: F.bodyBold },
 });

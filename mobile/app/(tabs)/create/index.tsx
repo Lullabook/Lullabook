@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, Chip, PrimaryButton } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, Chip, PrimaryButton, SkeletonCard } from "@/components/maya-ui";
 import { createStorybook, fetchHome, type HomeResponse } from "@/lib/api";
+import { isR1MultiStoryTypeEnabled } from "@/lib/r1-flags";
 import { C, F } from "@/constants/theme";
 import type { StoryType } from "@domain/types";
 
-const STORY_TYPES: { key: StoryType; icon: string; label: string }[] = [
+const ALL_STORY_TYPES: { key: StoryType; icon: string; label: string }[] = [
   { key: "bedtime", icon: "🌙", label: "Bedtime" },
   { key: "adventure", icon: "🚀", label: "Adventure" },
   { key: "silly", icon: "😄", label: "Silly" },
   { key: "learning", icon: "🌟", label: "Learning" },
 ];
+
+// R1 cut — Bedtime only ships; other types stay flag-gated for R2 (no
+// reachable UI for a deferred type, per "inert, not broken").
+const STORY_TYPES = isR1MultiStoryTypeEnabled()
+  ? ALL_STORY_TYPES
+  : ALL_STORY_TYPES.filter((t) => t.key === "bedtime");
 
 export default function NewStorybookScreen() {
   const params = useLocalSearchParams<{ theme?: string }>();
@@ -93,9 +100,10 @@ export default function NewStorybookScreen() {
 
   if (loading) {
     return (
-      <View style={st.center}>
-        <ActivityIndicator size="large" color={C.primary} />
-      </View>
+      <Screen>
+        <SkeletonCard lines={2} />
+        <SkeletonCard lines={3} />
+      </Screen>
     );
   }
 
@@ -110,7 +118,7 @@ export default function NewStorybookScreen() {
         <Eyebrow>✨ Create</Eyebrow>
         <PageTitle>Make an illustrated Storybook</PageTitle>
         <Lead>
-          Confirm the Story Type and theme before we spend a generation — seeded from your Moment if you came from Journal.
+          Pick who stars and what tonight&apos;s story is about — we&apos;ll write and illustrate it page by page.
         </Lead>
       </View>
 
@@ -122,10 +130,14 @@ export default function NewStorybookScreen() {
 
       {!subscribed ? (
         <Card>
-          <Text style={st.cardTitle}>Subscription required</Text>
+          <Text style={st.cardTitle}>🌙 Start your free trial</Text>
           <Text style={st.copy}>
-            Illustrated Storybooks need an active plan. Run the paid backend locally (`npm run dev:paid`) to try the full path in Simulator.
+            Illustrated Storybooks come with your plan — every plan starts with a 7-day free trial.
           </Text>
+          <PrimaryButton title="✨ See plans" onPress={() => router.push("/billing" as never)} />
+          {__DEV__ ? (
+            <Text style={st.devHint}>Dev: run `npm run dev:paid` to force-unlock the full path in Simulator.</Text>
+          ) : null}
         </Card>
       ) : !hasCast ? (
         <Card>
@@ -170,7 +182,7 @@ export default function NewStorybookScreen() {
           ) : null}
 
           <Card>
-            <Text style={st.cardTitle}>Story type — confirm before generating</Text>
+            <Text style={st.cardTitle}>Tonight&apos;s story</Text>
             <View style={st.chipRow}>
               {STORY_TYPES.map((t) => (
                 <Chip
@@ -182,6 +194,9 @@ export default function NewStorybookScreen() {
                 />
               ))}
             </View>
+            {!isR1MultiStoryTypeEnabled() ? (
+              <Text style={st.copy}>A calming wind-down arc with a soft landing — made for bedtime.</Text>
+            ) : null}
           </Card>
 
           <Card>
@@ -211,9 +226,9 @@ export default function NewStorybookScreen() {
 }
 
 const st = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: C.bg },
   cardTitle: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
   copy: { fontFamily: F.body, fontSize: 15, lineHeight: 22, color: C.muted },
+  devHint: { fontFamily: F.body, fontSize: 12, lineHeight: 17, color: C.soft },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   textarea: {
     minHeight: 96,

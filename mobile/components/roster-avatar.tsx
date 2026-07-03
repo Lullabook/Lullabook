@@ -1,14 +1,18 @@
 import { Image, Text, View, type ViewStyle } from "react-native";
+import { BrandGradient } from "@/components/maya-ui";
 import { C, F } from "@/constants/theme";
 import { getApiUrl } from "@/lib/env";
 import type { PersonaStatus } from "@domain/types";
 
-const GRADIENTS = [
+// Canonical AVATAR_GRADIENTS (src/components/v2/tokens.ts) — all five cast
+// accents, so each person keeps a consistent color across every surface.
+const GRADIENTS: [string, string][] = [
   ["#8B6DF0", "#6A55C9"],
   ["#E79A3C", "#F6C177"],
   ["#E78AA0", "#F2A6B8"],
   ["#5FB389", "#9FD8B1"],
-] as const;
+  ["#3f9bb0", "#7fc8c0"],
+];
 
 function avatarUrl(avatarKey: string): string {
   return `${getApiUrl()}/api/avatars?key=${encodeURIComponent(avatarKey)}`;
@@ -40,9 +44,6 @@ export function RosterAvatar({
           height: size,
           borderRadius: size / 2,
           overflow: "hidden",
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: gradient[0],
         },
         style,
       ]}
@@ -51,7 +52,12 @@ export function RosterAvatar({
       {showImage ? (
         <Image source={{ uri: avatarUrl(avatarKey) }} style={{ width: size, height: size }} accessibilityLabel={`${name} roster avatar`} />
       ) : (
-        <Text style={{ color: C.surface, fontFamily: F.displayBold, fontSize: size * 0.42 }}>{initial.toUpperCase()}</Text>
+        <BrandGradient
+          colors={gradient}
+          style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}
+        >
+          <Text style={{ color: C.surface, fontFamily: F.displayBold, fontSize: size * 0.42 }}>{initial.toUpperCase()}</Text>
+        </BrandGradient>
       )}
     </View>
   );
