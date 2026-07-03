@@ -30,7 +30,8 @@ function meta(t: MomentType) {
     case "first":
       return { icon: "✨", label: "A first", bg: "#FBEBCE", fg: "#9A6B1E" };
     case "funny":
-      return { icon: "😄", label: "Funny", bg: C.dangerBg, fg: C.danger };
+      // Canonical rose tag family (design REFERENCE §small tag color families).
+      return { icon: "😄", label: "Funny", bg: "#FCE4EC", fg: "#B5618A" };
     case "tough":
       return { icon: "🫂", label: "Tough day", bg: "#E1F1E8", fg: "#3E7A5A" };
     case "cozy":

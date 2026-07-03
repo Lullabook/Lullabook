@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Screen, Eyebrow, Lead, AnimatedToggle, PrimaryButton } from "@/components/maya-ui";
-import { isR1MultiFamilyEnabled } from "@/lib/r1-flags";
+import { isR1AudioEnabled, isR1MultiFamilyEnabled } from "@/lib/r1-flags";
 import { C, F, R } from "@/constants/theme";
 import { fetchPaywallConfig, type PaywallPlanResponse } from "@/lib/api";
 
@@ -58,7 +58,10 @@ function PlanCard({
     ...(isR1MultiFamilyEnabled()
       ? [plan.memberLoginCap === Infinity ? "Whole family" : `${plan.memberLoginCap} logins`]
       : []),
-    plan.canNarrate ? "Voice messages + narration" : null,
+    // Narration is double-gated: the server plan filter withholds it in R1,
+    // and the audio cut flag keeps it off even if that filter changes. Video
+    // has no mobile flag — it stays server-gated (no R1 plan sets canVideo).
+    plan.canNarrate && isR1AudioEnabled() ? "Voice messages + narration" : null,
     plan.canVideo ? "Video pages" : null,
     plan.canCustomStyle ? "Custom art style" : null,
   ].filter(Boolean);

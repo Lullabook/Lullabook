@@ -6,6 +6,10 @@ import { BrandGradient, HERO_GRAD, Screen, Eyebrow, PageTitle, Card, PrimaryButt
 import { usePressFeedback } from "@/lib/use-press-feedback";
 import { C, F } from "@/constants/theme";
 
+import { fetchHome, hardDeleteAccount, type HomeResponse } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
+import { isR1MultiFamilyEnabled, isR1AudioEnabled, R1_CUT_MESSAGE } from "@/lib/r1-flags";
+
 const AnimatedPressable = createAnimatedComponent(Pressable);
 
 function SignOutLink({ onPress }: { onPress: () => void }) {
@@ -23,9 +27,6 @@ function SignOutLink({ onPress }: { onPress: () => void }) {
     </AnimatedPressable>
   );
 }
-import { fetchHome, hardDeleteAccount, type HomeResponse } from "@/lib/api";
-import { supabase } from "@/lib/supabase";
-import { isR1MultiFamilyEnabled, isR1AudioEnabled, R1_CUT_MESSAGE } from "@/lib/r1-flags";
 
 // Issue 145/146 — cut features are gated off here so no dead surface is reachable.
 const PERKS = [
