@@ -47,6 +47,38 @@ Two things, in order:
   `.springify()` and a raw-photo `<Image>`) and confirming the tests fail, then
   reverting.
 
+## Two runtime crashes fixed while running the app (found by running, not the audit)
+
+Running the app on the Simulator + expo-web surfaced two hard crashes the static
+audit and unit suite couldn't see (both are UI-runtime failures with no node-testable
+surface). Both fixed test-first with source guards, and graded PASS by a second
+fresh-eyes checker.
+
+1. **iOS: Expo Go SIGABRT on every screen** — `usePressFeedback`
+   (`mobile/lib/use-press-feedback.ts`) called `disableSpringForReducedMotion(...)`, a
+   plain JS function from `./haptics`, **inside the `useAnimatedStyle` worklet**. A
+   worklet runs on Reanimated's UI thread; calling a non-worklet function there aborts
+   the process (confirmed from the `.ips` crash report: `worklets::scheduleOnUI` →
+   Hermes `throwPendingError` → `terminate` → SIGABRT). Because the hook backs every
+   button/chip, the whole app crashed a frame after render. Fix: choose the spring
+   config on the JS thread (`const { damping, stiffness } = PRESS_SPRING`) so the
+   worklet closes over only primitives; reduce-motion now correctly uses
+   `withTiming(scale, {duration:0})` instead of feeding a timing spec into `withSpring`.
+   Guard: **`tests/157-mobile-worklet-safety.test.ts`** (no worklet body calls a
+   `./haptics`-imported JS function; mutation-verified).
+2. **Web: `ExpoSecureStore.default.getValueWithKeyAsync is not a function`** on
+   baby-persona photo upload — `mobile/lib/supabase.ts` wired `expo-secure-store` as the
+   Supabase auth-storage adapter, but expo-secure-store has **no web implementation**,
+   so any session read on expo-web threw. Fix: new **`mobile/lib/auth-storage.ts`** with
+   `selectAuthStorage(os)` → localStorage on web, encrypted SecureStore keychain on iOS
+   (the shipping path is unchanged). Guard:
+   **`tests/158-mobile-auth-storage-web.test.ts`** (web path uses localStorage, never
+   SecureStore; native still uses SecureStore; supabase wires the selector;
+   mutation-verified).
+
+Note: web (expo-web) is a **dev-preview target only** — R1 ships iOS. These fixes make
+the preview usable without changing the shipping path.
+
 ## Fresh-eyes checker grade (maker ≠ checker): **PASS**
 
 A separate sub-agent graded the diff blind. Verdict PASS: test-only change, green for the
@@ -94,6 +126,11 @@ follow-ups #5–6 below.
    `PageTurn`** — factoring it to a module-level const would move a hypothetical
    `.springify()` outside the captured slice. Contrived; a whole-file scan for
    `springify` on any `SlideIn*`/`FadeIn*` used by `PageTurn` would be stricter.
+7. **(new) Apple Sign-In has no web implementation** — `mobile/app/sign-in.tsx` and
+   `sign-up.tsx` import `expo-apple-authentication`, which (like expo-secure-store) is
+   native-only. It didn't block the reported upload flow, but it's the next-most-likely
+   crash on the expo-web preview. If web preview matters, gate the Apple button behind
+   `Platform.OS !== "web"` (same shape as the auth-storage fix). Not fixed this session.
 
 ## Suggested skills for the next session
 
