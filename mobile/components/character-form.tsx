@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton, GhostButton } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton } from "@/components/maya-ui";
 import { createCharacter, updateCharacter } from "@/lib/api";
 import { C, F } from "@/constants/theme";
 
@@ -116,7 +116,7 @@ export function CharacterForm({
 
       {/* live card preview */}
       <View style={st.preview}>
-        <View style={[st.previewAvatar, { backgroundColor: v.isFictional ? "#8B6DF0" : C.green }]}><Text style={{ fontSize: 28 }}>{emoji(v.name)}</Text></View>
+        <View style={[st.previewAvatar, { backgroundColor: v.isFictional ? C.primaryLight : C.green }]}><Text style={{ fontSize: 28 }}>{emoji(v.name)}</Text></View>
         <View style={{ flex: 1 }}>
           <Text style={st.previewName}>{v.name.trim() || "Your character"}</Text>
           <Text style={st.previewSub}>{isEdit ? "Appears in your stories" : "New · not in a story yet"}</Text>
@@ -160,12 +160,20 @@ export function CharacterForm({
       ) : null}
 
       <PrimaryButton
-        title={!v.isFictional ? "💛 Add as Family instead" : isEdit ? "✓ Save changes" : "✨ Create character"}
+        title={
+          saving
+            ? "Saving…"
+            : !v.isFictional
+              ? "💛 Add as Family instead"
+              : isEdit
+                ? "✓ Save changes"
+                : "✨ Create character"
+        }
         disabled={!ready || saving}
         onPress={submit}
       />
-      {saving ? <ActivityIndicator color={C.primary} /> : null}
-      {isEdit && <GhostButton danger title="Delete character" onPress={() => setError("Character deletion is a backend follow-up; this control is connected and will use the delete endpoint once it lands.")} />}
+      {/* R1 "inert, not broken": no delete button until the delete endpoint
+          exists — a control that only apologizes is a dead surface. */}
     </Screen>
   );
 }

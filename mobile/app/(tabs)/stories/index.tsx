@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
 import {
   Screen,
@@ -7,14 +8,18 @@ import {
   PageTitle,
   Lead,
   Card,
+  BrandGradient,
   PrimaryButton,
   SkeletonRow,
   EmptyState,
   ListScreen,
   InsetSeparator,
 } from "@/components/maya-ui";
+import { usePressFeedback } from "@/lib/use-press-feedback";
 import { listStorybooks, type StorybookSummary } from "@/lib/api";
 import { C, F } from "@/constants/theme";
+
+const AnimatedPressable = createAnimatedComponent(Pressable);
 
 function statusLabel(status: StorybookSummary["status"]): string {
   switch (status) {
@@ -25,10 +30,53 @@ function statusLabel(status: StorybookSummary["status"]): string {
     case "finalized":
       return "🌟 Finalized";
     case "failed":
-      return "Needs attention";
+      return "🌦 Needs attention";
     default:
       return status;
   }
+}
+
+/** Parent-facing story-type labels — raw enums never reach the screen. */
+const TYPE_LABEL: Record<string, string> = {
+  bedtime: "Bedtime",
+  adventure: "Adventure",
+  silly: "Silly",
+  learning: "Learning",
+};
+
+// Book-cover skies (canon §1.3 bookSky) — two-stop dusk gradients assigned by
+// title so each book keeps a consistent cover.
+const BOOK_SKIES: [string, string][] = [
+  ["#4a7f5a", "#e8c46a"],
+  ["#5b8fb0", "#cfe6f0"],
+  ["#2f9bb0", "#f6d9a0"],
+  ["#7a3f6e", "#f2a6b8"],
+  ["#3b2f6e", "#6a55c9"],
+  ["#8a5a86", "#f6b98c"],
+];
+
+function BookRow({ book }: { book: StorybookSummary }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
+  const sky = BOOK_SKIES[(book.theme.charCodeAt(0) || 0) % BOOK_SKIES.length]!;
+  return (
+    <AnimatedPressable
+      onPress={() => router.push(`/stories/${book.id}` as never)}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${book.theme}`}
+      style={[st.row, style]}
+    >
+      <BrandGradient colors={sky} fallback={C.primaryBg} style={st.cover}>
+        <Text style={st.coverEmoji}>📖</Text>
+      </BrandGradient>
+      <View style={{ flex: 1 }}>
+        <Text style={st.title}>{book.theme}</Text>
+        <Text style={st.meta}>{statusLabel(book.status)} · {TYPE_LABEL[book.storyType] ?? "Story"}</Text>
+      </View>
+      <Text style={st.chev}>›</Text>
+    </AnimatedPressable>
+  );
 }
 
 export default function StorybookLibraryScreen() {
@@ -72,21 +120,7 @@ export default function StorybookLibraryScreen() {
     <ListScreen
       data={books}
       keyExtractor={(book) => book.id}
-      renderItem={({ item: book }) => (
-        <Pressable
-          onPress={() => router.push(`/stories/${book.id}` as never)}
-          style={st.row}
-        >
-          <View style={st.cover}>
-            <Text style={st.coverEmoji}>📖</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={st.title}>{book.theme}</Text>
-            <Text style={st.meta}>{statusLabel(book.status)} · {book.storyType}</Text>
-          </View>
-          <Text style={st.chev}>›</Text>
-        </Pressable>
-      )}
+      renderItem={({ item: book }) => <BookRow book={book} />}
       ListHeaderComponent={
         <>
           <View>
@@ -135,7 +169,7 @@ const st = StyleSheet.create({
     width: 52,
     height: 64,
     borderRadius: 12,
-    backgroundColor: C.primaryBg,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },

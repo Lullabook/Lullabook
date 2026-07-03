@@ -1,5 +1,5 @@
 import { useFonts } from "expo-font";
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
+import { DefaultTheme, Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import "react-native-reanimated";
@@ -10,11 +10,9 @@ import {
 import {
   Nunito_400Regular,
   Nunito_600SemiBold,
-  Nunito_700Bold,
   Nunito_800ExtraBold,
 } from "@expo-google-fonts/nunito";
 
-import { useColorScheme } from "@/components/useColorScheme";
 import { BackPill } from "@/components/BackPill";
 import { C, F } from "@/constants/theme";
 import { initMobileSentry } from "@/lib/sentry-init";
@@ -31,13 +29,13 @@ SplashScreen.preventAutoHideAsync();
 initMobileSentry();
 
 export default function RootLayout() {
+  // Only the brand fonts (Baloo 2 + Nunito weights the theme actually uses)
+  // load before splash-hide — cold-start budget (<3s) pays for every extra file.
   const [loaded, error] = useFonts({
-    SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
     Baloo2_700Bold,
     Baloo2_800ExtraBold,
     Nunito_400Regular,
     Nunito_600SemiBold,
-    Nunito_700Bold,
     Nunito_800ExtraBold,
   });
 
@@ -54,11 +52,25 @@ export default function RootLayout() {
   return <RootLayoutNav />;
 }
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+// Maya's World has no dark surface (canon: only the voice panel is dark), so
+// navigation always runs the branded light theme — never the stock RN
+// DarkTheme (pure black + system blue), which a system dark-mode setting used
+// to hand every screen. Pairs with `userInterfaceStyle: "light"` in app config.
+const mayaNavTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: C.primary,
+    background: C.bg,
+    card: C.bg,
+    text: C.text,
+    border: C.border,
+  },
+};
 
+function RootLayoutNav() {
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={mayaNavTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="sign-in" options={{ title: "Sign in", ...stackHeader }} />
@@ -68,6 +80,7 @@ function RootLayoutNav() {
         <Stack.Screen name="characters/new" options={{ title: "New character", ...stackHeader }} />
         <Stack.Screen name="characters/[id]" options={{ title: "Edit character", ...stackHeader }} />
         <Stack.Screen name="family/new" options={{ title: "Add someone who loves them", ...stackHeader }} />
+        <Stack.Screen name="family/[id]" options={{ title: "Family member", ...stackHeader }} />
         {/* Issue 105: billing is a reachable, dismissible modal. */}
         <Stack.Screen
           name="billing"

@@ -19,4 +19,12 @@ export function isR1JournalMachineryEnabled(): boolean {
   return process.env.EXPO_PUBLIC_R1_JOURNAL_MACHINERY_ENABLED === "true";
 }
 
+/**
+ * R1 ships the Bedtime story type only (Learning et al. deferred — R1 scope
+ * doc "Story type: Bedtime only"). Unset = cut, like every other R1 flag.
+ */
+export function isR1MultiStoryTypeEnabled(): boolean {
+  return process.env.EXPO_PUBLIC_R1_STORY_TYPES_ENABLED === "true";
+}
+
 export const R1_CUT_MESSAGE = "is not available in this release";

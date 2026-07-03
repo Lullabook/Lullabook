@@ -1,22 +1,44 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Card, PrimaryButton, GhostButton, Field } from "@/components/maya-ui";
+import { BrandGradient, HERO_GRAD, Screen, Eyebrow, PageTitle, Card, PrimaryButton, GhostButton, Field, SkeletonCard, SkeletonRow } from "@/components/maya-ui";
+import { usePressFeedback } from "@/lib/use-press-feedback";
 import { C, F } from "@/constants/theme";
+
+const AnimatedPressable = createAnimatedComponent(Pressable);
+
+function SignOutLink({ onPress }: { onPress: () => void }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      accessibilityRole="button"
+      accessibilityLabel="Sign out"
+      style={[{ alignItems: "center", justifyContent: "center", minHeight: 44, paddingVertical: 8 }, style]}
+    >
+      <Text style={{ color: C.primary, fontFamily: F.bodyBold, fontSize: 15 }}>Sign out</Text>
+    </AnimatedPressable>
+  );
+}
 import { fetchHome, hardDeleteAccount, type HomeResponse } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 import { isR1MultiFamilyEnabled, isR1AudioEnabled, R1_CUT_MESSAGE } from "@/lib/r1-flags";
 
 // Issue 145/146 — cut features are gated off here so no dead surface is reachable.
 const PERKS = [
-  { icon: "🎨", title: "Illustrated personas", note: "Family drawn as themselves" },
+  { icon: "🎨", title: "Illustrated family", note: "Everyone drawn as themselves" },
   ...(isR1AudioEnabled() ? [{ icon: "🎙️", title: "Real voices", note: "They read every page" }] : []),
   { icon: "📚", title: "Unlimited stories", note: "Make as many as you like" },
   { icon: "⬇️", title: "PDF & print export", note: "Keep them forever" },
 ];
+// R1 has no Share links (cut to R2) — a child's likeness leaves the device
+// only via your own PDF export, and the privacy copy says exactly that.
 const PRIVACY = [
   "Photos and likeness models are encrypted and never shared.",
-  "Storybooks are private to your family unless you share a link.",
+  "Storybooks stay private to your family — nothing is ever public.",
   "Canceling starts a 30-day export window before everything is purged.",
 ];
 
@@ -63,10 +85,15 @@ export default function AccountScreen() {
   }
 
   if (loading) {
-    return <View style={st.center}><ActivityIndicator size="large" color={C.primary} /></View>;
+    return (
+      <Screen>
+        <SkeletonRow />
+        <SkeletonCard lines={3} />
+      </Screen>
+    );
   }
 
-  const email = home?.member.email ?? "you@example.com";
+  const email = home?.member.email ?? "Your account";
   const subscribed = home?.subscriptionActive ?? false;
 
   return (
@@ -77,19 +104,24 @@ export default function AccountScreen() {
       </View>
 
       {/* profile header */}
-      <View style={st.profile}>
+      <BrandGradient colors={HERO_GRAD} fallback={C.primary} style={st.profile}>
         <View style={st.profileAvatar}><Text style={st.profileInitial}>{email[0]?.toUpperCase()}</Text></View>
         <View style={{ flex: 1 }}>
           <Text style={st.profileName}>{email}</Text>
           <Text style={st.profileSub}>Guardian of your family</Text>
-          <View style={st.planPill}><Text style={st.planPillText}>{subscribed ? "✨ Illustrated plan" : "Free plan"}</Text></View>
+          <View style={st.planPill}><Text style={st.planPillText}>{subscribed ? "✨ Plan active" : "🌙 Trial available"}</Text></View>
         </View>
-      </View>
+      </BrandGradient>
 
-      {/* plan */}
+      {/* plan — R1 has no free tier; no fabricated prices or renewal dates
+          (server-side entitlement is the only source of billing truth). */}
       <Card>
-        <Text style={st.cardTitle}>{subscribed ? "✨ Illustrated plan" : "Free plan"}</Text>
-        <Text style={st.cardMeta}>{subscribed ? "$12 / month · renews Jul 7, 2026" : "Upgrade to draw your family as themselves in every story."}</Text>
+        <Text style={st.cardTitle}>{subscribed ? "✨ Your plan" : "🌙 Start your free trial"}</Text>
+        <Text style={st.cardMeta}>
+          {subscribed
+            ? "Your plan is active — manage or cancel anytime in your App Store subscriptions."
+            : "Every plan starts with a 7-day free trial — your family, drawn as themselves in every story."}
+        </Text>
         <View style={st.perkGrid}>
           {PERKS.map((p) => (
             <View key={p.title} style={st.perk}>
@@ -104,7 +136,7 @@ export default function AccountScreen() {
         {subscribed ? (
           <GhostButton title="Manage billing" onPress={() => router.push("/billing")} />
         ) : (
-          <PrimaryButton title="✨ Upgrade to Illustrated" onPress={() => router.push("/billing")} />
+          <PrimaryButton title="✨ Start your 7-day free trial" onPress={() => router.push("/billing")} />
         )}
       </Card>
 
@@ -141,27 +173,24 @@ export default function AccountScreen() {
           Photos, trained models, storybooks, and account data are erased from our database and file storage. This cannot be undone.
         </Text>
         <GhostButton danger title={deleting ? "Deleting…" : "Delete my account & all data"} onPress={confirmHardDelete} />
-        <Pressable onPress={signOut} style={{ alignItems: "center", paddingVertical: 8 }}>
-          <Text style={{ color: C.primary, fontWeight: "800" }}>Sign out</Text>
-        </Pressable>
+        <SignOutLink onPress={signOut} />
       </View>
     </Screen>
   );
 }
 
 const st = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: C.bg },
-  profile: { flexDirection: "row", gap: 14, alignItems: "center", backgroundColor: C.primary, borderRadius: 26, padding: 20 },
-  profileAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.rose, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "rgba(255,255,255,0.55)" },
+  profile: { flexDirection: "row", gap: 14, alignItems: "center", borderRadius: 26, padding: 20 },
+  profileAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.rose, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "rgba(255,253,249,0.55)" },
   profileInitial: { color: C.surface, fontFamily: F.displayBold, fontSize: 26 },
   profileName: { color: C.surface, fontFamily: F.displayBold, fontSize: 18 },
-  profileSub: { color: "#FBEAF3", fontFamily: F.body, fontSize: 13, marginTop: 2 },
-  planPill: { alignSelf: "flex-start", marginTop: 8, backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
+  profileSub: { color: "rgba(255,253,249,0.85)", fontFamily: F.body, fontSize: 13, marginTop: 2 },
+  planPill: { alignSelf: "flex-start", marginTop: 8, backgroundColor: C.surface, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 },
   planPillText: { color: C.badgeGoldText, fontFamily: F.bodyBold, fontSize: 12 },
   cardTitle: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
   cardMeta: { color: C.muted, fontFamily: F.body, fontSize: 14, marginTop: -6 },
   perkGrid: { gap: 10 },
-  perk: { flexDirection: "row", gap: 10, alignItems: "flex-start", backgroundColor: C.bg, borderColor: C.borderSoft, borderWidth: 1, borderRadius: 16, padding: 12 },
+  perk: { flexDirection: "row", gap: 10, alignItems: "flex-start", backgroundColor: C.bg, borderColor: C.borderSoft, borderWidth: 1, borderRadius: 18, padding: 12 },
   perkTitle: { fontFamily: F.bodyBold, fontSize: 14, color: C.text },
   perkNote: { fontFamily: F.body, fontSize: 12, color: C.soft, marginTop: 2 },
   cardDanger: { backgroundColor: C.surface, borderColor: C.dangerBorder, borderWidth: 1, borderRadius: 22, padding: 18, gap: 14 },

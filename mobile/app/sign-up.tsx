@@ -90,8 +90,9 @@ export default function SignUpScreen() {
       <View style={styles.hero}>
         <Text style={styles.heroMark}>✨</Text>
       </View>
+      <Text style={styles.wordmark}>Lullabook</Text>
       <Eyebrow>💛 New here</Eyebrow>
-      <Lead>Sign up with Apple or Google — your first Member and Family are created automatically.</Lead>
+      <Lead>Sign up with Apple or Google — we&apos;ll set up your family&apos;s private story world automatically.</Lead>
 
       <View style={styles.form}>
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -105,12 +106,24 @@ export default function SignUpScreen() {
             onPress={signUpWithApple}
           />
         ) : Platform.OS === "ios" ? null : (
-          <Pressable style={styles.button} onPress={signUpWithApple} disabled={loading !== null}>
+          <Pressable
+            style={({ pressed }) => [styles.button, pressed && { opacity: 0.85 }]}
+            onPress={signUpWithApple}
+            disabled={loading !== null}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Apple"
+          >
             <Text style={styles.buttonText}>{loading === "apple" ? "…" : " Continue with Apple"}</Text>
           </Pressable>
         )}
 
-        <Pressable style={styles.googleButton} onPress={signUpWithGoogle} disabled={loading !== null}>
+        <Pressable
+          style={({ pressed }) => [styles.googleButton, pressed && { opacity: 0.85 }]}
+          onPress={signUpWithGoogle}
+          disabled={loading !== null}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with Google"
+        >
           {loading === "google" ? (
             <ActivityIndicator color={C.text} />
           ) : (
@@ -143,6 +156,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   heroMark: { fontSize: 36 },
+  wordmark: {
+    alignSelf: "center",
+    fontFamily: F.display,
+    fontSize: 30,
+    color: C.text,
+    letterSpacing: -0.5,
+    marginBottom: 10,
+  },
   form: { marginTop: 18, gap: 14 },
   button: {
     backgroundColor: C.text,

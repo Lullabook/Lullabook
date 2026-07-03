@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, Lead, AnimatedToggle } from "@/components/maya-ui";
+import { Screen, Eyebrow, Lead, AnimatedToggle, PrimaryButton } from "@/components/maya-ui";
+import { isR1MultiFamilyEnabled } from "@/lib/r1-flags";
 import { C, F, R } from "@/constants/theme";
 import { fetchPaywallConfig, type PaywallPlanResponse } from "@/lib/api";
 
@@ -48,10 +49,15 @@ function PlanCard({
 }) {
   const price = billing === "annual" ? plan.annualPrice : plan.monthlyPrice;
   const priceLabel = billing === "annual" ? `$${price}/yr` : `$${price}/mo`;
+  // R1 doesn't surface Story caps, and member logins are multi-family (cut) —
+  // both feature rows stay flag-gated so the paywall never markets a cut.
   const features = [
-    `${plan.storyCap} stories/mo`,
-    plan.memberLoginCap === Infinity ? "Whole family" : `${plan.memberLoginCap} logins`,
-    "Illustrated books",
+    "Illustrated storybooks starring your baby",
+    "Your family, drawn as themselves",
+    "PDF keepsake export",
+    ...(isR1MultiFamilyEnabled()
+      ? [plan.memberLoginCap === Infinity ? "Whole family" : `${plan.memberLoginCap} logins`]
+      : []),
     plan.canNarrate ? "Voice messages + narration" : null,
     plan.canVideo ? "Video pages" : null,
     plan.canCustomStyle ? "Custom art style" : null,
@@ -87,16 +93,14 @@ function PlanCard({
           </View>
         ))}
       </View>
-      <Pressable
-        style={[st.chooseBtn, plan.isRecommended ? { backgroundColor: C.primary } : { borderColor: C.primary, borderWidth: 1 }]}
-        onPress={() => router.dismiss()}
-        accessibilityRole="button"
-        accessibilityLabel={`Choose ${plan.label}`}
-      >
-        <Text style={[st.chooseBtnText, plan.isRecommended ? { color: "#FFFDF9" } : { color: C.primary }]}>
-          {plan.id === "our_whole_family" ? "Start 7-day free trial" : `Choose ${plan.label}`}
-        </Text>
-      </Pressable>
+      {/* The trial is the only entry point (R1 one-plan). Purchase wiring
+          (RevenueCat IAP) is its own issue; this CTA currently dismisses. */}
+      <View style={{ marginTop: 16 }}>
+        <PrimaryButton
+          title="✨ Start your 7-day free trial"
+          onPress={() => router.dismiss()}
+        />
+      </View>
     </View>
   );
 }
@@ -188,7 +192,7 @@ const st = StyleSheet.create({
   badgeRecText: {
     fontFamily: F.bodyBold,
     fontSize: 11,
-    color: "#FFFDF9",
+    color: C.surface,
     letterSpacing: 0.5,
   },
   tierLabel: { fontFamily: F.display, fontSize: 22, color: C.text },
@@ -199,30 +203,6 @@ const st = StyleSheet.create({
   featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   check: { color: C.green, fontFamily: F.bodyBold, fontSize: 14 },
   featureText: { fontFamily: F.body, fontSize: 14, color: C.muted, flex: 1 },
-  chooseBtn: {
-    marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: R.pill,
-    alignItems: "center",
-    backgroundColor: C.surface,
-  },
-  chooseBtnText: { fontFamily: F.bodyBold, fontSize: 15 },
-  toggleWrap: {
-    flexDirection: "row",
-    gap: 6,
-    backgroundColor: C.surfaceAlt,
-    borderRadius: R.pill,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignSelf: "flex-start",
-  },
-  toggleBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: R.pill,
-  },
-  toggleText: { fontFamily: F.bodyBold, fontSize: 14, color: C.muted },
   foundingNote: {
     fontFamily: F.body,
     fontSize: 13,

@@ -1,14 +1,18 @@
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import { Screen, Eyebrow, Lead, Card, Field, Chip, PrimaryButton, AnimatedCheckbox } from "@/components/maya-ui";
+import { BrandGradient, HERO_GRAD, Screen, Eyebrow, Lead, Card, Field, Chip, PrimaryButton, AnimatedCheckbox } from "@/components/maya-ui";
 import { PhotoUploadStatus, RosterAvatar } from "@/components/roster-avatar";
+import { usePressFeedback } from "@/lib/use-press-feedback";
 import { createPersona } from "@/lib/api";
 import { appendNativeFile, setNativeFile, type NativeUploadFile } from "@/lib/form-data";
 import { C, F } from "@/constants/theme";
 
-interface PickedPhoto extends NativeUploadFile {}
+const AnimatedPressable = createAnimatedComponent(Pressable);
+
+type PickedPhoto = NativeUploadFile;
 
 function imagePart(asset: ImagePicker.ImagePickerAsset, fallbackName: string): PickedPhoto {
   return {
@@ -29,6 +33,8 @@ export default function AddFamilyScreen() {
   const [consent, setConsent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dropzonePress = usePressFeedback({ kind: "selection" });
+  const selfiePress = usePressFeedback({ kind: "selection" });
 
   async function pickPhotos() {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, quality: 0.9, selectionLimit: 10 });
@@ -127,17 +133,17 @@ export default function AddFamilyScreen() {
         <Lead>Add their photos and we&apos;ll train a private likeness so they&apos;re drawn as themselves in every story. Photos stay encrypted and are never shown back — only the generated roster avatar appears.</Lead>
       </View>
 
-      <View style={st.preview}>
+      <BrandGradient colors={HERO_GRAD} fallback={C.primary} style={st.preview}>
         <RosterAvatar name={name.trim() || "New member"} initial={previewInitial} status="training" size={60} />
         <View style={{ flex: 1 }}>
           <Text style={st.previewName}>{name.trim() || "New member"}</Text>
           <View style={st.previewPill}><Text style={st.previewPillText}>{previewSubtitle}</Text></View>
           <View style={st.previewStatusRow}>
-            <View style={[st.dot, { backgroundColor: enough ? C.green : "#C9A9A9" }]} />
+            <View style={[st.dot, { backgroundColor: enough ? C.green : C.accent }]} />
             <Text style={st.previewStatus}>{enough ? "Ready to train likeness" : "Needs photos"}</Text>
           </View>
         </View>
-      </View>
+      </BrandGradient>
 
       <Card>
         <Text style={st.h}>Who is this?</Text>
@@ -175,11 +181,18 @@ export default function AddFamilyScreen() {
           </View>
         </View>
         <Text style={st.help}>At least 3 clear, well-lit photos of just this person. We never display them back.</Text>
-        <Pressable onPress={pickPhotos} style={st.dropzone}>
+        <AnimatedPressable
+          onPress={pickPhotos}
+          onPressIn={dropzonePress.onPressIn}
+          onPressOut={dropzonePress.onPressOut}
+          accessibilityRole="button"
+          accessibilityLabel="Add photos"
+          style={[st.dropzone, dropzonePress.style]}
+        >
           <Text style={{ fontSize: 30 }}>⬆️</Text>
           <Text style={st.dropTitle}>Tap to add photos</Text>
           <Text style={st.help}>JPG or PNG · up to 10</Text>
-        </Pressable>
+        </AnimatedPressable>
         {photos.length > 0 ? <PhotoUploadStatus count={photos.length} enough={enough} /> : null}
       </Card>
 
@@ -191,7 +204,16 @@ export default function AddFamilyScreen() {
             <View style={[st.selfieFrame, selfie ? { borderColor: C.green, backgroundColor: C.greenBg } : null]}>
               <Text style={{ fontSize: 22 }}>{selfie ? "✓" : "🤳"}</Text>
             </View>
-            <Pressable onPress={takeSelfie} style={st.selfieBtn}><Text style={st.selfieBtnText}>{selfie ? "↻ Retake selfie" : "🤳 Take a selfie"}</Text></Pressable>
+            <AnimatedPressable
+              onPress={takeSelfie}
+              onPressIn={selfiePress.onPressIn}
+              onPressOut={selfiePress.onPressOut}
+              accessibilityRole="button"
+              accessibilityLabel={selfie ? "Retake selfie" : "Take a selfie"}
+              style={[st.selfieBtn, selfiePress.style]}
+            >
+              <Text style={st.selfieBtnText}>{selfie ? "↻ Retake selfie" : "🤳 Take a selfie"}</Text>
+            </AnimatedPressable>
           </View>
         </Card>
       )}
@@ -207,8 +229,19 @@ export default function AddFamilyScreen() {
           }
         />
         {error ? <Text style={st.errorText}>{error}</Text> : null}
-        <PrimaryButton title={ready ? "✨ Start training (~5 min)" : enough ? "Confirm consent to continue" : `Add ${Math.max(0, 3 - photos.length)} more photo(s)`} disabled={!ready || saving} onPress={submit} />
-        {saving ? <ActivityIndicator color={C.primary} /> : null}
+        <PrimaryButton
+          title={
+            saving
+              ? "Uploading photos…"
+              : ready
+                ? "✨ Start training (~5 min)"
+                : enough
+                  ? "Confirm consent to continue"
+                  : `Add ${Math.max(0, 3 - photos.length)} more photo(s)`
+          }
+          disabled={!ready || saving}
+          onPress={submit}
+        />
       </Card>
     </Screen>
   );
@@ -219,23 +252,19 @@ const st = StyleSheet.create({
   help: { color: C.muted, fontFamily: F.body, fontSize: 13, lineHeight: 19 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  preview: { flexDirection: "row", gap: 14, alignItems: "center", backgroundColor: C.primary, borderRadius: 24, padding: 18 },
+  preview: { flexDirection: "row", gap: 14, alignItems: "center", borderRadius: 24, padding: 18 },
   previewName: { color: C.surface, fontFamily: F.displayBold, fontSize: 18 },
-  previewPill: { alignSelf: "flex-start", marginTop: 4, backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
+  previewPill: { alignSelf: "flex-start", marginTop: 4, backgroundColor: "rgba(255,253,249,0.25)", borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
   previewPillText: { color: C.surface, fontFamily: F.bodyBold, fontSize: 12 },
   previewStatusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   dot: { width: 9, height: 9, borderRadius: 5 },
-  previewStatus: { color: "#FBEAF3", fontFamily: F.bodyBold, fontSize: 13 },
+  previewStatus: { color: "rgba(255,253,249,0.85)", fontFamily: F.bodyBold, fontSize: 13 },
   countPill: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
   countText: { fontFamily: F.bodyBold, fontSize: 12 },
   dropzone: { alignItems: "center", justifyContent: "center", gap: 6, padding: 26, borderRadius: 18, borderWidth: 2, borderColor: C.borderDashed, borderStyle: "dashed", backgroundColor: C.surfaceAlt },
   dropTitle: { fontFamily: F.bodyBold, fontSize: 16, color: C.primary },
   selfieFrame: { width: 64, height: 64, borderRadius: 16, backgroundColor: C.bg, borderWidth: 2, borderColor: C.borderDashed, borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
-  selfieBtn: { borderRadius: 999, borderWidth: 1, borderColor: C.border, backgroundColor: C.surfaceAlt, paddingHorizontal: 18, paddingVertical: 12 },
+  selfieBtn: { minHeight: 44, justifyContent: "center", borderRadius: 999, borderWidth: 1, borderColor: C.border, backgroundColor: C.surfaceAlt, paddingHorizontal: 18, paddingVertical: 12 },
   selfieBtnText: { color: C.primary, fontFamily: F.bodyBold, fontSize: 14 },
-  consentRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
-  checkbox: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 2 },
-  checkmark: { color: C.surface, fontFamily: F.bodyBold, fontSize: 13 },
-  consentText: { flex: 1, color: C.muted, fontFamily: F.body, fontSize: 14, lineHeight: 20 },
   errorText: { color: C.danger, fontFamily: F.bodyBold, fontSize: 14, lineHeight: 20 },
 });

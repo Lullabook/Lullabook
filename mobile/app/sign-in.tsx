@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { Link, router } from "expo-router";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
@@ -108,7 +108,12 @@ export default function SignInScreen() {
     } catch (e) {
       const message = e instanceof Error ? e.message : "Google sign-in failed";
       if (message.includes("provider is not enabled")) {
-        setError("Google is not enabled in Supabase yet. Use Apple or the simulator email sign-in below.");
+        // Dev-only detail; a parent just needs a warm nudge to the working path.
+        setError(
+          __DEV__
+            ? "Google is not enabled in Supabase yet. Use Apple or the simulator email sign-in below."
+            : "Google sign-in isn't available right now — Apple sign-in works!"
+        );
       } else {
         setError(message);
       }
@@ -161,6 +166,7 @@ export default function SignInScreen() {
       <View style={styles.hero}>
         <Text style={styles.heroMark}>🌙</Text>
       </View>
+      <Text style={styles.wordmark}>Lullabook</Text>
       <Eyebrow>💛 Welcome back</Eyebrow>
       <Lead>Sign in with Apple or Google to make bedtime Storybooks starring your family.</Lead>
 
@@ -176,20 +182,36 @@ export default function SignInScreen() {
             onPress={signInWithApple}
           />
         ) : (
-          <Pressable style={styles.button} onPress={signInWithApple} disabled={loading !== null}>
+          <Pressable
+            style={({ pressed }) => [styles.button, pressed && { opacity: 0.85 }]}
+            onPress={signInWithApple}
+            disabled={loading !== null}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Apple"
+          >
             <Text style={styles.buttonText}>
               {loading === "apple" ? "…" : " Continue with Apple"}
             </Text>
           </Pressable>
         )}
 
-        <Pressable style={styles.googleButton} onPress={signInWithGoogle} disabled={loading !== null}>
+        <Pressable
+          style={({ pressed }) => [styles.googleButton, pressed && { opacity: 0.85 }]}
+          onPress={signInWithGoogle}
+          disabled={loading !== null}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with Google"
+        >
           {loading === "google" ? (
             <ActivityIndicator color={C.text} />
           ) : (
             <Text style={styles.googleText}>Continue with Google</Text>
           )}
         </Pressable>
+
+        <Link href="/sign-up" style={styles.link}>
+          New here? Create your family&apos;s world
+        </Link>
 
         {DEV_SIGNIN_ENABLED ? (
           <View style={styles.devBlock}>
@@ -236,7 +258,16 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
   },
   heroMark: { fontSize: 36 },
+  wordmark: {
+    alignSelf: "center",
+    fontFamily: F.display,
+    fontSize: 30,
+    color: C.text,
+    letterSpacing: -0.5,
+    marginBottom: 10,
+  },
   form: { marginTop: 18, gap: 14 },
+  link: { marginTop: 12, textAlign: "center", color: C.primary, fontSize: 15, fontFamily: F.bodyBold, paddingVertical: 12 },
   button: {
     backgroundColor: C.text,
     borderRadius: R.pill,
