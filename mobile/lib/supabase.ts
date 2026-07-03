@@ -1,13 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import * as SecureStore from "expo-secure-store";
 
 import { requireSupabaseConfig } from "@/lib/env";
-
-const SecureStoreAdapter = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-};
+import { selectAuthStorage } from "@/lib/auth-storage";
 
 let client: SupabaseClient | undefined;
 
@@ -16,7 +10,7 @@ function getClient(): SupabaseClient {
     const { url, key } = requireSupabaseConfig();
     client = createClient(url, key, {
       auth: {
-        storage: SecureStoreAdapter,
+        storage: selectAuthStorage(),
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: false,

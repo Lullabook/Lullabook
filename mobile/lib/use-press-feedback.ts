@@ -9,7 +9,7 @@
  *  - press latency < 50ms at 60fps (reanimated worklet, UI thread).
  */
 import { useCallback } from "react";
-import Animated, {
+import {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
@@ -17,7 +17,7 @@ import Animated, {
   useReducedMotion,
   runOnJS,
 } from "react-native-reanimated";
-import { getHaptics, PRESS_SPRING, disableSpringForReducedMotion, type HapticsImpact, type HapticsNotification } from "./haptics";
+import { getHaptics, PRESS_SPRING, type HapticsImpact, type HapticsNotification } from "./haptics";
 
 type FeedbackKind = "impact" | "selection" | "notify";
 
@@ -32,16 +32,28 @@ export function usePressFeedback(payload: FeedbackPayload = NONE) {
   const reduceMotion = useReducedMotion();
   const pressed = useSharedValue(0);
 
+  // The spring config is chosen on the JS thread (plain numbers) so the worklet
+  // below never calls a non-worklet function on the UI runtime — doing so aborts
+  // the process (SIGABRT), which unit tests can't catch. Only primitives cross
+  // into the worklet closure.
+  const { damping, stiffness } = PRESS_SPRING;
+
   const style = useAnimatedStyle(() => {
     // Opacity + scale both track `pressed.value` so the resting state is 1.0
     // (not 0.85) and the press visibly dims+scales to 0.85/0.97. Reduce-motion
-    // collapses the transitions to instant (duration 0).
-    const spec = disableSpringForReducedMotion(reduceMotion, PRESS_SPRING);
+    // collapses both transitions to instant (duration 0), including the scale.
+    const scale = 1 - 0.03 * pressed.value;
     return {
       opacity: withTiming(1 - 0.15 * pressed.value, { duration: reduceMotion ? 0 : 80 }),
-      transform: [{ scale: withSpring(1 - 0.03 * pressed.value, spec) }],
+      transform: [
+        {
+          scale: reduceMotion
+            ? withTiming(scale, { duration: 0 })
+            : withSpring(scale, { damping, stiffness }),
+        },
+      ],
     };
-  }, [reduceMotion]);
+  }, [reduceMotion, damping, stiffness]);
 
   const fire = useCallback(() => {
     const h = getHaptics();
