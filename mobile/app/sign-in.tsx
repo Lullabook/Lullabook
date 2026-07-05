@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Link, router } from "expo-router";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
@@ -181,7 +181,11 @@ export default function SignInScreen() {
             style={styles.appleButton}
             onPress={signInWithApple}
           />
-        ) : (
+        ) : Platform.OS === "web" ? null : (
+          // expo-apple-authentication has no web implementation — on the
+          // expo-web dev preview this fallback would be a dead button whose
+          // tap throws UnavailabilityError. Render nothing there instead;
+          // Google + the dev email path remain. iOS behavior unchanged.
           <Pressable
             style={({ pressed }) => [styles.button, pressed && { opacity: 0.85 }]}
             onPress={signInWithApple}
