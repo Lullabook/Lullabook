@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,8 +9,11 @@ import {
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import * as Sharing from "expo-sharing";
 import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton, PageTurn, Skeleton, SkeletonCard, Twinkle } from "@/components/maya-ui";
 import {
+  downloadStorybookPdf,
+  finalizeStorybook,
   getStorybook,
   illustrationSource,
   rerollPageImage,
@@ -71,6 +75,23 @@ export default function StorybookReaderScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  // Issue 160 (E4): finalize is deliberate — the CTA opens an inline confirm
+  // sheet that names the re-roll lock before anything is sent to the server.
+  const [confirmingFinalize, setConfirmingFinalize] = useState(false);
+  // Issue 161 (E1/E6): export is gated on real share capability and shows a
+  // blocking in-progress state while the PDF downloads.
+  const [canShare, setCanShare] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    // E6: hidden, never dead — the expo-web preview can't share a local file
+    // (and expo-file-system's File API is native-only), so canShare can never
+    // become true on web and the export button simply doesn't render there.
+    if (Platform.OS === "web") return;
+    Sharing.isAvailableAsync()
+      .then(setCanShare)
+      .catch(() => setCanShare(false));
+  }, []);
   // Issue 101: bounded poll — never spin forever. A book that hasn't reached a
   // terminal state within the budget is surfaced as a timed-out state with a
   // retry, never an infinite "Illustrating" spinner.
@@ -132,6 +153,46 @@ export default function StorybookReaderScreen() {
     }
   }
 
+  // Issue 160 (E4): call the finalize route, then REFETCH via load() — the
+  // client never flips the status field itself. On failure the draft is
+  // untouched and the error card offers the same affordance again (retryable).
+  async function confirmFinalize() {
+    if (!book || actionBusy) return;
+    setActionBusy(true);
+    setError(null);
+    try {
+      await finalizeStorybook(book.id);
+      await load();
+      setConfirmingFinalize(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not finalize — please try again");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  // Issue 161 — download to the app cache, then hand the file to the native
+  // share sheet. E2: on any failure the button returns to idle with a
+  // retryable error and the book stays finalized untouched; no auto-retry.
+  async function exportPdf() {
+    if (!book || exporting) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const uri = await downloadStorybookPdf(book.id);
+      // E3: the keepsake leaves the device only via this user-initiated sheet.
+      await Sharing.shareAsync(uri, {
+        mimeType: "application/pdf",
+        UTI: "com.adobe.pdf",
+        dialogTitle: "Save your keepsake",
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Export failed — please try again");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function pickCandidate(candidateId: string) {
     if (actionBusy) return;
     setActionBusy(true);
@@ -177,6 +238,8 @@ export default function StorybookReaderScreen() {
   const page = pages[pageIndex];
   const generating = book.status === "generating";
   const failed = book.status === "failed";
+  const isDraft = book.status === "draft";
+  const isFinalized = book.status === "finalized";
   const imageCandidates = page?.candidates.filter((c) => c.kind === "image" && !c.selected) ?? [];
 
   return (
@@ -282,6 +345,47 @@ export default function StorybookReaderScreen() {
               onPress={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))}
             />
           </View>
+
+          {/* Issue 160 — "Finalize keepsake" is draft-only (E4). The confirm
+              sheet names the re-roll lock before anything hits the server. */}
+          {isDraft ? (
+            confirmingFinalize ? (
+              <Card style={st.finalizeCard}>
+                <Text style={st.cardTitle}>Make it a keepsake?</Text>
+                <Text style={st.copy}>
+                  Finalizing locks re-rolls — every page stays exactly as it looks now, ready to export as a PDF forever.
+                </Text>
+                <View style={st.finalizeRow}>
+                  <GhostButton
+                    title="Keep editing"
+                    disabled={actionBusy}
+                    onPress={() => setConfirmingFinalize(false)}
+                  />
+                  <PrimaryButton
+                    title={actionBusy ? "Finalizing…" : "📖 Yes, finalize"}
+                    disabled={actionBusy}
+                    onPress={confirmFinalize}
+                  />
+                </View>
+              </Card>
+            ) : (
+              <PrimaryButton
+                title="📖 Finalize keepsake"
+                disabled={actionBusy}
+                onPress={() => setConfirmingFinalize(true)}
+              />
+            )
+          ) : null}
+
+          {/* Issue 161 — "Export PDF" renders only for a finalized book on a
+              platform that can actually share (E6: hidden, never dead). */}
+          {isFinalized && canShare ? (
+            <PrimaryButton
+              title={exporting ? "Preparing your PDF…" : "📕 Export PDF"}
+              disabled={exporting}
+              onPress={exportPdf}
+            />
+          ) : null}
         </>
       ) : (
         <Card>
@@ -324,6 +428,8 @@ const st = StyleSheet.create({
   },
   candidateText: { fontFamily: F.bodyBold, color: C.primary, fontSize: 13 },
   errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
+  finalizeCard: { borderColor: C.borderSoft, backgroundColor: C.surfaceAlt },
+  finalizeRow: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 14 },
   errorText: { color: C.danger, fontFamily: F.bodyBold },
   skeletonPage: { gap: 14 },
   generatingRow: { flexDirection: "row", alignItems: "center", gap: 12 },
