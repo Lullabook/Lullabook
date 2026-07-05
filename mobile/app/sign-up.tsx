@@ -105,7 +105,10 @@ export default function SignUpScreen() {
             style={styles.appleButton}
             onPress={signUpWithApple}
           />
-        ) : Platform.OS === "ios" ? null : (
+        ) : Platform.OS === "ios" || Platform.OS === "web" ? null : (
+          // Web: expo-apple-authentication has no implementation — the
+          // fallback tap would throw UnavailabilityError. Inert, not a dead
+          // button (same doctrine as r1-flags). iOS keeps its existing null.
           <Pressable
             style={({ pressed }) => [styles.button, pressed && { opacity: 0.85 }]}
             onPress={signUpWithApple}
