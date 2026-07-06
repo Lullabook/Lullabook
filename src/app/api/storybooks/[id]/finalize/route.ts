@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveRequestAuth } from "@/lib/request-auth";
+import { RlsViolationError } from "@/db/store";
 
 /**
  * Issue 160 (PRD v18) — finalize a draft Storybook (draft → finalized, one-way).
@@ -23,6 +24,13 @@ export async function POST(
     await ctx.persist();
     return NextResponse.json({ finalized: true, status: book.status });
   } catch (err) {
+    // Tenant isolation: the dev store's RlsViolationError names "another
+    // family" — surfacing it would let a stranger distinguish an existing
+    // book from a nonexistent id (existence oracle). Map it to the same
+    // not-found shape the service uses for unknown ids.
+    if (err instanceof RlsViolationError) {
+      return NextResponse.json({ error: "Storybook not found" }, { status: 400 });
+    }
     // Service throws plain Errors ("Storybook not found", "Only drafts can be
     // finalized") — surface the message as a 400, never a 500 (E4: the book is
     // untouched on any rejection).

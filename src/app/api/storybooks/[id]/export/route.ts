@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveRequestAuth } from "@/lib/request-auth";
+import { RlsViolationError } from "@/db/store";
 
 /**
  * Export a finalized Storybook as a PDF keepsake (ADR-0007 export path).
@@ -25,6 +26,12 @@ export async function GET(
       },
     });
   } catch (err) {
+    // Tenant isolation: never surface the dev store's RlsViolationError
+    // message ("…another family") — a stranger probing ids must see the same
+    // not-found body as a nonexistent id (no existence oracle).
+    if (err instanceof RlsViolationError) {
+      return NextResponse.json({ error: "Storybook not found" }, { status: 400 });
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Export failed" },
       { status: 400 }
