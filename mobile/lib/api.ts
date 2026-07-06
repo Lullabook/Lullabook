@@ -221,6 +221,78 @@ export function getStorybook(id: string): Promise<StorybookDetailWire> {
   return apiFetch(`/api/storybooks/${encodeURIComponent(id)}`);
 }
 
+/**
+ * Issue 160 (PRD v18) — finalize a draft Storybook. One-way: locks re-rolls.
+ * Callers must refetch the book afterwards (E4) — the server is the only
+ * authority on status.
+ */
+export function finalizeStorybook(id: string): Promise<{ finalized: boolean; status: string }> {
+  return apiFetch(`/api/storybooks/${encodeURIComponent(id)}/finalize`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+/**
+ * Issue 161 (PRD v18) — download a finalized Storybook's PDF keepsake into the
+ * app cache sandbox and return the cached file's uri for the share sheet.
+ *
+ *   E1: the download aborts at 45s — the caller never freezes on a dead wait.
+ *   E2: the body is validated as a real PDF (%PDF magic) before anything is
+ *       kept; any failure deletes the file and rethrows a retryable error.
+ *   E3: the fetch carries the same bearer mechanism as every other call; the
+ *       file only ever lands in `Paths.cache` (app sandbox) — egress happens
+ *       solely via the user-initiated share sheet in the caller.
+ */
+export async function downloadStorybookPdf(id: string): Promise<string> {
+  // SDK 56 expo-file-system (File/Paths API) is native-only — no web
+  // implementation. Lazy-load it so importing this module never breaks the
+  // expo-web preview bundle; the export button itself is hidden on web (E6).
+  const { File, Paths } = await import("expo-file-system");
+  const file = new File(Paths.cache, `lullabook-${id}.pdf`);
+  const token = await getAccessToken();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45_000);
+  try {
+    const res = await fetch(`${apiBase}/api/storybooks/${encodeURIComponent(id)}/export`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? `Export failed (${res.status})`);
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const isPdf =
+      bytes.length > 4 &&
+      bytes[0] === 0x25 && // %
+      bytes[1] === 0x50 && // P
+      bytes[2] === 0x44 && // D
+      bytes[3] === 0x46; // F
+    if (!isPdf) {
+      throw new Error("The export didn't come back as a PDF — please try again");
+    }
+    if (file.exists) file.delete(); // replace any stale keepsake atomically-ish
+    file.write(bytes);
+    return file.uri;
+  } catch (err) {
+    // E2: never leave a partial or non-PDF file behind on any failure.
+    try {
+      if (file.exists) file.delete();
+    } catch {
+      // best-effort cleanup — the throw below is what the UI acts on
+    }
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("The export took too long — please try again");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function rerollPageImage(pageId: string): Promise<{ rerolled: boolean }> {
   return apiFetch(`/api/storybooks/pages/${encodeURIComponent(pageId)}/reroll-image`, {
     method: "POST",

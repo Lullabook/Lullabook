@@ -49,6 +49,39 @@ appId:
     visible: "Page 2"
     timeout: 10000
 
+# --- Issue 161: finalize → export (PRD v18, aha-path steps 9–10) ---
+# NOTE: finalize is one-way. This leg consumes the seeded draft; re-running the
+# flow needs a fresh backend seed (restart dev server with DEV_DEMO_SEED=true).
+
+# The finalize CTA sits below the page card — bring it into view.
+- scrollUntilVisible:
+    element:
+      text: "Finalize keepsake"
+
+# Open the confirm sheet; it must name the re-roll lock (E4).
+- tapOn: "Finalize keepsake"
+- extendedWaitUntil:
+    visible: "locks re-rolls"
+    timeout: 5000
+
+# Confirm. The client refetches; the badge flips to "Finalized" server-side.
+- tapOn: "Yes, finalize"
+- extendedWaitUntil:
+    visible: "Finalized"
+    timeout: 15000
+
+# Export the keepsake (E1: 30s p95 budget; button shows a blocking state).
+- tapOn: "Export PDF"
+
+# The native share sheet appears with the cached PDF (lullabook-<id>.pdf).
+- extendedWaitUntil:
+    visible: "lullabook"
+    timeout: 45000
+
+# Dismiss the share sheet before returning to the library.
+- swipe:
+    direction: DOWN
+
 # Go back to the library.
 - tapOn: "Back"
 
