@@ -45,7 +45,9 @@ export const mayaStackHeader = {
 };
 
 const st = StyleSheet.create({
-  // Issue 138 — ≥44pt hit target (minHeight 44, content centered).
+  // Issue 166 — plum-tinted shadow from the Maya design system canon
+  // (shadowColor #3A2850, same family as Card). Elevates the back control
+  // from "flat" to "part of the system" without overpowering the content.
   pill: {
     flexDirection: "row",
     alignItems: "center",
@@ -56,6 +58,11 @@ const st = StyleSheet.create({
     borderRadius: R.pill,
     backgroundColor: C.primaryBg,
     marginLeft: 4,
+    shadowColor: "#3A2850",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   arrow: { color: C.primary, fontFamily: F.displayBold, fontSize: 20, lineHeight: 22 },
   label: { color: C.primary, fontFamily: F.bodyBold, fontSize: 14 },

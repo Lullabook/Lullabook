@@ -21,20 +21,56 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function apiFormData<T>(path: string, body: FormData): Promise<T> {
+export async function apiFormData<T>(path: string, body: FormData): Promise<T> {
   const token = await getAccessToken();
-  const res = await fetch(`${apiBase}${path}`, {
-    method: "POST",
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body,
+  return new Promise<T>((resolve, reject) => {
+    // Issue 163: Expo SDK 56's "winter" fetch polyfill throws
+    // "Unsupported FormDataPart implementation" on RN's native {uri,name,type}
+    // FormData file parts. The RN-native XMLHttpRequest streams {uri} parts
+    // from disk natively (no base64 in memory — I1.3: ≤10 images, streamed),
+    // so we use XHR directly for multipart uploads, bypassing the winter fetch.
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${apiBase}${path}`);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.timeout = 120_000; // generous; uploads of ≤10 photos are I1.3-streamed.
+    let settled = false;
+    const done = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      fn();
+    };
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState !== 4) return;
+      // Red-team EDGE-1: status === 0 means the request never reached the
+      // server (network failure). The XHR spec fires onreadystatechange(4, 0)
+      // BEFORE onerror — if we reject here, the `settled` guard swallows the
+      // more helpful onerror message. Defer to onerror/ontimeout instead.
+      if (xhr.status === 0) return;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        done(() => {
+          try {
+            resolve(JSON.parse(xhr.responseText) as T);
+          } catch {
+            reject(new Error("The server returned an unexpected response — please try again"));
+          }
+        });
+      } else {
+        done(() => {
+          try {
+            const body = JSON.parse(xhr.responseText) as { error?: string };
+            reject(new Error(body.error ?? `Upload failed (${xhr.status})`));
+          } catch {
+            reject(new Error(`Upload failed (${xhr.status})`));
+          }
+        });
+      }
+    };
+    xhr.onerror = () =>
+      done(() => reject(new Error("Network error during upload — please check your connection and try again")));
+    xhr.ontimeout = () =>
+      done(() => reject(new Error("The upload timed out — please try again")));
+    xhr.send(body);
   });
-  if (!res.ok) {
-    const responseBody = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(responseBody.error ?? `Request failed (${res.status})`);
-  }
-  return res.json() as Promise<T>;
 }
 
 export interface HomeResponse {

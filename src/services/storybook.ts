@@ -512,7 +512,15 @@ export class StorybookService {
                 }))
               );
             } else {
-              const loraKey = personas[0]!.loraWeightKey ?? "lora/default";
+              // Issue 162: persona-free / Character-only Brief — no persona
+              // LoRA available. Use "lora/default" (placeholder art: a generic
+              // illustration from the scene description, no raw photo, no
+              // likeness trained — I3.1). Previously `personas[0]!` threw a
+              // TypeError here, which the fal-gen catch swallowed into a
+              // uniformly-failed page; now fal is called with lora/default.
+              const loraKey = personas.length > 0
+                ? (personas[0]!.loraWeightKey ?? "lora/default")
+                : "lora/default";
               const prompt = `${story.styleBible.artStyle} | ${story.styleBible.palette} | ${scene.description}`;
               imageResult = await this.fal.generateImage(prompt, loraKey, {
                 idempotencyKey: falIdempotencyKey,

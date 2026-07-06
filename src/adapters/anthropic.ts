@@ -136,11 +136,27 @@ function parseGeneratedStory(message: Anthropic.Message): GeneratedStory {
   if (message.stop_reason === "refusal") {
     throw new Error("Story generation was refused by the model's safety system");
   }
+  // Issue 162: a max_tokens stop means the JSON was truncated mid-output —
+  // JSON.parse would throw an opaque SyntaxError. Surface a clear, actionable
+  // diagnostic so the caller (runGenerationBody) forces the book to terminal
+  // `failed` with a useful error instead of a cryptic parse failure.
+  if (message.stop_reason === "max_tokens") {
+    throw new Error(
+      "Story generation hit the max_tokens limit (truncated JSON) — increase MAX_TOKENS or reduce page count"
+    );
+  }
   const block = message.content.find((b) => b.type === "text");
   if (!block || block.type !== "text") {
     throw new Error("Story generation returned no text content");
   }
-  const wire = JSON.parse(block.text) as WireGeneratedStory;
+  let wire: WireGeneratedStory;
+  try {
+    wire = JSON.parse(block.text) as WireGeneratedStory;
+  } catch {
+    throw new Error(
+      "Story generation returned malformed JSON (could not parse the structured output)"
+    );
+  }
   if (!Array.isArray(wire.pages) || !Array.isArray(wire.scenes) || !wire.styleBible) {
     throw new Error("Story generation returned malformed structured output");
   }

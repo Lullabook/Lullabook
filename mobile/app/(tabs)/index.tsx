@@ -127,8 +127,9 @@ export default function HomeScreen() {
       {/* Dashboard cards */}
       <View style={st.cardGrid}>
         <DashCard onPress={() => router.push("/stories" as never)} label="Continue reading">
+          {/* Issue 166 — 🌙 (the last bedtime story) distinct from 📖 (Journal hero) */}
           <View style={[st.dashIcon, { backgroundColor: C.primary }]}>
-            <Text style={st.dashIconText}>📖</Text>
+            <Text style={st.dashIconText}>🌙</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={st.dashTitle}>Continue reading</Text>
@@ -141,8 +142,9 @@ export default function HomeScreen() {
           label="What happened today?"
           style={{ borderColor: C.accentLight }}
         >
+          {/* Issue 166 — ✍️ (capturing/writing) distinct from ✨ (Create tab) */}
           <View style={[st.dashIcon, { backgroundColor: C.accent }]}>
-            <Text style={st.dashIconText}>✨</Text>
+            <Text style={st.dashIconText}>✍️</Text>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={st.dashTitle}>What happened today?</Text>
