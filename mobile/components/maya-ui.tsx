@@ -734,8 +734,11 @@ const s = StyleSheet.create({
     backgroundColor: C.primary,
     borderRadius: R.pill,
   },
-  toggleBtn: { minHeight: 44, paddingHorizontal: 22, paddingVertical: 10, justifyContent: "center", alignItems: "center" },
-  toggleText: { fontFamily: F.bodyBold, fontSize: 14, color: C.muted },
+  // Issue 167 — flex:1 so segments share space equally regardless of label
+  // length (no clipping of "Annual (save 17%)"). textAlign center balances
+  // the label within its segment.
+  toggleBtn: { flex: 1, minHeight: 44, paddingHorizontal: 22, paddingVertical: 10, justifyContent: "center", alignItems: "center" },
+  toggleText: { fontFamily: F.bodyBold, fontSize: 14, color: C.muted, textAlign: "center" },
   consentRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, minHeight: 44, paddingVertical: 6 },
   checkbox: { width: 28, height: 28, borderRadius: 8, borderWidth: 2, alignItems: "center", justifyContent: "center", marginTop: 2 },
   checkmark: { color: C.surface, fontFamily: F.bodyBold, fontSize: 18 },

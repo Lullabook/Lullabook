@@ -11,7 +11,7 @@ const ALL_STORY_TYPES: { key: StoryType; icon: string; label: string }[] = [
   { key: "bedtime", icon: "🌙", label: "Bedtime" },
   { key: "adventure", icon: "🚀", label: "Adventure" },
   { key: "silly", icon: "😄", label: "Silly" },
-  { key: "learning", icon: "🌟", label: "Learning" },
+  { key: "learning", icon: "🎓", label: "Learning" },
 ];
 
 // R1 cut — Bedtime only ships; other types stay flag-gated for R2 (no
