@@ -78,6 +78,12 @@ export default function StorybookReaderScreen() {
   // Issue 160 (E4): finalize is deliberate — the CTA opens an inline confirm
   // sheet that names the re-roll lock before anything is sent to the server.
   const [confirmingFinalize, setConfirmingFinalize] = useState(false);
+  // Part3 hardening (E4): flips the moment the finalize ROUTE succeeds — pure
+  // server truth, never a local book.status flip. If the follow-up refetch
+  // fails, this keeps the (now wrong) draft CTA hidden so the parent can't
+  // re-send finalize into a confusing "Only drafts" error; a reload card
+  // offers the retry instead.
+  const [finalizedOnServer, setFinalizedOnServer] = useState(false);
   // Issue 161 (E1/E6): export is gated on real share capability and shows a
   // blocking in-progress state while the PDF downloads.
   const [canShare, setCanShare] = useState(false);
@@ -147,7 +153,14 @@ export default function StorybookReaderScreen() {
       await rerollPageImage(page.id);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Re-roll failed");
+      // Session expired mid-action: redirect to sign-in like load() does —
+      // an inline "Unauthorized" card would be a dead end.
+      const message = e instanceof Error ? e.message : "Re-roll failed";
+      if (message.includes("Unauthorized")) {
+        router.replace("/sign-in");
+        return;
+      }
+      setError(message);
     } finally {
       setActionBusy(false);
     }
@@ -162,10 +175,18 @@ export default function StorybookReaderScreen() {
     setError(null);
     try {
       await finalizeStorybook(book.id);
-      await load();
+      // The route succeeded — the book IS finalized on the server. Record that
+      // before the refetch so a failed load() can't resurrect the draft CTA.
+      setFinalizedOnServer(true);
       setConfirmingFinalize(false);
+      await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not finalize — please try again");
+      const message = e instanceof Error ? e.message : "Could not finalize — please try again";
+      if (message.includes("Unauthorized")) {
+        router.replace("/sign-in");
+        return;
+      }
+      setError(message);
     } finally {
       setActionBusy(false);
     }
@@ -187,7 +208,12 @@ export default function StorybookReaderScreen() {
         dialogTitle: "Save your keepsake",
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Export failed — please try again");
+      const message = e instanceof Error ? e.message : "Export failed — please try again";
+      if (message.includes("Unauthorized")) {
+        router.replace("/sign-in");
+        return;
+      }
+      setError(message);
     } finally {
       setExporting(false);
     }
@@ -200,7 +226,12 @@ export default function StorybookReaderScreen() {
       await selectPageCandidate(candidateId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not select candidate");
+      const message = e instanceof Error ? e.message : "Could not select candidate";
+      if (message.includes("Unauthorized")) {
+        router.replace("/sign-in");
+        return;
+      }
+      setError(message);
     } finally {
       setActionBusy(false);
     }
@@ -346,9 +377,24 @@ export default function StorybookReaderScreen() {
             />
           </View>
 
+          {/* Part3 hardening — finalize succeeded on the server but the
+              refetch failed: the local copy still says draft. Tell the truth
+              and offer a reload; never a re-confirmable finalize CTA (E4). */}
+          {isDraft && finalizedOnServer ? (
+            <Card style={st.finalizeCard}>
+              <Text style={st.cardTitle}>Your keepsake is finalized! 🎉</Text>
+              <Text style={st.copy}>
+                We just couldn&apos;t refresh this page — reload to see your finalized book and export it.
+              </Text>
+              <View style={st.finalizeRow}>
+                <PrimaryButton title="↻ Reload" onPress={load} />
+              </View>
+            </Card>
+          ) : null}
+
           {/* Issue 160 — "Finalize keepsake" is draft-only (E4). The confirm
               sheet names the re-roll lock before anything hits the server. */}
-          {isDraft ? (
+          {isDraft && !finalizedOnServer ? (
             confirmingFinalize ? (
               <Card style={st.finalizeCard}>
                 <Text style={st.cardTitle}>Make it a keepsake?</Text>
