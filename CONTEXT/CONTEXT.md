@@ -505,9 +505,27 @@ advances only on a generation that reaches Story text. See
   **auto-opens a tracked GitHub issue** (deduped), closing the "bugs vanish" loop.
   _Avoid_: "telemetry" (broader/analytics-flavored), "monitoring" (this is errors, not uptime).
 
+## v19 "Working core loop" — incoming language (PRD v19)
+
+> Grilled 2026-07-06 (hands-on Simulator QA). Fixes the core loop and **partially reverses
+> the PRD v16 ruthless cut** per [ADR-0026](docs/adr/0026-restore-journal-and-learning-uncut-r1.md).
+> Audio, multi-family, and Asia stay cut. See `planning/prd-v19-working-core-loop.md`.
+
+- **Placeholder art** — the degradation that keeps the core loop working without a trained
+  likeness: a [Character](#character)-only or persona-free [Brief](#brief) generates a
+  **text-viewable [Storybook](#storybook) draft with generic art**, never a `failed` book,
+  once the text pass succeeds. Uses no raw photo and trains no likeness (ADR-0020/0021 hold).
+  The [Generation terminal state](#storybook) invariant, extended: text-success ⇒ `draft`.
+- **Partial un-cut** — the [Ruthless cut](#r1-simplification--testobservability--incoming-language-prd-v16--v17)
+  relaxed for exactly two features — the per-Baby [Journal](#journal) and the **Learning**
+  [Story Type](#story-type) — each restored *with its own tests* so it is not a new way to
+  break. The cut-flag scaffolding stays so either can be re-cut by env (ADR-0026).
+
 ---
 
-_Last updated 2026-06-23: added PRD v16/v17 language (Ruthless cut, Inert-not-broken, Daily
+_Last updated 2026-07-06: added PRD v19 language (Working core loop — Placeholder art
+degradation, Partial un-cut of Journal + Learning; ADR-0026 relaxes the PRD v16 ruthless cut
+for those two only). Prior update 2026-06-23: added PRD v16/v17 language (Ruthless cut, Inert-not-broken, Daily
 Notes, Verify gate, Honest seed harness, Error capture [Sentry, fail-open, error→issue]; amends
 ADR-0024 solo-only + ADR-0025 solo plan, sequences ADR-0015 US-only R1.0). Prior update
 2026-06-22: added PRD v13 language (Just Us / Our Whole Family two-plan
