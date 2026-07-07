@@ -106,7 +106,9 @@ export default function AccountScreen() {
 
       {/* profile header */}
       <BrandGradient colors={HERO_GRAD} fallback={C.primary} style={st.profile}>
-        <View style={st.profileAvatar}><Text style={st.profileInitial}>{email[0]?.toUpperCase()}</Text></View>
+        <BrandGradient colors={[C.rose, C.primaryLight]} fallback={C.rose} style={st.profileAvatar}>
+          <Text style={st.profileInitial}>{email[0]?.toUpperCase()}</Text>
+        </BrandGradient>
         <View style={{ flex: 1 }}>
           <Text style={st.profileName}>{email}</Text>
           <Text style={st.profileSub}>Guardian of your family</Text>
@@ -123,6 +125,7 @@ export default function AccountScreen() {
             ? "Your plan is active — manage or cancel anytime in your App Store subscriptions."
             : "Every plan starts with a 7-day free trial — your family, drawn as themselves in every story."}
         </Text>
+        <View style={st.divider} />
         <View style={st.perkGrid}>
           {PERKS.map((p) => (
             <View key={p.title} style={st.perk}>
@@ -160,9 +163,11 @@ export default function AccountScreen() {
       <Card>
         <Text style={st.cardTitle}>🔒 Privacy & your data</Text>
         {PRIVACY.map((p) => (
-          <View key={p} style={{ flexDirection: "row", gap: 10 }}>
-            <Text style={{ color: C.greenText }}>✓</Text>
-            <Text style={{ flex: 1, color: C.muted, fontSize: 14, lineHeight: 20 }}>{p}</Text>
+          <View key={p} style={st.privacyRow}>
+            <View style={st.privacyCheck}>
+              <Text style={st.privacyCheckText}>✓</Text>
+            </View>
+            <Text style={st.privacyText}>{p}</Text>
           </View>
         ))}
       </Card>
@@ -182,7 +187,7 @@ export default function AccountScreen() {
 
 const st = StyleSheet.create({
   profile: { flexDirection: "row", gap: 14, alignItems: "center", borderRadius: 26, padding: 20 },
-  profileAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: C.rose, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "rgba(255,253,249,0.55)" },
+  profileAvatar: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "rgba(255,253,249,0.55)" },
   profileInitial: { color: C.surface, fontFamily: F.displayBold, fontSize: 26 },
   profileName: { color: C.surface, fontFamily: F.displayBold, fontSize: 18 },
   profileSub: { color: "rgba(255,253,249,0.85)", fontFamily: F.body, fontSize: 13, marginTop: 2 },
@@ -190,11 +195,27 @@ const st = StyleSheet.create({
   planPillText: { color: C.badgeGoldText, fontFamily: F.bodyBold, fontSize: 12 },
   cardTitle: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
   cardMeta: { color: C.muted, fontFamily: F.body, fontSize: 14, marginTop: -6 },
+  divider: { height: 1, backgroundColor: C.borderSoft },
   perkGrid: { gap: 10 },
   perk: { flexDirection: "row", gap: 10, alignItems: "flex-start", backgroundColor: C.bg, borderColor: C.borderSoft, borderWidth: 1, borderRadius: 18, padding: 12 },
   perkTitle: { fontFamily: F.bodyBold, fontSize: 14, color: C.text },
   perkNote: { fontFamily: F.body, fontSize: 12, color: C.soft, marginTop: 2 },
-  cardDanger: { backgroundColor: C.surface, borderColor: C.dangerBorder, borderWidth: 1, borderRadius: 22, padding: 18, gap: 14 },
+  privacyRow: { flexDirection: "row", gap: 11, alignItems: "flex-start" },
+  privacyCheck: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.greenBg, alignItems: "center", justifyContent: "center", marginTop: 1 },
+  privacyCheckText: { color: C.greenText, fontFamily: F.bodyBold, fontSize: 12 },
+  privacyText: { flex: 1, color: C.muted, fontSize: 14, lineHeight: 20, fontFamily: F.body },
+  cardDanger: {
+    backgroundColor: C.surface,
+    borderColor: C.dangerBorder,
+    borderWidth: 1,
+    borderRadius: 22,
+    padding: 18,
+    gap: 14,
+    shadowColor: "#B23A48",
+    shadowOpacity: 0.06,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 8 },
+  },
   noticeCard: { backgroundColor: C.primaryBg, borderColor: C.primaryLight },
   noticeText: { color: C.primary, fontFamily: F.bodyBold, fontSize: 14, lineHeight: 20 },
 });

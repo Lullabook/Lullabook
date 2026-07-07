@@ -18,6 +18,13 @@ const STATUS_LABEL: Record<PersonaStatus, string> = {
   failed: "Training needs a retry",
 };
 
+/** Status dot colors mirror the web roster row's status indicator (v2-theme's familyMemberStatus). */
+const STATUS_DOT: Record<PersonaStatus, string> = {
+  training: C.accent,
+  ready: C.green,
+  failed: C.soft,
+};
+
 /** Pill add-button with the shared press feedback + a11y (44pt target). */
 function AddPill({ title, onPress, disabled }: { title: string; onPress: () => void; disabled?: boolean }) {
   const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
@@ -32,6 +39,30 @@ function AddPill({ title, onPress, disabled }: { title: string; onPress: () => v
       style={[st.addBtn, disabled && { opacity: 0.5 }, style]}
     >
       <Text style={st.addBtnText}>{title}</Text>
+    </AnimatedPressable>
+  );
+}
+
+/**
+ * Dashed "add someone" row — mirrors the web family sidebar's dashed CTA
+ * (a plus-in-a-circle + warm copy), swapped in for the plain pill so the
+ * roster/cast lists end on the same inviting note as the web page.
+ */
+function DashedAddRow({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={[st.dashedRow, style]}
+    >
+      <View style={st.dashedRowIconWrap}>
+        <Text style={st.dashedRowIcon}>{icon}</Text>
+      </View>
+      <Text style={st.dashedRowLabel}>{label}</Text>
     </AnimatedPressable>
   );
 }
@@ -112,15 +143,16 @@ export default function FamilyTab() {
     );
   }
 
+  const babyName = home?.selectedBaby?.displayName ?? "your baby";
   const personas = home?.personas ?? [];
   const characters = home?.characters ?? [];
 
   return (
     <Screen onRefresh={load} refreshing={loading}>
       <View>
-        <Eyebrow>💛 Family</Eyebrow>
-        <PageTitle>Family & Characters</PageTitle>
-        <Lead>Everyone who stars in {home?.selectedBaby?.displayName ?? "your baby"}&apos;s stories.</Lead>
+        <Eyebrow>💛 {babyName}&apos;s family</Eyebrow>
+        <PageTitle>The people in their world</PageTitle>
+        <Lead>Real people and made-up friends who star in {babyName}&apos;s stories — drawn and voiced as themselves.</Lead>
       </View>
 
       {error ? (
@@ -139,7 +171,7 @@ export default function FamilyTab() {
           ListEmptyComponent={
             <View style={st.emptyInline}>
               <Text style={st.emptyEmoji}>💛</Text>
-              <Text style={st.emptyNote}>Add someone who loves {home?.selectedBaby?.displayName ?? "them"} to draw your family.</Text>
+              <Text style={st.emptyNote}>Add someone who loves {babyName} to draw your family.</Text>
             </View>
           }
           renderItem={({ item: p }) => (
@@ -149,17 +181,21 @@ export default function FamilyTab() {
                 initial={p.displayName.charAt(0)}
                 status={p.status}
                 avatarKey={p.avatarKey}
-                size={44}
+                size={46}
               />
               <View style={{ flex: 1 }}>
                 <Text style={st.item}>{p.displayName}</Text>
-                <Text style={st.metaInline}>{STATUS_LABEL[p.status] ?? p.status}</Text>
+                <Text style={st.metaInline}>
+                  {p.kind === "baby" ? "👶 Baby · " : ""}
+                  {STATUS_LABEL[p.status] ?? p.status}
+                </Text>
               </View>
+              <View style={[st.statusDot, { backgroundColor: STATUS_DOT[p.status] ?? C.soft }]} />
               <Text style={st.chev}>›</Text>
             </PersonaRow>
           )}
         />
-        <AddPill title="＋ Add family member" onPress={() => router.push("/family/new")} />
+        <DashedAddRow icon="＋" label={`Add someone who loves ${babyName}`} onPress={() => router.push("/family/new")} />
       </MotionCard>
 
       <MotionCard delay={140}>
@@ -179,7 +215,7 @@ export default function FamilyTab() {
             <Text style={st.item}>{c.displayName}</Text>
           )}
         />
-        <AddPill title="＋ Create character" onPress={() => router.push("/characters")} />
+        <DashedAddRow icon="🐻" label="Invent a made-up character" onPress={() => router.push("/characters")} />
       </MotionCard>
 
       {/* Issue 107: dev-only seed button. __DEV__ is true only in dev builds. */}
@@ -206,6 +242,7 @@ const st = StyleSheet.create({
   emptyNote: { flex: 1, fontSize: 14, color: C.muted, fontFamily: F.body, lineHeight: 20, marginTop: 4 },
   personaRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   metaInline: { fontSize: 13, color: C.muted, fontFamily: F.body, marginTop: 1 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
   chev: { color: C.soft, fontSize: 22, fontFamily: F.bodyBold },
   addBtn: {
     marginTop: 14,
@@ -218,6 +255,34 @@ const st = StyleSheet.create({
     alignSelf: "flex-start",
   },
   addBtnText: { fontFamily: F.bodyBold, fontSize: 14, color: C.primary },
+  dashedRow: {
+    marginTop: 14,
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: C.borderDashed,
+    borderStyle: "dashed",
+    backgroundColor: C.surfaceAlt,
+  },
+  dashedRowIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#3A2850",
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  dashedRowIcon: { fontSize: 18 },
+  dashedRowLabel: { flex: 1, fontFamily: F.bodyBold, fontSize: 14, color: C.soft },
   errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
   errorText: { color: C.danger, fontFamily: F.bodyBold },
 });

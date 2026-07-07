@@ -14,6 +14,9 @@ const ALL_STORY_TYPES: { key: StoryType; icon: string; label: string }[] = [
   { key: "learning", icon: "🎓", label: "Learning" },
 ];
 
+// Mirrors the web composer's "Try:" quick-fill chips (src/components/v2/composer.tsx).
+const TRY_THEMES = ["A trip to the moon", "The first snow", "Learning to share"];
+
 // R1 cut — Bedtime only ships; other types stay flag-gated for R2 (no
 // reachable UI for a deferred type, per "inert, not broken").
 const STORY_TYPES = isR1MultiStoryTypeEnabled()
@@ -147,9 +150,29 @@ export default function NewStorybookScreen() {
         </Card>
       ) : (
         <>
+          <Card>
+            <Text style={st.cardTitle}>What&apos;s the story about?</Text>
+            <Text style={st.copy}>One line is plenty — a moment, a lesson, an adventure.</Text>
+            <TextInput
+              value={theme}
+              onChangeText={setTheme}
+              multiline
+              placeholder="A trip to the moon, the first snow, learning to share…"
+              placeholderTextColor="#B7A992"
+              style={st.textarea}
+            />
+            <View style={st.tryRow}>
+              <Text style={st.tryLabel}>Try:</Text>
+              {TRY_THEMES.map((t) => (
+                <Chip key={t} label={t} active={theme === t} onPress={() => setTheme(t)} />
+              ))}
+            </View>
+          </Card>
+
           {personas.length > 0 ? (
             <Card>
-              <Text style={st.cardTitle}>Family starring</Text>
+              <Text style={st.cardTitle}>Who stars?</Text>
+              <Text style={st.copy}>Family who show up in tonight&apos;s story.</Text>
               <View style={st.chipRow}>
                 {personas.map((p) => (
                   <Chip
@@ -167,6 +190,7 @@ export default function NewStorybookScreen() {
           {characters.length > 0 ? (
             <Card>
               <Text style={st.cardTitle}>Characters</Text>
+              <Text style={st.copy}>Made-up friends invented in Family → Add character.</Text>
               <View style={st.chipRow}>
                 {characters.map((c) => (
                   <Chip
@@ -182,7 +206,7 @@ export default function NewStorybookScreen() {
           ) : null}
 
           <Card>
-            <Text style={st.cardTitle}>Tonight&apos;s story</Text>
+            <Text style={st.cardTitle}>What kind of story?</Text>
             <View style={st.chipRow}>
               {STORY_TYPES.map((t) => (
                 <Chip
@@ -199,26 +223,15 @@ export default function NewStorybookScreen() {
             ) : null}
           </Card>
 
-          <Card>
-            <Text style={st.cardTitle}>Theme</Text>
-            <TextInput
-              value={theme}
-              onChangeText={setTheme}
-              multiline
-              placeholder="What should this Storybook be about?"
-              placeholderTextColor="#B7A992"
-              style={st.textarea}
-            />
-            <PrimaryButton
-              title={generating ? "Starting…" : "✨ Generate illustrated Storybook"}
-              disabled={
-                !theme.trim() ||
-                generating ||
-                (selectedPersonaIds.length === 0 && selectedCharacterIds.length === 0)
-              }
-              onPress={generate}
-            />
-          </Card>
+          <PrimaryButton
+            title={generating ? "Starting…" : "✨ Generate illustrated Storybook"}
+            disabled={
+              !theme.trim() ||
+              generating ||
+              (selectedPersonaIds.length === 0 && selectedCharacterIds.length === 0)
+            }
+            onPress={generate}
+          />
         </>
       )}
     </Screen>
@@ -230,6 +243,8 @@ const st = StyleSheet.create({
   copy: { fontFamily: F.body, fontSize: 15, lineHeight: 22, color: C.muted },
   devHint: { fontFamily: F.body, fontSize: 12, lineHeight: 17, color: C.soft },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  tryRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 12 },
+  tryLabel: { fontFamily: F.bodyBold, fontSize: 13, color: C.soft, marginRight: 2 },
   textarea: {
     minHeight: 96,
     fontFamily: F.body,

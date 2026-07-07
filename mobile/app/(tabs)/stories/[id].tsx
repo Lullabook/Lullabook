@@ -21,6 +21,7 @@ import {
   type StorybookDetailWire,
   type StorybookPageWire,
 } from "@/lib/api";
+import { BookCover } from "@/components/story-cover";
 import { C, F } from "@/constants/theme";
 
 // Issue 145 — audio is cut from R1: the VoicePlayback component (issue 114)
@@ -275,14 +276,21 @@ export default function StorybookReaderScreen() {
 
   return (
     <Screen>
-      <View>
-        <Eyebrow>📚 Storybook</Eyebrow>
-        <PageTitle>{book.theme.slice(0, 48)}{book.theme.length > 48 ? "…" : ""}</PageTitle>
-        <Lead>
-          {generating
-            ? "Illustrating your pages — this usually takes a minute."
-            : `${TYPE_LABEL[book.storyType] ?? "Story"} · ${STATUS_LABEL[book.status] ?? book.status}`}
-        </Lead>
+      {/* Web parity (reader header): the same illustrated cover as the shelf,
+          beside the title — cover art matches everywhere via seed=book.id. */}
+      <View style={st.headerRow}>
+        <View style={st.headerCover}>
+          <BookCover theme={book.theme} status={book.status} seed={book.id} compact />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Eyebrow>📚 Storybook</Eyebrow>
+          <PageTitle>{book.theme.slice(0, 48)}{book.theme.length > 48 ? "…" : ""}</PageTitle>
+          <Lead>
+            {generating
+              ? "Illustrating your pages — this usually takes a minute."
+              : `${TYPE_LABEL[book.storyType] ?? "Story"} · ${STATUS_LABEL[book.status] ?? book.status}`}
+          </Lead>
+        </View>
       </View>
 
       {error ? (
@@ -443,6 +451,8 @@ export default function StorybookReaderScreen() {
 }
 
 const st = StyleSheet.create({
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  headerCover: { width: 64 },
   copy: { fontFamily: F.body, fontSize: 15, color: C.muted, marginTop: 8 },
   cardTitle: { fontFamily: F.displayBold, fontSize: 17, color: C.text },
   pageLabel: { fontFamily: F.bodyBold, fontSize: 13, color: C.soft, marginBottom: 10 },

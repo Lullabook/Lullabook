@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { getAudio } from "@/lib/audio";
-import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton, SkeletonCard, SkeletonRow } from "@/components/maya-ui";
+import { BrandGradient, Screen, Eyebrow, Lead, Card, PrimaryButton, GhostButton, SkeletonCard, SkeletonRow } from "@/components/maya-ui";
 import { RosterAvatar } from "@/components/roster-avatar";
 import { fetchHome, listVoiceClips, uploadVoiceClip, type HomeResponse } from "@/lib/api";
 import { isR1AudioEnabled, R1_CUT_MESSAGE } from "@/lib/r1-flags";
@@ -22,6 +22,29 @@ interface VoiceClipWire {
   transcript: string;
   durationSecs: number;
 }
+
+/**
+ * Header-band gradient pairs (mirrors web's HEADER_GRADIENTS in
+ * src/lib/v2-theme.ts). Picked by the same char-code hash roster-avatar.tsx
+ * uses for the avatar gradient, so a person's detail-screen header always
+ * pairs with the color they show up as everywhere else.
+ */
+const HEADER_GRADIENTS: [string, string][] = [
+  ["#8B6DF0", "#6A55C9"],
+  ["#E79A3C", "#F0A878"],
+  ["#E78AA0", "#C77FA6"],
+  ["#5FB389", "#7FC8A0"],
+  ["#3f9bb0", "#5fb3c0"],
+];
+function headerGradientFor(initial: string): [string, string] {
+  const idx = (initial.charCodeAt(0) || 0) % HEADER_GRADIENTS.length;
+  return HEADER_GRADIENTS[idx]!;
+}
+
+const KIND_LABEL: Record<"baby" | "adult", string> = {
+  baby: "👶 Baby",
+  adult: "🧑 Family member",
+};
 
 export default function FamilyMemberDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -168,36 +191,45 @@ export default function FamilyMemberDetailScreen() {
 
   return (
     <Screen>
-      <View>
-        <Eyebrow>💛 Family member</Eyebrow>
-        <PageTitle>{persona?.displayName ?? "Member"}</PageTitle>
-        <Lead>
-          {isR1AudioEnabled()
-            ? "Record a voice message for stories. The recorder self-consents to their own voice."
-            : `Part of the cast — drawn as themselves in every story they star in.`}
-        </Lead>
-      </View>
-
-      {error ? (
-        <Card style={st.errorCard}><Text style={st.errorText}>{error}</Text></Card>
-      ) : null}
+      <Eyebrow>💛 Family member</Eyebrow>
 
       {persona ? (
-        <Card>
-          <View style={st.personaRow}>
+        <BrandGradient
+          colors={headerGradientFor(persona.displayName.charAt(0))}
+          fallback={C.primary}
+          style={st.heroBand}
+        >
+          <View style={st.heroRing}>
             <RosterAvatar
               name={persona.displayName}
               initial={persona.displayName.charAt(0)}
               status={persona.status}
               avatarKey={persona.avatarKey}
-              size={56}
+              size={78}
             />
-            <View style={{ flex: 1 }}>
-              <Text style={st.personaName}>{persona.displayName}</Text>
-              <Text style={st.personaStatus}>{STATUS_LABEL[persona.status] ?? persona.status}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={st.heroName}>{persona.displayName}</Text>
+            <View style={st.heroBadgeRow}>
+              <View style={st.heroBadgeGhost}>
+                <Text style={st.heroBadgeGhostText}>{KIND_LABEL[persona.kind]}</Text>
+              </View>
+              <View style={st.heroBadgeSolid}>
+                <Text style={st.heroBadgeSolidText}>{STATUS_LABEL[persona.status] ?? persona.status}</Text>
+              </View>
             </View>
           </View>
-        </Card>
+        </BrandGradient>
+      ) : null}
+
+      <Lead>
+        {isR1AudioEnabled()
+          ? "Record a voice message for stories. The recorder self-consents to their own voice."
+          : `Part of the cast — drawn as themselves in every story they star in.`}
+      </Lead>
+
+      {error ? (
+        <Card style={st.errorCard}><Text style={st.errorText}>{error}</Text></Card>
       ) : null}
 
       {/* Issue 145 — audio cut from R1. The voice recorder + clips UI is gated
@@ -271,9 +303,29 @@ export default function FamilyMemberDetailScreen() {
 
 const st = StyleSheet.create({
   cardTitle: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
-  personaRow: { flexDirection: "row", alignItems: "center", gap: 14 },
-  personaName: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
-  personaStatus: { fontFamily: F.body, fontSize: 14, color: C.muted, marginTop: 2 },
+  heroBand: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    borderRadius: R.detail,
+    padding: 22,
+    shadowColor: "#3A2850",
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  heroRing: {
+    borderRadius: 43,
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.55)",
+  },
+  heroName: { fontFamily: F.display, fontSize: 24, color: "#fff", letterSpacing: -0.3 },
+  heroBadgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  heroBadgeGhost: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: R.pill, backgroundColor: "rgba(255,255,255,0.25)" },
+  heroBadgeGhostText: { fontFamily: F.bodyBold, fontSize: 12, color: "#fff" },
+  heroBadgeSolid: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: R.pill, backgroundColor: "rgba(255,255,255,0.95)" },
+  heroBadgeSolidText: { fontFamily: F.bodyBold, fontSize: 12, color: C.accentDark },
   copy: { fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 20, marginTop: 4 },
   ready: { fontFamily: F.bodyBold, fontSize: 14, color: C.greenText, marginTop: 10 },
   input: {

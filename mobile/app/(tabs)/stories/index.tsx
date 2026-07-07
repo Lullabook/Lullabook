@@ -16,6 +16,7 @@ import {
   InsetSeparator,
 } from "@/components/maya-ui";
 import { usePressFeedback } from "@/lib/use-press-feedback";
+import { BookCover, bookPalette } from "@/components/story-cover";
 import { listStorybooks, type StorybookSummary } from "@/lib/api";
 import { C, F } from "@/constants/theme";
 
@@ -44,20 +45,14 @@ const TYPE_LABEL: Record<string, string> = {
   learning: "Learning",
 };
 
-// Book-cover skies (canon §1.3 bookSky) — two-stop dusk gradients assigned by
-// title so each book keeps a consistent cover.
-const BOOK_SKIES: [string, string][] = [
-  ["#4a7f5a", "#e8c46a"],
-  ["#5b8fb0", "#cfe6f0"],
-  ["#2f9bb0", "#f6d9a0"],
-  ["#7a3f6e", "#f2a6b8"],
-  ["#3b2f6e", "#6a55c9"],
-  ["#8a5a86", "#f6b98c"],
-];
+// Banner/cover text creams — decorative cover-illustration colors (same
+// category as story-cover's BOOK_PALETTES, mirrored from the web's
+// .v2-continue-banner), not interactive UI tokens.
+const BANNER_CREAM = "#FAF4E6";
+const BANNER_CREAM_SOFT = "rgba(250,244,230,0.82)";
 
 function BookRow({ book }: { book: StorybookSummary }) {
   const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
-  const sky = BOOK_SKIES[(book.theme.charCodeAt(0) || 0) % BOOK_SKIES.length]!;
   return (
     <AnimatedPressable
       onPress={() => router.push(`/stories/${book.id}` as never)}
@@ -67,14 +62,43 @@ function BookRow({ book }: { book: StorybookSummary }) {
       accessibilityLabel={`Open ${book.theme}`}
       style={[st.row, style]}
     >
-      <BrandGradient colors={sky} fallback={C.primaryBg} style={st.cover}>
-        <Text style={st.coverEmoji}>📖</Text>
-      </BrandGradient>
+      <View style={st.coverWrap}>
+        <BookCover theme={book.theme} status={book.status} seed={book.id} compact />
+      </View>
       <View style={{ flex: 1 }}>
         <Text style={st.title}>{book.theme}</Text>
         <Text style={st.meta}>{statusLabel(book.status)} · {TYPE_LABEL[book.storyType] ?? "Story"}</Text>
       </View>
       <Text style={st.chev}>›</Text>
+    </AnimatedPressable>
+  );
+}
+
+/** Port of the web shelf's .v2-continue-banner — the most recent readable
+ * draft, resumable in one tap. Gradient reuses the book's own cover sky so
+ * banner and cover always match. */
+function ContinueBanner({ book }: { book: StorybookSummary }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
+  const sky = bookPalette(book.id).sky;
+  return (
+    <AnimatedPressable
+      onPress={() => router.push(`/stories/${book.id}` as never)}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      accessibilityRole="button"
+      accessibilityLabel={`Resume reading ${book.theme}`}
+      style={style}
+    >
+      <BrandGradient colors={sky} fallback={sky[0]} style={st.banner}>
+        <View style={st.bannerCover}>
+          <BookCover theme={book.theme} status={book.status} seed={book.id} compact />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={st.bannerLabel}>📖 Continue reading</Text>
+          <Text style={st.bannerTitle} numberOfLines={2}>{book.theme}</Text>
+          <Text style={st.bannerMeta}>{TYPE_LABEL[book.storyType] ?? "Story"} · ▶ Resume reading</Text>
+        </View>
+      </BrandGradient>
     </AnimatedPressable>
   );
 }
@@ -116,6 +140,11 @@ export default function StorybookLibraryScreen() {
     );
   }
 
+  // Web parity (stories-shelf.tsx): continueReading is the newest readable
+  // draft. listStorybooks already returns newest-first, so find() is enough —
+  // no new API calls.
+  const resume = books.find((b) => b.status === "draft") ?? null;
+
   return (
     <ListScreen
       data={books}
@@ -128,6 +157,7 @@ export default function StorybookLibraryScreen() {
             <PageTitle>Your Storybooks</PageTitle>
             <Lead>Illustrated books you&apos;ve generated — tap to read or watch them finish.</Lead>
           </View>
+          {resume ? <ContinueBanner book={resume} /> : null}
           <PrimaryButton title="✨ New Storybook" onPress={() => router.push("/create" as never)} />
           {error ? (
             <Card style={st.errorCard}>
@@ -145,7 +175,7 @@ export default function StorybookLibraryScreen() {
           onCta={() => router.push("/create" as never)}
         />
       }
-      ItemSeparatorComponent={() => <InsetSeparator indent={66} />}
+      ItemSeparatorComponent={() => <InsetSeparator indent={70} />}
       onRefresh={load}
       refreshing={loading}
     />
@@ -165,15 +195,30 @@ const st = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
   },
-  cover: {
-    width: 52,
-    height: 64,
-    borderRadius: 12,
-    overflow: "hidden",
+  coverWrap: { width: 56 },
+  banner: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 14,
+    borderRadius: 22,
+    padding: 16,
+    overflow: "hidden",
+    shadowColor: "#3A2850",
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
   },
-  coverEmoji: { fontSize: 26 },
+  bannerCover: { width: 64 },
+  bannerLabel: {
+    fontFamily: F.bodyBold,
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: BANNER_CREAM_SOFT,
+  },
+  bannerTitle: { fontFamily: F.display, fontSize: 19, color: BANNER_CREAM, marginTop: 2 },
+  bannerMeta: { fontFamily: F.bodyBold, fontSize: 13, color: BANNER_CREAM_SOFT, marginTop: 6 },
   title: { fontFamily: F.displayBold, fontSize: 16, color: C.text },
   meta: { fontFamily: F.body, fontSize: 13, color: C.muted, marginTop: 4 },
   chev: { color: C.soft, fontSize: 24, fontFamily: F.bodyBold },

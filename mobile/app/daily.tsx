@@ -2,7 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
-import { Screen, Eyebrow, Lead, Card, Chip, EmptyState, PrimaryButton, SkeletonCard, ListScreen, InsetSeparator } from "@/components/maya-ui";
+import {
+  Screen,
+  Eyebrow,
+  PageTitle,
+  Lead,
+  Card,
+  Chip,
+  EmptyState,
+  PrimaryButton,
+  SkeletonCard,
+  ListScreen,
+  InsetSeparator,
+  BrandGradient,
+} from "@/components/maya-ui";
 import { usePressFeedback } from "@/lib/use-press-feedback";
 import {
   createMoment,
@@ -169,7 +182,8 @@ export default function DailyScreen() {
       ListHeaderComponent={
         <>
           <View>
-            <Eyebrow>📔 Their days</Eyebrow>
+            <Eyebrow>📔 {babyName}&apos;s days</Eyebrow>
+            <PageTitle>Daily Life</PageTitle>
             <Lead>
               {filter === "firsts"
                 ? `Celebrate ${babyName}'s milestones — then turn one into a Story when you're ready.`
@@ -200,6 +214,7 @@ export default function DailyScreen() {
           ) : (
             <Card>
               <Text style={st.h}>What happened today?</Text>
+              <Text style={st.subcopy}>A milestone, a giggle, a hard nap day — anything worth remembering.</Text>
               <TextInput
                 value={draft}
                 onChangeText={setDraft}
@@ -242,12 +257,12 @@ export default function DailyScreen() {
         />
       }
       ListFooterComponent={
-        <View style={st.why}>
+        <BrandGradient colors={["#6A55C9", "#B5739E"]} fallback={C.primary} style={st.why}>
           <Text style={st.whyTitle}>Why this helps ✨</Text>
           <Text style={st.whyText}>
             Real moments teach Lullabook who {babyName} is — so every Story sounds like their actual life.
           </Text>
-        </View>
+        </BrandGradient>
       }
       ItemSeparatorComponent={() => <InsetSeparator indent={56} />}
       onRefresh={load}
@@ -262,6 +277,7 @@ const st = StyleSheet.create({
   cardTitle: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
   copy: { fontFamily: F.body, fontSize: 15, lineHeight: 22, color: C.muted },
   h: { fontFamily: F.displayBold, fontSize: 17, color: C.text },
+  subcopy: { fontFamily: F.body, fontSize: 14, color: C.soft, marginTop: -6 },
   textarea: {
     minHeight: 84,
     fontFamily: F.body,
