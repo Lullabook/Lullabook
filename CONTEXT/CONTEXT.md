@@ -521,9 +521,71 @@ advances only on a generation that reaches Story text. See
   [Story Type](#story-type) — each restored *with its own tests* so it is not a new way to
   break. The cut-flag scaffolding stays so either can be re-cut by env (ADR-0026).
 
+## v20 "Working monetization (R1 entry gates)" — incoming language (PRD v20)
+
+> Grilled 2026-07-07 (grounded in a codebase read: the monetization spine already exists in
+> `src/services/{entitlement,story-cap,credit-ledger,subscription,email-plus-vpc,first-open}.ts`
+> and is largely built; this effort **wires the gates and the mobile purchase path**, it does
+> not build billing from scratch). Ships the R1 **one-plan** entry (Just Us) with a
+> Simulator-verifiable fake purchase, and closes the **COPPA consent hole** on Baby Persona
+> creation. Real Apple IAP is deferred to the EAS/TestFlight milestone. See
+> `planning/prd-v20-monetization-r1.md` and
+> [ADR-0027](docs/adr/0027-purchase-controller-fake-first-r1-entry.md). Audio, multi-family,
+> and Asia stay cut (PRD v16 / ADR-0026).
+
+- **PurchaseController** — the mobile abstraction over "start the subscription." It has two
+  implementations behind one interface: a **FakePurchaseController** (R1 / Simulator) that
+  activates the trial through the prod-guarded [Start-trial endpoint](#start-trial-endpoint),
+  and a **real `react-native-purchases` (RevenueCat) implementation** deferred to the EAS
+  milestone. Both converge on the **same server subscription state** — the real one via the
+  RevenueCat webhook, the fake one via the endpoint — so swapping in the native SDK later
+  changes *who tells the server*, not the state-flip. Because `react-native-purchases` is a
+  native module, it cannot run in Expo Go; the fake keeps the whole entry flow verifiable on
+  the Simulator (ADR-0027). _Avoid_: "mock" (this is a shipped controller, not a test double),
+  "IAP" alone (that names the real path only).
+
+- **Start-trial endpoint** — the **prod-guarded** `POST /api/billing/start-trial` that
+  activates a 7-day [Trial](#trial) [Subscription](#subscription) idempotently (status
+  `active`, plan `just_us`, `trialEndsAt = now + 7d`) — the **same state the RevenueCat
+  webhook writes**. It is refused outside non-production / `DEV_*` env so it can never mint a
+  free subscription for a real payer. The [FakePurchaseController](#purchasecontroller) calls
+  it; real IAP does not (the webhook does). _Avoid_: "checkout" (that is the Stripe/web path).
+
+- **Trial expiry** — the R1 [Trial](#trial) now carries a **`trialEndsAt`** timestamp;
+  `SubscriptionService.isActive` is `active` **AND** `now < trialEndsAt`. Past expiry the
+  Household re-hits the paywall (403 → paywall). **Auto-renew / charge / `past_due` grace is
+  RevenueCat's job and is deferred** — R1 models the *end* of the trial, not the billing that
+  would follow it.
+
+- **Consent gate (Baby Persona)** — the server check `requireConsentVerified(familyId)` that
+  **blocks Baby Persona (minor biometric LoRA) creation until the Household is
+  `consent_verified`** via [Email-Plus VPC](#email-plus-vpc). This closes a live COPPA hole:
+  before v20, `PersonaService.createBaby` had **no** consent check. On the mobile surface,
+  **consent and payment are separate gates** (ADR-0018/0025: Apple IAP cannot prove payer
+  identity, so payment is *not* VPC on iOS) — the [Trial](#trial) card unlocks *paying* for
+  likeness; **Email-Plus** unlocks *the legal right* to create it. Both are required before a
+  baby's photos are accepted. Fails **closed** (a consent-engine error denies, never permits).
+
+- **R1 entry flow** — the canonical first-open order the app walks a new Household through:
+  **demo → signup → trial → consent → photos** (`FirstOpenService.getFlow`). The
+  [Demo Story](#demo-story) earns trust before the wall; the wall appears at the first gated
+  action (403 → paywall); consent (Email-Plus) and payment (trial) are both cleared before
+  the baby's photos are accepted. If the demo asset fails, the flow degrades to
+  skip-to-paywall (`onDemoFailed`), never a white screen.
+
+- **Demo Story** — the **pre-baked, baby-free** Story ("Maya and the Moon") shown first-open
+  as the free "aha" **before** any card or signup. Static content (no generation spend, no
+  child likeness), served by `DemoStoryService`. Distinct from a real [Story](#story): it
+  stars no [Persona](#persona), requires no card, and is the same for every user.
+  _Avoid_: "sample"/"preview" (ambiguous); "template" (it is not a starting point a user edits).
+
 ---
 
-_Last updated 2026-07-06: added PRD v19 language (Working core loop — Placeholder art
+_Last updated 2026-07-07: added PRD v20 language (Working monetization / R1 entry gates —
+PurchaseController fake-first, Start-trial endpoint, Trial expiry, Consent gate on Baby
+Persona [closes the COPPA hole], R1 entry flow, Demo Story; ADR-0027 records the fake-first
+purchase seam and the payment-vs-consent split. R1 ships one plan [Just Us]; real Apple IAP
+deferred to EAS). Prior update 2026-07-06: added PRD v19 language (Working core loop — Placeholder art
 degradation, Partial un-cut of Journal + Learning; ADR-0026 relaxes the PRD v16 ruthless cut
 for those two only). Prior update 2026-06-23: added PRD v16/v17 language (Ruthless cut, Inert-not-broken, Daily
 Notes, Verify gate, Honest seed harness, Error capture [Sentry, fail-open, error→issue]; amends
