@@ -134,7 +134,9 @@ export default function AddFamilyScreen() {
       </View>
 
       <BrandGradient colors={HERO_GRAD} fallback={C.primary} style={st.preview}>
-        <RosterAvatar name={name.trim() || "New member"} initial={previewInitial} status="training" size={60} />
+        <View style={st.previewRing}>
+          <RosterAvatar name={name.trim() || "New member"} initial={previewInitial} status="training" size={60} />
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={st.previewName}>{name.trim() || "New member"}</Text>
           <View style={st.previewPill}><Text style={st.previewPillText}>{previewSubtitle}</Text></View>
@@ -252,7 +254,23 @@ const st = StyleSheet.create({
   help: { color: C.muted, fontFamily: F.body, fontSize: 13, lineHeight: 19 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  preview: { flexDirection: "row", gap: 14, alignItems: "center", borderRadius: 24, padding: 18 },
+  preview: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "center",
+    borderRadius: 24,
+    padding: 18,
+    shadowColor: "#6A55C9",
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  previewRing: {
+    borderRadius: 34,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.55)",
+  },
   previewName: { color: C.surface, fontFamily: F.displayBold, fontSize: 18 },
   previewPill: { alignSelf: "flex-start", marginTop: 4, backgroundColor: "rgba(255,253,249,0.25)", borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
   previewPillText: { color: C.surface, fontFamily: F.bodyBold, fontSize: 12 },

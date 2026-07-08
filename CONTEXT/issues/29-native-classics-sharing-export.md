@@ -1,32 +1,7 @@
 # 29 — Personalized Classics + sharing + export
 
-- Type: AFK · Triage: ready-for-agent
-- Parent: [PRD v3 — Native iOS](../planning/prd-v3-native-ios.md)
-- Implementer: Cursor Composer 2.5, TDD
+Status: cut
 
-## What to build
+The Classics-recast and non-indexed Share-link (mint/revoke, expiry/passcode, likeness warning) portions were later deferred to R2 in the R1 ruthless-cut (prd-v14/v16) and confirmed inert by 149-dead-ui-endpoint-sweep.md. The PDF-export-via-native-share-sheet portion is the part that survived and was carried forward/rebuilt (132-pdf-export-finalized-storybook.md, 161-pdf-export-download-share-sheet.md).
 
-Keepsake breadth and sharing. A parent picks a **Personalized Classic** from the
-curated public-domain catalog and has their Personas recast into it (same
-illustrated pipeline + Style Bible). A parent mints/revokes a non-indexed **Share
-link** (optional expiry/passcode, likeness warning) via the native share sheet,
-and **Exports** a finalized Storybook as a PDF shared via the native share sheet.
-Reuses existing services (`generateFromClassic`, sharing, export) through Bearer
-routes.
-
-## Acceptance criteria
-
-- [ ] A parent can select a **Personalized Classic** from the curated
-      **public-domain** catalog only; recasting reuses the illustrated pipeline +
-      Style Bible; custom twists pass Brief moderation (ADR-0017, ADR-0010).
-- [ ] A parent can **mint and revoke** a non-indexed **Share link** (optional
-      expiry/passcode) with a likeness warning, via the native share sheet; revoke
-      immediately kills access (ADR-0013).
-- [ ] A parent can **Export** a finalized Storybook as a **PDF** and share it via
-      the native share sheet.
-- [ ] Tested at the service seam (catalog id validation, share mint/revoke, export)
-      with fakes; prior art `09-export-pdf`, `10-sharing`, `22-personalized-classics`.
-
-## Blocked by
-
-- [27 — Curation + library + immersive reader + offline](./27-native-curation-library-reader.md)
+(condensed 2026-07-07 — full spec in git history)

@@ -1,13 +1,31 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { StyleSheet, Text, View, Pressable } from "react-native";
+import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
 import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
-import { BrandGradient, HERO_GRAD, Screen, Card, SkeletonCard, SkeletonRow, Twinkle } from "@/components/maya-ui";
+import { BrandGradient, HERO_GRAD, Screen, Card, Float, Twinkle, SkeletonCard, SkeletonRow } from "@/components/maya-ui";
 import { fetchHome, type HomeResponse } from "@/lib/api";
 import { usePressFeedback } from "@/lib/use-press-feedback";
 import { C, F, R } from "@/constants/theme";
 
 const AnimatedPressable = createAnimatedComponent(Pressable);
+
+// Web port (src/components/v2/tokens.ts AVATAR_GRADIENTS / world.ts) — two-tone
+// gradient pairs cycled across the avatar rail so every roster chip reads as
+// part of the same "Maya's World" palette instead of a flat single color.
+const AVATAR_GRADIENT_PAIRS: [string, string][] = [
+  ["#8B6DF0", "#6A55C9"],
+  ["#E79A3C", "#F6C177"],
+  ["#E78AA0", "#F2A6B8"],
+  ["#5FB389", "#9FD8B1"],
+  ["#3f9bb0", "#7fc8c0"],
+];
+
+// Web port (src/components/v2/home-dashboard.tsx cardIconBg) — per-card icon
+// gradients so the dashboard grid isn't four flat-colored squares.
+const CONTINUE_GRAD: [string, string] = ["#8B6DF0", "#6A55C9"];
+const JOURNAL_GRAD: [string, string] = ["#F6C177", "#E79A3C"];
+const STORYBOOK_GRAD: [string, string] = ["#5FB389", "#9FD8B1"];
+const FAMILY_GRAD: [string, string] = ["#E78AA0", "#F2A6B8"];
 
 /** A dashboard card row with the shared press feedback + a11y role. */
 function DashCard({
@@ -32,6 +50,71 @@ function DashCard({
       style={[st.dashCard, style, pressStyle]}
     >
       {children}
+    </AnimatedPressable>
+  );
+}
+
+/** A gradient icon tile shared by the dashboard cards (web: cardIconBg map). */
+function DashIcon({ colors, icon }: { colors: [string, string]; icon: string }) {
+  return (
+    <BrandGradient colors={colors} fallback={colors[0]} style={st.dashIcon}>
+      <Text style={st.dashIconText}>{icon}</Text>
+    </BrandGradient>
+  );
+}
+
+/** Web port (v2-section-head / v2-section-title) — title + optional trailing link. */
+function SectionHead({ title, actionLabel, onPressAction }: { title: string; actionLabel?: string; onPressAction?: () => void }) {
+  return (
+    <View style={st.sectionHead}>
+      <Text style={st.sectionTitle}>{title}</Text>
+      {actionLabel && onPressAction ? (
+        <Pressable onPress={onPressAction} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={actionLabel}>
+          <Text style={st.sectionLink}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+interface AvatarItem {
+  id: string;
+  name: string;
+  initial: string;
+  role: string;
+  badge: string;
+  status?: "training" | "ready" | "failed";
+}
+
+/** Web port (v2-avatar-chip) — gradient circle, name, role, status/badge corner. */
+function AvatarChip({ item, index, onPress }: { item: AvatarItem; index: number; onPress: () => void }) {
+  const { style, onPressIn, onPressOut } = usePressFeedback({ kind: "selection" });
+  const grad = AVATAR_GRADIENT_PAIRS[index % AVATAR_GRADIENT_PAIRS.length]!;
+  const statusColor = item.status === "ready" ? C.green : item.status === "training" ? C.accent : item.status === "failed" ? C.danger : undefined;
+  return (
+    <AnimatedPressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name} — ${item.role}`}
+      style={[st.avatarChip, style]}
+    >
+      <View>
+        <BrandGradient colors={grad} fallback={grad[0]} style={st.avatarCircle}>
+          <Text style={st.avatarCircleText}>{item.initial}</Text>
+        </BrandGradient>
+        <View style={st.avatarBadge}>
+          <Text style={st.avatarBadgeText}>{item.badge}</Text>
+        </View>
+        {statusColor ? <View style={[st.avatarStatusDot, { backgroundColor: statusColor }]} /> : null}
+      </View>
+      <Text style={st.avatarName} numberOfLines={1}>
+        {item.name}
+      </Text>
+      <Text style={st.avatarRole} numberOfLines={1}>
+        {item.role}
+      </Text>
     </AnimatedPressable>
   );
 }
@@ -77,16 +160,60 @@ export default function HomeScreen() {
   const babyInitial = babyName.charAt(0).toUpperCase();
   const familyCount = home?.personas?.length ?? 0;
 
+  // Web port (services/world.ts getHome avatars) — baby persona first, then the
+  // rest of the family roster, then a handful of not-yet-promoted characters.
+  // Built from data `fetchHome` already loaded — no new endpoint.
+  const personas = home?.personas ?? [];
+  const babyPersonas = personas.filter((p) => p.kind === "baby");
+  const adultPersonas = personas.filter((p) => p.kind !== "baby");
+  const characters = home?.characters ?? [];
+  const worldAvatars: AvatarItem[] = [
+    ...babyPersonas.map((p) => ({
+      id: p.id,
+      name: p.displayName,
+      initial: p.displayName.charAt(0).toUpperCase(),
+      role: "Star",
+      badge: "⭐",
+      status: p.status,
+    })),
+    ...adultPersonas.map((p) => ({
+      id: p.id,
+      name: p.displayName,
+      initial: p.displayName.charAt(0).toUpperCase(),
+      role: "Family",
+      badge: "💛",
+      status: p.status,
+    })),
+    ...characters.slice(0, 4).map((c) => ({
+      id: c.id,
+      name: c.displayName,
+      initial: c.displayName.charAt(0).toUpperCase(),
+      role: "Character",
+      badge: "🐻",
+    })),
+  ];
+
   return (
     <Screen onRefresh={load} refreshing={loading}>
-      {/* Hero — brand 3-stop dusk gradient (REFERENCE.md §1.3) */}
+      {/* Hero — brand 3-stop dusk gradient (REFERENCE.md §1.3), ported from
+          v2-hero: bigger floating star + twinkling background dots. */}
       <BrandGradient colors={HERO_GRAD} fallback={C.primary} style={st.hero}>
+        <Twinkle>
+          <View style={[st.heroTwinkle, { top: 26, left: 40, width: 6, height: 6 }]} />
+        </Twinkle>
+        <Twinkle>
+          <View style={[st.heroTwinkle, { top: 54, right: 46, width: 5, height: 5, backgroundColor: "#FFF3D6" }]} />
+        </Twinkle>
+        <Twinkle>
+          <View style={[st.heroTwinkle, { bottom: 64, left: 84, width: 5, height: 5 }]} />
+        </Twinkle>
+
         <Text style={st.heroEyebrow}>✨ A growing world starring</Text>
-        <View style={st.heroStar}>
-          <Twinkle>
+        <Float>
+          <View style={st.heroStar}>
             <Text style={st.heroStarText}>{babyInitial}</Text>
-          </Twinkle>
-        </View>
+          </View>
+        </Float>
         <Text style={st.heroTitle}>{babyName}&apos;s World</Text>
         <Text style={st.heroLead}>
           A whole world of stories starring {babyName} — and everyone who loves them.
@@ -109,70 +236,93 @@ export default function HomeScreen() {
 
       {/* Issue 106: Daily-life / Journal as a first-class destination — a
           prominent full-width featured card above the dashboard grid, not
-          buried behind one Home card. */}
+          buried behind one Home card. Restyled to the soft cream/lavender
+          nudge-card look (web: world-journal-cards.tsx cardStyle) instead of
+          a flat accent fill. */}
       <DashCard
         onPress={() => router.push("/daily")}
         label={`Open ${babyName}'s Journal`}
         style={st.journalHero}
       >
-        <View style={st.journalIcon}>
+        <BrandGradient colors={["#FFFDF9", "#FBEBCE"]} fallback={C.primaryBg} style={st.journalIcon}>
           <Text style={st.journalIconText}>📖</Text>
-        </View>
+        </BrandGradient>
         <View style={{ flex: 1 }}>
-          <Text style={st.journalLabel}>✨ {babyName}&apos;s Journal</Text>
+          <Text style={st.journalLabel} numberOfLines={1}>
+            ✨ {babyName}&apos;s Journal
+          </Text>
           <Text style={st.journalSub}>Log a moment, see the timeline, make it a story →</Text>
         </View>
       </DashCard>
 
-      {/* Dashboard cards */}
+      {/* Dashboard cards — web port (home-dashboard.tsx DashboardCard): gradient
+          icon tiles + uniform card border/shadow instead of flat icon fills. */}
       <View style={st.cardGrid}>
         <DashCard onPress={() => router.push("/stories" as never)} label="Continue reading">
           {/* Issue 166 — 🌙 (the last bedtime story) distinct from 📖 (Journal hero) */}
-          <View style={[st.dashIcon, { backgroundColor: C.primary }]}>
-            <Text style={st.dashIconText}>🌙</Text>
-          </View>
+          <DashIcon colors={CONTINUE_GRAD} icon="🌙" />
           <View style={{ flex: 1 }}>
-            <Text style={st.dashTitle}>Continue reading</Text>
-            <Text style={st.dashSub}>Your last story →</Text>
+            <Text style={st.dashTitle} numberOfLines={1}>
+              Continue reading
+            </Text>
+            <Text style={st.dashSub} numberOfLines={1}>
+              Your last story →
+            </Text>
           </View>
         </DashCard>
 
-        <DashCard
-          onPress={() => router.push("/daily")}
-          label="What happened today?"
-          style={{ borderColor: C.accentLight }}
-        >
+        <DashCard onPress={() => router.push("/daily")} label="What happened today?">
           {/* Issue 166 — ✍️ (capturing/writing) distinct from ✨ (Create tab) */}
-          <View style={[st.dashIcon, { backgroundColor: C.accent }]}>
-            <Text style={st.dashIconText}>✍️</Text>
-          </View>
+          <DashIcon colors={JOURNAL_GRAD} icon="✍️" />
           <View style={{ flex: 1 }}>
-            <Text style={st.dashTitle}>What happened today?</Text>
-            <Text style={st.dashSub}>Log a moment to personalize →</Text>
+            <Text style={st.dashTitle} numberOfLines={1}>
+              What happened today?
+            </Text>
+            <Text style={st.dashSub} numberOfLines={1}>
+              Log a moment to personalize →
+            </Text>
           </View>
         </DashCard>
 
         <DashCard onPress={() => router.push("/stories" as never)} label="Your storybooks">
-          <View style={[st.dashIcon, { backgroundColor: C.green }]}>
-            <Text style={st.dashIconText}>📚</Text>
-          </View>
+          <DashIcon colors={STORYBOOK_GRAD} icon="📚" />
           <View style={{ flex: 1 }}>
-            <Text style={st.dashTitle}>Your storybooks</Text>
-            <Text style={st.dashSub}>Open the library →</Text>
+            <Text style={st.dashTitle} numberOfLines={1}>
+              Your storybooks
+            </Text>
+            <Text style={st.dashSub} numberOfLines={1}>
+              Open the library →
+            </Text>
           </View>
         </DashCard>
 
         <DashCard onPress={() => router.push("/family")} label="Family">
-          <View style={[st.dashIcon, { backgroundColor: C.rose }]}>
-            <Text style={st.dashIconText}>💛</Text>
-          </View>
+          <DashIcon colors={FAMILY_GRAD} icon="💛" />
           <View style={{ flex: 1 }}>
-            <Text style={st.dashTitle}>Family</Text>
-            <Text style={st.dashSub}>
+            <Text style={st.dashTitle} numberOfLines={1}>
+              Family
+            </Text>
+            <Text style={st.dashSub} numberOfLines={1}>
               {familyCount} {familyCount === 1 ? "person" : "people"} who love {babyName} →
             </Text>
           </View>
         </DashCard>
+      </View>
+
+      {/* "Everyone in {baby}'s world" avatar rail — web port (world/page.tsx
+          v2-avatar-row), built from the personas/characters `fetchHome`
+          already returns (no new endpoint). */}
+      <View>
+        <SectionHead title={`Everyone in ${babyName}'s world`} actionLabel="Manage family →" onPressAction={() => router.push("/family")} />
+        {worldAvatars.length === 0 ? (
+          <Text style={st.emptyRosterText}>Add family members and characters to fill this world.</Text>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.avatarRow}>
+            {worldAvatars.map((item, i) => (
+              <AvatarChip key={item.id} item={item} index={i} onPress={() => router.push("/family")} />
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {/* R1 has no free tier — the plan row says plan-active or trial-available,
@@ -195,38 +345,56 @@ const st = StyleSheet.create({
     padding: 28,
     alignItems: "center",
     gap: 8,
+    overflow: "hidden",
+    // Web port (V2_SHADOW.hero) — plum-tinted glow, never gray/black.
+    shadowColor: "#6A55C9",
+    shadowOpacity: 0.32,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 8,
+  },
+  heroTwinkle: {
+    position: "absolute",
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
   },
   heroEyebrow: {
     fontFamily: F.bodyBold,
     fontSize: 12,
     letterSpacing: 1.4,
     textTransform: "uppercase",
-    color: C.accentLight,
+    color: "#FFE9C9",
   },
   heroStar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     backgroundColor: "rgba(255,253,249,0.22)",
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.5)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
   },
   heroStarText: {
     fontFamily: F.display,
-    fontSize: 30,
+    fontSize: 38,
     color: C.surface,
   },
   heroTitle: {
     fontFamily: F.display,
-    fontSize: 26,
+    fontSize: 28,
     color: C.surface,
     textAlign: "center",
   },
   heroLead: {
     fontFamily: F.body,
     fontSize: 14,
-    color: "rgba(255,253,249,0.8)",
+    color: "#FBEAF3",
     textAlign: "center",
     lineHeight: 20,
     maxWidth: 280,
@@ -250,23 +418,27 @@ const st = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
-    backgroundColor: C.accent,
-    borderWidth: 0,
+    backgroundColor: C.surfaceAlt,
+    borderColor: "#D4C4F0",
+    borderWidth: 1,
     borderRadius: R.card,
     padding: 18,
     marginBottom: 4,
+    shadowColor: "#3A2850",
+    shadowOpacity: 0.06,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
   },
   journalIcon: {
     width: 48,
     height: 48,
     borderRadius: 16,
-    backgroundColor: "rgba(255,253,249,0.25)",
     alignItems: "center",
     justifyContent: "center",
   },
   journalIconText: { fontSize: 24 },
-  journalLabel: { fontFamily: F.displayBold, fontSize: 17, color: C.surface },
-  journalSub: { fontFamily: F.body, fontSize: 13, color: "rgba(255,253,249,0.85)", marginTop: 2, lineHeight: 18 },
+  journalLabel: { fontFamily: F.displayBold, fontSize: 17, color: C.text },
+  journalSub: { fontFamily: F.body, fontSize: 13, color: C.muted, marginTop: 2, lineHeight: 18 },
   dashCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -275,7 +447,13 @@ const st = StyleSheet.create({
     borderColor: C.border,
     borderWidth: 1,
     borderRadius: R.card,
-    padding: 16,
+    padding: 20,
+    // Web port (V2_SHADOW.charCard) — plum-tinted, matches web card shadow.
+    shadowColor: "#3A2850",
+    shadowOpacity: 0.07,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
   dashIcon: {
     width: 44,
@@ -287,6 +465,50 @@ const st = StyleSheet.create({
   dashIconText: { fontSize: 20 },
   dashTitle: { fontFamily: F.displayBold, fontSize: 16, color: C.text },
   dashSub: { fontFamily: F.body, fontSize: 13, color: C.muted, marginTop: 2 },
+  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  sectionTitle: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
+  sectionLink: { fontFamily: F.bodyBold, fontSize: 13, color: C.primary },
+  emptyRosterText: { fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 20 },
+  avatarRow: { gap: 18, paddingRight: 4 },
+  avatarChip: { alignItems: "center", gap: 8, width: 76 },
+  avatarCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: C.surface,
+    shadowColor: "#3A2850",
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  avatarCircleText: { fontFamily: F.displayBold, fontSize: 22, color: C.surface },
+  avatarBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: C.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarBadgeText: { fontSize: 11 },
+  avatarStatusDot: {
+    position: "absolute",
+    top: 0,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: C.surface,
+  },
+  avatarName: { fontFamily: F.bodyBold, fontSize: 12, color: C.text, textAlign: "center" },
+  avatarRole: { fontFamily: F.body, fontSize: 10, color: C.soft, textAlign: "center" },
   planRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   planDot: { width: 9, height: 9, borderRadius: 5 },
   meta: { fontSize: 14, color: C.muted, fontFamily: F.bodyBold },

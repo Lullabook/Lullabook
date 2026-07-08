@@ -1,32 +1,12 @@
 # 150 — Sentry on the Next.js API: capture, scrub child data, fail-open
 
-Triage: ready-for-agent
+Status: shipped
 
-## Parent
-PRD v17 — `CONTEXT/planning/prd-v17-test-framework-and-logging.md`. Track T1.
+Wired `@sentry/nextjs` into the API/server (src/lib/sentry-server.config.ts,
+src/lib/sentry-scrub.ts): captures API-route errors, rejections, Inngest job failures.
+`beforeSend` scrubs request bodies, photo URLs, signed storage URLs, LoRA IDs, auth tokens
+(`sendDefaultPii: false`, COPPA/GDPR invariant). Fail-open, <10ms overhead; EU region; disabled
+under test. Note: Next.js API routes remain the mobile app's backend — not superseded by the
+mobile-only pivot (that cut the web frontend only). Complements 151 (Expo client), not replaced by it.
 
-## What to build
-Wire `@sentry/nextjs` into the API/server (the wizard generates client/server/edge config +
-`instrumentation.ts` + source-map upload). Capture unhandled API-route errors and rejections
-automatically; `captureException` inside Inngest job catch-blocks. Implement **`beforeSend`
-scrubbing** + server-side scrubbing rules so no child/PII data is ever sent. Logging must be
-**fire-and-forget and fail-open**. EU (Frankfurt) region; `sendDefaultPii: false`.
-
-## Acceptance criteria
-- [ ] API-route throws + unhandled rejections + Inngest job failures are captured with stack +
-      release + environment.
-- [ ] **Scrubbing is tested:** request bodies, photo URLs/paths, signed Supabase storage URLs,
-      LoRA identifiers, consent/auth tokens, and secrets are stripped before send (COPPA/GDPR
-      invariant). `sendDefaultPii: false`.
-- [ ] **Fails open:** with the Sentry SDK unreachable/misconfigured, requests and generation
-      still succeed; capture adds < 10ms on the happy path and never blocks a response.
-- [ ] Sentry is disabled (or DSN-less) under Vitest/Playwright (`environment !== "test"`); no
-      secret rides a public env var.
-
-## Verification-command
-```bash
-npm test -- 150-sentry-scrub-failopen && tsc --noEmit
-```
-
-## Blocked by
-_none_
+(condensed 2026-07-07 — full spec in git history)

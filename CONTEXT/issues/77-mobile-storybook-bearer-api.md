@@ -1,31 +1,12 @@
 # 77 — Bearer API for Storybook create/generate + list
 
-Triage: ready-for-agent
+Status: shipped
 
-## What to build
-Expose Storybook generation and listing to the native app over the Bearer API,
-mirroring the existing web server actions/`src/services/storybook.ts`. No pipeline
-changes — this is the route layer the mobile client needs.
+Canonical routes, still binding: `POST /api/storybooks` (create/generate from a Brief,
+enforces `isActive` subscription gate, dev-forceable via `DEV_FORCE_SUBSCRIPTION`,
+returns id + `generating` status, kicks the durable workflow) and `GET /api/storybooks`
+(list with status `generating|draft|failed|finalized`). `mobile/lib/api.ts` gained
+`createStorybook`, `listStorybooks`, `getStorybook`. No token → 401; inactive gate →
+same denial as web. Closed as code-complete (GH #20).
 
-- `POST /api/storybooks` — create/generate a Storybook from a Brief (starring cast +
-  Story Type + theme, optional Moment-seeded note) for the caller's Family. Enforces the
-  existing `isActive` gate (force-unlocked in dev via `DEV_FORCE_SUBSCRIPTION`). Returns
-  the new Storybook id + initial `generating` status; kicks the existing durable
-  workflow.
-- `GET /api/storybooks` — list the Family/World's Storybooks with status
-  (`generating | draft | failed | finalized`).
-- Confirm whether `GET /api/storybooks/[id]` already returns Pages + per-Page candidates
-  for the reader (issue 79); if not, note the gap for that slice.
-- `mobile/lib/api.ts`: add `createStorybook(brief)`, `listStorybooks()`, and a
-  `getStorybook(id)` typed client.
-
-## Acceptance criteria
-- A Member with an active (or dev-forced) subscription can create a Storybook and list
-  their books over Bearer auth; no token → **401**; inactive gate → the same denial the
-  web path returns.
-- Routes tested at the service seam with Anthropic/fal/moderation adapters faked
-  (401 + gate + create→list round-trip); existing tests stay green.
-- No new domain logic or migration.
-
-## Blocked by
-Nothing (storybook service + pipeline exist). Pairs with 78/79.
+(condensed 2026-07-07 — full spec in git history)

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, Field, Chip, PrimaryButton, BrandGradient } from "@/components/maya-ui";
 import { createCharacter, updateCharacter } from "@/lib/api";
-import { C, F } from "@/constants/theme";
+import { C, F, R } from "@/constants/theme";
 
 export interface CharacterFormValues {
   name: string;
@@ -18,7 +18,12 @@ export interface CharacterFormValues {
 
 const EMPTY: CharacterFormValues = { name: "", nickname: "", people: "", animals: "", toys: "", songs: "", traits: "", isFictional: true };
 
-function emoji(name: string) {
+// Canonical AVATAR_GRADIENTS (src/components/v2/tokens.ts) — first slot, so a
+// character's preview avatar shares the same purple as its card in the list.
+const CHARACTER_GRAD: [string, string] = ["#8B6DF0", "#6A55C9"];
+
+/** Shared with characters/index.tsx so list cards and the form preview agree. */
+export function emoji(name: string) {
   const l = name.toLowerCase();
   if (l.includes("cat") || l.includes("coco")) return "🐱";
   if (l.includes("dragon") || l.includes("pip")) return "🐲";
@@ -114,18 +119,28 @@ export function CharacterForm({
         <Lead>Every detail becomes a thread the story can weave in. No photos, no subscription — made-up friends are always free.</Lead>
       </View>
 
-      {/* live card preview */}
+      {/* live card preview — mirrors the v2 web character card */}
       <View style={st.preview}>
-        <View style={[st.previewAvatar, { backgroundColor: v.isFictional ? C.primaryLight : C.green }]}><Text style={{ fontSize: 28 }}>{emoji(v.name)}</Text></View>
+        {v.isFictional ? (
+          <BrandGradient colors={CHARACTER_GRAD} fallback={C.primaryLight} style={st.previewAvatar}>
+            <Text style={st.previewAvatarEmoji}>{emoji(v.name)}</Text>
+          </BrandGradient>
+        ) : (
+          <View style={[st.previewAvatar, { backgroundColor: C.green }]}>
+            <Text style={st.previewAvatarEmoji}>{emoji(v.name)}</Text>
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           <Text style={st.previewName}>{v.name.trim() || "Your character"}</Text>
           <Text style={st.previewSub}>{isEdit ? "Appears in your stories" : "New · not in a story yet"}</Text>
           <Text style={st.previewDesc}>{describe(v)}</Text>
-          <View style={st.tagRow}>
-            {split(v.traits).slice(0, 4).map((t) => (
-              <View key={t} style={st.tag}><Text style={st.tagText}>{t}</Text></View>
-            ))}
-          </View>
+          {split(v.traits).length > 0 && (
+            <View style={st.tagRow}>
+              {split(v.traits).slice(0, 4).map((t) => (
+                <View key={t} style={st.tag}><Text style={st.tagText}>{t}</Text></View>
+              ))}
+            </View>
+          )}
         </View>
       </View>
 
@@ -182,8 +197,21 @@ const st = StyleSheet.create({
   h: { fontFamily: F.displayBold, fontSize: 17, color: C.text },
   help: { color: C.muted, fontFamily: F.body, fontSize: 14, lineHeight: 20 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  preview: { flexDirection: "row", gap: 14, backgroundColor: C.surface, borderColor: C.border, borderWidth: 1, borderRadius: 22, padding: 18 },
-  previewAvatar: { width: 60, height: 60, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  preview: {
+    flexDirection: "row",
+    gap: 14,
+    backgroundColor: C.surface,
+    borderColor: C.border,
+    borderWidth: 1,
+    borderRadius: R.card,
+    padding: 18,
+    shadowColor: "#3A2850",
+    shadowOpacity: 0.07,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  previewAvatar: { width: 62, height: 62, borderRadius: R.detail - 6, alignItems: "center", justifyContent: "center" },
+  previewAvatarEmoji: { fontSize: 28 },
   previewName: { fontFamily: F.displayBold, fontSize: 18, color: C.text },
   previewSub: { color: C.soft, fontSize: 13, fontFamily: F.bodyBold, marginTop: 1 },
   previewDesc: { color: C.muted, fontSize: 14, fontFamily: F.body, lineHeight: 20, marginTop: 8 },

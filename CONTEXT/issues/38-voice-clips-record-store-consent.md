@@ -1,15 +1,7 @@
 # 38 — Voice clips: record, store, consent (recorded only, no cloning)
 
-## What to build
-In-app **audio recording** per Family member: capture short clips (label + transcript +
-duration), store bytes in the blob store, attach to the member. Capture **voice consent**
-per person (voice = biometric) with a **revoke** path that purges clips. Reader/Family
-panel playback.
+Status: superseded by 145-cut-audio-from-r1.md
 
-## Acceptance criteria
-- Record → upload → playback round-trips for a Family member's clip.
-- Voice-consent recorded before clips persist; revoke purges clips + audit retained.
-- Hard-delete removes voice clips (extends issue 12 propagation).
+Shipped in-app audio recording per Family member (blob storage, biometric voice-consent with a revoke-purges-clips path, hard-delete propagation) and reader/Family-panel playback. Issue 145 later disables all voice/audio server-side for R1 (clean 404/403, no reachable record/play UI) — code kept behind config for R2, not deleted.
 
-## Blocked by
-35
+(condensed 2026-07-07 — full spec in git history)

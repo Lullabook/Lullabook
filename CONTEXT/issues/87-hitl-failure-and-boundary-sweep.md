@@ -1,33 +1,14 @@
 # 87 — HITL: cross-cutting failure & boundary sweep
 
-Triage: ready-for-agent (HITL)
+Status: shipped (assumed — see git history)
 
-## Parent
-PRD v10 — `CONTEXT/planning/prd-v10-hitl-smoke-verification.md`
+Manual HITL sweep (PRD v10) of failure modes/security boundaries: backend-down/5xx and
+offline show in-screen kit errors with no crash/unhandled rejection; missing/expired
+token → 401 + routed to sign-in; `DEV_FORCE_SUBSCRIPTION` confirmed dev-only/never-ship;
+single-account smoke flagged as a limited RLS check (true cross-Family isolation needs a
+2nd account).
+This doc's own PASS/FAIL rows in `HITL-SMOKE-RUNBOOK.md` §5 were left blank — the manual
+sweep itself is unconfirmed, though the underlying error-handling invariants persisted
+through later hardening waves.
 
-## What to build
-The final sweep of the smoke runbook: deliberately exercise the failure modes and
-security boundaries from the PRD invariants, rather than the happy path. This mirrors the
-`/part2` red-team intent at the manual-test level.
-
-- **Backend down / 5xx:** stop `dev:paid` (or force a 500) mid-flow; confirm screens show
-  an in-screen error via the kit (`C.danger`) with **no crash and no unhandled promise
-  rejection**.
-- **Offline:** disable networking; confirm graceful, retryable error states (not white
-  screens / infinite spinners).
-- **Auth boundary:** with no/expired token, confirm protected Bearer endpoints return
-  **401** and the app routes to sign-in; no protected data renders without auth.
-- **Dev-gate check:** confirm `DEV_FORCE_SUBSCRIPTION` is the only reason the paywall is
-  bypassed locally, and note that it must never ship enabled.
-- **Isolation note:** record that single-account smoke is a **limited** RLS check; true
-  cross-Family isolation needs a second test account (flag as a follow-up, not a blocker).
-
-## Acceptance criteria
-- [ ] Backend-down and offline states render kit errors with no crash / no unhandled rejection.
-- [ ] Missing/expired token → 401 + routed to sign-in; no protected data leaks.
-- [ ] The dev subscription bypass is confirmed dev-only and documented as never-ship.
-- [ ] The single-account isolation limitation is recorded as a follow-up.
-- [ ] Each step recorded PASS/FAIL; any FAIL filed as a `bug` issue with repro.
-
-## Blocked by
-82
+(condensed 2026-07-07 — full spec in git history)

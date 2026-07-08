@@ -1,11 +1,20 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { Link, router } from "expo-router";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
 import * as QueryParams from "expo-auth-session/build/QueryParams";
-import { Eyebrow, Lead } from "@/components/maya-ui";
+import { Card, Eyebrow, Lead, PageTitle } from "@/components/maya-ui";
 import { C, F, R } from "@/constants/theme";
 import { supabase } from "@/lib/supabase";
 
@@ -86,88 +95,115 @@ export default function SignUpScreen() {
   }
 
   return (
-    <View style={styles.container} accessibilityLabel="Sign up">
-      <View style={styles.hero}>
-        <Text style={styles.heroMark}>✨</Text>
-      </View>
-      <Text style={styles.wordmark}>Lullabook</Text>
-      <Eyebrow>💛 New here</Eyebrow>
-      <Lead>Sign up with Apple or Google — we&apos;ll set up your family&apos;s private story world automatically.</Lead>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        accessibilityLabel="Sign up"
+      >
+        <Card style={styles.card}>
+          <View style={styles.hero}>
+            <Text style={styles.heroMark}>✨</Text>
+          </View>
+          <Eyebrow>💛 A story is waiting</Eyebrow>
+          <PageTitle>Create your Family</PageTitle>
+          <View style={styles.leadWrap}>
+            <Lead>
+              You&apos;ll be the Guardian — the grown-up in charge of family members and privacy. Sign
+              up with Apple or Google and we&apos;ll set up your family&apos;s private story world
+              automatically.
+            </Lead>
+          </View>
 
-      <View style={styles.form}>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? (
+            <View style={styles.errorBanner} accessibilityRole="alert">
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
 
-        {appleAvailable ? (
-          <AppleAuthentication.AppleAuthenticationButton
-            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
-            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-            cornerRadius={R.pill}
-            style={styles.appleButton}
-            onPress={signUpWithApple}
-          />
-        ) : Platform.OS === "ios" || Platform.OS === "web" ? null : (
-          // Web: expo-apple-authentication has no implementation — the
-          // fallback tap would throw UnavailabilityError. Inert, not a dead
-          // button (same doctrine as r1-flags). iOS keeps its existing null.
-          <Pressable
-            style={({ pressed }) => [styles.button, pressed && { opacity: 0.85 }]}
-            onPress={signUpWithApple}
-            disabled={loading !== null}
-            accessibilityRole="button"
-            accessibilityLabel="Continue with Apple"
-          >
-            <Text style={styles.buttonText}>{loading === "apple" ? "…" : " Continue with Apple"}</Text>
-          </Pressable>
-        )}
+          <View style={styles.buttonStack}>
+            {appleAvailable ? (
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                cornerRadius={R.pill}
+                style={styles.appleButton}
+                onPress={signUpWithApple}
+              />
+            ) : Platform.OS === "ios" || Platform.OS === "web" ? null : (
+              // Web: expo-apple-authentication has no implementation — the
+              // fallback tap would throw UnavailabilityError. Inert, not a dead
+              // button (same doctrine as r1-flags). iOS keeps its existing null.
+              <Pressable
+                style={({ pressed }) => [styles.button, pressed && { opacity: 0.85 }]}
+                onPress={signUpWithApple}
+                disabled={loading !== null}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Apple"
+              >
+                <Text style={styles.buttonText}>{loading === "apple" ? "…" : " Continue with Apple"}</Text>
+              </Pressable>
+            )}
 
-        <Pressable
-          style={({ pressed }) => [styles.googleButton, pressed && { opacity: 0.85 }]}
-          onPress={signUpWithGoogle}
-          disabled={loading !== null}
-          accessibilityRole="button"
-          accessibilityLabel="Continue with Google"
-        >
-          {loading === "google" ? (
-            <ActivityIndicator color={C.text} />
-          ) : (
-            <Text style={styles.googleText}>Continue with Google</Text>
-          )}
-        </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.googleButton, pressed && { opacity: 0.85 }]}
+              onPress={signUpWithGoogle}
+              disabled={loading !== null}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Google"
+            >
+              {loading === "google" ? (
+                <ActivityIndicator color={C.text} />
+              ) : (
+                <Text style={styles.googleText}>Continue with Google</Text>
+              )}
+            </Pressable>
+          </View>
 
-        <Link href="/sign-in" style={styles.link}>
-          I already have an account
-        </Link>
-      </View>
-    </View>
+          <View style={styles.divider} />
+
+          <Text style={styles.footerText}>
+            Already have an account?{" "}
+            <Link href="/sign-in" style={styles.footerLink}>
+              Sign in
+            </Link>
+          </Text>
+        </Card>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: C.bg, gap: 6 },
+  flex: { flex: 1, backgroundColor: C.bg },
+  scroll: { flexGrow: 1, justifyContent: "center", padding: 24 },
+  card: { width: "100%", maxWidth: 440, alignSelf: "center", padding: 28, gap: 0 },
   hero: {
     alignSelf: "center",
-    width: 76,
-    height: 76,
-    borderRadius: 22,
+    width: 64,
+    height: 64,
+    borderRadius: R.card,
     backgroundColor: C.accent,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 18,
+    marginBottom: 16,
     shadowColor: "#E79A3C",
     shadowOpacity: 0.35,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 6 },
   },
-  heroMark: { fontSize: 36 },
-  wordmark: {
-    alignSelf: "center",
-    fontFamily: F.display,
-    fontSize: 30,
-    color: C.text,
-    letterSpacing: -0.5,
-    marginBottom: 10,
+  heroMark: { fontSize: 30 },
+  leadWrap: { marginTop: 6, marginBottom: 18 },
+  errorBanner: {
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: C.dangerBg,
+    borderWidth: 1,
+    borderColor: C.dangerBorder,
+    marginBottom: 16,
   },
-  form: { marginTop: 18, gap: 14 },
+  errorText: { color: C.danger, fontFamily: F.bodySemi, fontSize: 14, lineHeight: 20 },
+  buttonStack: { gap: 12 },
   button: {
     backgroundColor: C.text,
     borderRadius: R.pill,
@@ -177,7 +213,7 @@ const styles = StyleSheet.create({
   buttonText: { color: C.surface, fontSize: 16, fontFamily: F.bodyBold },
   appleButton: { width: "100%", height: 50 },
   googleButton: {
-    backgroundColor: C.surface,
+    backgroundColor: C.bg,
     borderRadius: R.pill,
     borderWidth: 1.5,
     borderColor: C.border,
@@ -185,6 +221,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   googleText: { color: C.text, fontSize: 16, fontFamily: F.bodyBold },
-  link: { marginTop: 16, textAlign: "center", color: C.primary, fontSize: 15, fontFamily: F.bodyBold },
-  error: { color: C.danger, fontFamily: F.bodyBold },
+  divider: { height: 1, backgroundColor: C.border, marginVertical: 20 },
+  footerText: { fontSize: 14, color: C.muted, fontFamily: F.body, lineHeight: 20 },
+  footerLink: { color: C.primary, fontFamily: F.bodyBold },
 });

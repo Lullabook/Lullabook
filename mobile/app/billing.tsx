@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Screen, Eyebrow, Lead, AnimatedToggle, PrimaryButton } from "@/components/maya-ui";
+import { BrandGradient, Screen, Eyebrow, Lead, AnimatedToggle, PrimaryButton } from "@/components/maya-ui";
 import { isR1AudioEnabled, isR1MultiFamilyEnabled } from "@/lib/r1-flags";
 import { C, F, R } from "@/constants/theme";
 import { fetchPaywallConfig, type PaywallPlanResponse } from "@/lib/api";
@@ -66,17 +66,8 @@ function PlanCard({
     plan.canCustomStyle ? "Custom art style" : null,
   ].filter(Boolean);
 
-  return (
-    <View
-      style={[
-        st.tierCard,
-        plan.isRecommended && {
-          borderColor: C.primary,
-          borderWidth: 2,
-          backgroundColor: C.primaryBg,
-        },
-      ]}
-    >
+  const cardBody = (
+    <>
       {plan.isRecommended ? (
         <View style={st.badgeRec}>
           <Text style={st.badgeRecText}>✨ Recommended</Text>
@@ -84,10 +75,10 @@ function PlanCard({
       ) : null}
       <Text style={st.tierLabel}>{plan.label}</Text>
       <Text style={st.tierValue}>{plan.valueProp}</Text>
-      <Text style={st.tierPrice}>{priceLabel}</Text>
-      {billing === "annual" ? (
-        <Text style={st.save}>Save ~17%</Text>
-      ) : null}
+      <View style={st.priceRow}>
+        <Text style={st.tierPrice}>{priceLabel}</Text>
+        {billing === "annual" ? <Text style={st.save}>(save ~17%)</Text> : null}
+      </View>
       <View style={st.features}>
         {features.map((f, i) => (
           <View key={i} style={st.featureRow}>
@@ -104,8 +95,25 @@ function PlanCard({
           onPress={() => router.dismiss()}
         />
       </View>
-    </View>
+    </>
   );
+
+  // Issue: recommended tier gets the same soft purple-tinted gradient wash +
+  // colored glow as the web tier card (paywall-ui.tsx `recommendedStyle`),
+  // falling back to a flat tint if expo-linear-gradient is unavailable.
+  if (plan.isRecommended) {
+    return (
+      <BrandGradient
+        colors={["#FFFDF9", "#F6F0FF"]}
+        fallback={C.primaryBg}
+        style={[st.tierCard, st.tierCardRecommended]}
+      >
+        {cardBody}
+      </BrandGradient>
+    );
+  }
+
+  return <View style={st.tierCard}>{cardBody}</View>;
 }
 
 function toPlanInfo(p: PaywallPlanResponse): PlanInfo {
@@ -148,7 +156,10 @@ export default function PaywallScreen() {
     <Screen>
       <View>
         <Eyebrow>✨ Plans</Eyebrow>
-        <Lead>Every plan starts with a 7-day free trial of the full experience. Cancel anytime.</Lead>
+        <Lead>
+          Every plan starts with a 7-day free trial of the full experience. Your card stays on
+          file as verifiable parental consent — cancel anytime.
+        </Lead>
       </View>
 
       {/* Billing toggle — Issue 144: animated segmented control (sliding indicator) */}
@@ -184,6 +195,16 @@ const st = StyleSheet.create({
     padding: 20,
     marginBottom: 12,
   },
+  // Matches web's `recommendedStyle` glow (paywall-ui.tsx): 2px primary
+  // border + a purple-tinted shadow instead of the plain card shadow.
+  tierCardRecommended: {
+    borderColor: C.primary,
+    borderWidth: 2,
+    shadowColor: "#6A55C9",
+    shadowOpacity: 0.18,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 10 },
+  },
   badgeRec: {
     alignSelf: "flex-start",
     backgroundColor: C.primary,
@@ -200,8 +221,9 @@ const st = StyleSheet.create({
   },
   tierLabel: { fontFamily: F.display, fontSize: 22, color: C.text },
   tierValue: { fontFamily: F.body, fontSize: 14, color: C.muted, marginTop: 4, lineHeight: 20 },
-  tierPrice: { fontFamily: F.display, fontSize: 28, color: C.text, marginTop: 12 },
-  save: { fontFamily: F.body, fontSize: 12, color: C.accent, marginTop: 2 },
+  priceRow: { flexDirection: "row", alignItems: "baseline", gap: 6, marginTop: 12 },
+  tierPrice: { fontFamily: F.display, fontSize: 28, color: C.text },
+  save: { fontFamily: F.body, fontSize: 12, color: C.soft },
   features: { marginTop: 14, gap: 8 },
   featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   check: { color: C.green, fontFamily: F.bodyBold, fontSize: 14 },

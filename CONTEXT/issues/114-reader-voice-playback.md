@@ -1,22 +1,5 @@
 # 114 — Lullaby / narration playback in the reader
-
-Triage: ready-for-agent
-
-## Parent
-PRD v13 — `CONTEXT/planning/prd-v13-working-app-family-accounts-pricing.md`. Track B. ADR-0024.
-
-## What to build
-The mobile reader (`mobile/app/storybooks/[id].tsx`) has **zero audio UI**. Add playback for
-the woven lullaby / per-page narration voice clip.
-
-## Acceptance criteria
-- [ ] The reader plays the page/lullaby voice clip; playback starts < 1 s from cache.
-- [ ] Missing audio degrades gracefully (no crash, no blocking spinner).
-
-## Verification-command
-```bash
-cd mobile && npx tsc --noEmit && test -z "$(find . -name '* 2.*' -not -path '*/node_modules/*')"
-```
-
-## Blocked by
-112
+Status: cut
+Added reader (mobile/app/storybooks/[id].tsx) playback UI for the woven lullaby/per-page narration clip; <1s start from cache, graceful degrade when audio missing.
+Cut for R1 — 145 disables the lullaby weave + narration entirely; reader ships audio-free.
+(condensed 2026-07-07 — full spec in git history)

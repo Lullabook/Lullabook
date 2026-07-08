@@ -1,14 +1,7 @@
 # 39 — Voice in stories + lullaby-weave generation contract
 
-## What to build
-Let a story **weave around recorded phrases**: the generation prompt is conditioned on
-chosen clips so a member's line lands in-page and the **story ends toward a recorded
-lullaby**. Reader plays the relevant member's clip per page.
+Status: superseded by 145-cut-audio-from-r1.md
 
-## Acceptance criteria
-- A story generated with a chosen lullaby clip ends on a page that sets up that exact phrase.
-- Reader page shows "Hear [name] read this page" and plays the right clip.
-- Generation is deterministic/idempotent per page attempt (issue 16 money-safety holds).
+Shipped lullaby-weave: generation conditioned on chosen voice clips so a page lands a member's recorded phrase and the story ends toward that lullaby; reader played the matching clip per page. Issue 145 explicitly cuts "the lullaby-ending weave" from R1 (disabled server-side, kept behind config for R2).
 
-## Blocked by
-38, 40
+(condensed 2026-07-07 — full spec in git history)

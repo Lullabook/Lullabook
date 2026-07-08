@@ -1,29 +1,11 @@
 # 147 — US-only jurisdiction for R1.0 (Asia = flagged R1.1 fast-follow)
 
-Triage: ready-for-agent
+Status: shipped
 
-## Parent
-PRD v16 — `CONTEXT/planning/prd-v16-r1-ruthless-cut.md`. Track S3. Sequences ADR-0015.
+Multi-jurisdiction engine shipped config-driven, only US enabled for R1.0: consent method,
+child-age threshold, data-residency, retention/notice all come from config, no hardcoded US
+values. Non-US request rides the same config path (clean "not available" message or US
+default), never a crash. Asia slot exists in config, flag-disabled — enabling it later is a
+data/config change, no rebuild. Binding: jurisdiction gating stays config-driven, never hardcoded.
 
-## What to build
-Ship the multi-jurisdiction engine **config-driven** but with **only the US market enabled**
-for R1.0. Cut the Asia long pole down to a flagged-off entry that R1.1 enables by **data/config
-change, not a rebuild**. A request from a non-US/unsupported market must ride the same config
-path — a clean "not available in your region" or US default — never a hardcode, never a crash.
-
-## Acceptance criteria
-- [ ] Only the US market is enabled; its consent method, child-age threshold, data-residency,
-      and retention/notice come from config (no hardcoded US values scattered in code).
-- [ ] A non-US request is handled by the same config path (clean message or US default), **never
-      a crash** (failure-mode invariant).
-- [ ] Enabling Asia later is a config/data change — no engine rebuild required (assert the Asia
-      config slot exists and is flag-disabled).
-- [ ] A test exercises US-enabled + a non-US request and asserts no crash + correct gating.
-
-## Verification-command
-```bash
-npm test -- 147-us-only-jurisdiction
-```
-
-## Blocked by
-_none_
+(condensed 2026-07-07 — full spec in git history)

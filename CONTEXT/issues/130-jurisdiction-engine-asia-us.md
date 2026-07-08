@@ -1,26 +1,5 @@
 # 130 — Multi-jurisdiction engine real for Asia + US (the R1 long pole)
-
-Triage: ready-for-agent
-
-## Parent
-PRD v14 — `CONTEXT/planning/prd-v14-r1-release.md`. Track B. ADR-0015.
-
-## What to build
-Make the jurisdiction engine **real** for Asia + US: consent method, child-age threshold,
-data-residency region, retention/notice — **config-driven per market**, detected/declared at
-signup, never hardcoded. Ship a per-market **legal-review checklist** as a launch gate.
-⚠️ The R1 long pole; built config-driven so additional markets are a data change.
-
-## Acceptance criteria
-- [ ] Jurisdiction detected/declared at signup; consent method + child-age + residency + notice
-      resolve from per-market config for **US + ≥1 Asia market**.
-- [ ] No jurisdiction value hardcoded; a test proves adding a market is config-only.
-- [ ] Per-market legal-review checklist documented + referenced as a launch gate.
-
-## Verification-command
-```bash
-npm test -- jurisdiction && tsc --noEmit
-```
-
-## Blocked by
-127
+Status: superseded by 147-us-only-jurisdiction-r1.md
+Scoped a config-driven jurisdiction engine (consent method, child-age threshold, data-residency, retention/notice per market) for both Asia + US, detected/declared at signup, no hardcoding, with a per-market legal-review checklist as launch gate.
+Superseded: R1.0 cut this down to US-only (see 147); Asia became a flagged, config-only fast-follow (R1.1) rather than shipping both markets at launch.
+(condensed 2026-07-07 — full spec in git history)

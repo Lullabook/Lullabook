@@ -1,15 +1,7 @@
 # 35 — Family roster (Persona → Family member) + per-baby relationships
 
-## What to build
-Rename the user-facing **Persona → Family member**; the internal likeness model
-(ADR-0001/0002) stays, now attached to a Family member. Add **relationship** and the
-two nicknames (what the baby calls them / what they call the baby) as **per baby–person
-pair** data. Roster is shared across a Household's babies by default.
+Status: shipped
 
-## Acceptance criteria
-- Family master-detail (real data): list + detail with relationship + both nicknames + photo count + status.
-- Relationship/nicknames stored per (baby, person); editing one baby's pair doesn't change another's.
-- Existing Persona likeness/training flow still works under the new name.
+Binding rename still current: user-facing Persona → "Family member" (internal likeness model/ADR-0001/0002 unchanged, now attached to a Family member). Relationship + the two nicknames are stored per (baby, person) pair, shared across a Household's babies by default. This naming underlies all later Family/roster work.
 
-## Blocked by
-34
+(condensed 2026-07-07 — full spec in git history)

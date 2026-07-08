@@ -1,46 +1,13 @@
 # Session Handoff — 2026-06-19: live-app-audit skill + native FormData helper
 
-> Small session on `main` after PR #39 merged. No domain/service logic changed.
-> Adds orchestration skills and a tiny mobile upload helper.
+Status: historical
 
-## What happened
+Small session on main after PR #39: authored `live-app-audit` skill (hermes-driven
+free+paid sweep, 17-row flow matrix, P0/P1/P2 rubric) and `xcode-ios-dev` skill;
+extracted `mobile/lib/form-data.ts` (`NativeUploadFile`/`appendNativeFile`/`setNativeFile`
+for RN `{uri,name,type}` upload parts, not web Blobs), used by `family/new.tsx`.
 
-1. **Authored `live-app-audit` skill** (`.claude/skills/live-app-audit/SKILL.md` +
-   `REFERENCE.md`). Orchestrates a full free+paid feature sweep by delegating every
-   run to the **`hermes`** subagent (`Task` tool, `subagent_type: "hermes"`).
-   REFERENCE.md holds the 17-row flow matrix and P0/P1/P2 severity rubric. Invoke
-   when the user wants to "test everything" / pre-release smoke.
+- Binding: RN uploads go through `mobile/lib/form-data.ts` — never append web Blobs.
+- `next-env.d.ts` local `.next-free` tweak is environment-generated — never commit.
 
-2. **Added `xcode-ios-dev` skill** (`.claude/skills/xcode-ios-dev/SKILL.md`). Thin
-   wrapper that reads `.cursor/agents/xcode-ios-dev.md` and spawns a general-purpose
-   subagent for first-time Xcode / Simulator setup. Complements the existing Cursor
-   agent definition; does not duplicate its checklist inline.
-
-3. **Extracted native FormData helper** — `mobile/lib/form-data.ts` with
-   `NativeUploadFile`, `appendNativeFile`, and `setNativeFile` for React Native's
-   `{ uri, name, type }` upload parts (not web Blobs). `mobile/app/family/new.tsx`
-   imports from here; **`submit()` and `takeSelfie()` wired in follow-up** after
-   Simulator HITL bugs B1/B2 (see `SESSION-HANDOFF-2026-06-16-mobile-simulator-hitl-bugs.md`).
-
-## State
-
-- `main` is current through PR #39 (June 18 live-app-run + dupe sweep handoff).
-- Next planned HITL work remains **issue 83** (auth & account runbook §1) per the
-  June 18 handoff chain.
-- `next-env.d.ts` has a local `.next-free` path tweak from running `dev:free` — do
-  **not** commit; it is environment-generated.
-
-## Not done / follow-ups
-
-- **Re-run Add Family HITL** — bug log in `SESSION-HANDOFF-2026-06-16-mobile-simulator-hitl-bugs.md`;
-  FormData + camera permission fixes landed on this branch; confirm `POST /api/personas` `202`.
-- **Run `live-app-audit`** — skill exists but no audit has been executed yet; hermes should
-  drive the first full free+paid sweep after issue 70 closes.
-- Other mobile upload surfaces may still need the `form-data` helper if they append Blobs.
-- HITL Simulator passes for issues 75–81 are still owed (runbook exists).
-
-## Suggested skills
-
-- **live-app-audit** → drives **hermes** for the live free+paid feature sweep.
-- **xcode-ios-dev** → first-time Xcode / Simulator setup for native runs.
-- `/part2` — issue 83 (HITL runbook §1 auth & account).
+(condensed 2026-07-07 — full text in git history)
