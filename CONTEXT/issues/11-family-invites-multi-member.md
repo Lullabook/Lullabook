@@ -1,25 +1,5 @@
 # 11 — Family invites & multi-Member
 
-- Type: AFK · Triage: ready-for-agent
-- Parent: [PRD v1](../planning/prd-v1.md)
-- Refs: ADR-0006
-
-## What to build
-
-A Guardian can invite other adults as Members of the Family and remove them.
-Every Member can use every Persona in the Family; each Member can link a Self
-Persona so their account is personalized. Stories are owned by their creating
-Member; finalized Storybooks are visible Family-wide (per 10), drafts are
-creator-private.
-
-## Acceptance criteria
-
-- [ ] A Guardian can invite a Member (email invite) and remove a Member.
-- [ ] Only a Guardian can invite/remove; non-Guardians cannot.
-- [ ] An invited Member can create their own Adult Persona and link it as their Self Persona.
-- [ ] A Member's new Story defaults to featuring their Self Persona + chosen Personas.
-- [ ] Story ownership and Family-wide visibility of finalized books are enforced (tests).
-
-## Blocked by
-
-- 04 — Baby Persona creation
+Status: superseded by 146-cut-multi-family-solo-only.md
+Guardian could invite/remove Members; every Member shared every Persona and could link their own Self Persona; Stories owned by creating Member, finalized books Family-wide visible. Cut for R1 (146): family-invite/invited-member/voice-message endpoints disabled server-side (clean 404/403), one-Guardian/one-baby/one-Household enforced, multi-member code kept behind config for R2.
+(condensed 2026-07-07 — full spec in git history)

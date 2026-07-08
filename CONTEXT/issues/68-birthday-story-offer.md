@@ -1,31 +1,11 @@
 # 68 — Birthday Story offer (web)
 
-Triage: ready-for-agent
+Status: superseded by 72-native-firsts-and-birthday-parity.md
 
-## Parent
-PRD v8 — `CONTEXT/planning/prd-v8-photo-stories-and-calendar.md`
+Built a calendar-triggered Birthday Story offer on the web World home, using the Baby's
+`birthDate` + an injected clock, windowed around the birthday. Holidays/jurisdiction
+calendars explicitly out of scope. Same suggestion contract as 67: offer → confirm Story
+Type → generate, never silent. Web UI is dead per the mobile-only pivot; the offer/clock
+logic was reused (not rebuilt) by the native port (72).
 
-## What to build
-A calendar-triggered **[Birthday Story](../CONTEXT.md)** offer. Using the Baby's
-`birthDate` (issue 64), the World surfaces a "Make [Baby]'s birthday story" offer on/near
-the birthday. Same suggestion contract — offer → confirm [Story Type](../CONTEXT.md) →
-generate; never silent. **Holidays / jurisdiction calendar are out of scope.**
-
-- Extend the suggestion seam so, given a Baby with a `birthDate` and an injected clock, it
-  returns a birthday offer within a defined window around the date.
-- Surface the offer on the World home (alongside the existing daily/weekly cards).
-- The offer assembles a suggested [Brief](../CONTEXT.md) (the Baby stars; theme seeded as a
-  birthday); the parent confirms before any spend.
-
-## Acceptance criteria
-- [ ] With a Baby whose `birthDate` is within the offer window (clock injected), a birthday
-      offer is returned; outside the window, none is.
-- [ ] A Baby with no `birthDate` produces no birthday offer and no errors.
-- [ ] The offer never triggers generation without an explicit parent confirm.
-- [ ] Service tests cover in-window, out-of-window, and null-date, with a deterministic
-      injected clock. All existing tests stay green.
-- [ ] Documented real-keys manual smoke passes (HITL): set a Baby's birthday to today
-      locally, accept the offer, and generate a real Story.
-
-## Blocked by
-- 64
+(condensed 2026-07-07 — full spec in git history)

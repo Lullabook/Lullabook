@@ -1,13 +1,4 @@
 # 44 — Multi-baby polish: switch baby + per-baby defaults
-
-## What to build
-Finish the multi-baby experience: smooth baby switching, per-baby cast defaults, and
-the "different family" path when adding a baby whose roster differs.
-
-## Acceptance criteria
-- Switching baby swaps World/Stories/Family context correctly.
-- A "different family" baby keeps an isolated roster; shared-family babies share it.
-- Relationships/nicknames stay per (baby, person).
-
-## Blocked by
-34, 35, 43
+Status: superseded by 146-cut-multi-family-solo-only.md
+Built baby-switching, per-baby cast defaults, and isolated-vs-shared-family rosters (relationships/nicknames scoped per baby+person). Issue 146 (PRD v16 ruthless cut) later collapsed R1 to one Guardian + one Baby per Household, enforced server-side — multi-baby UI/logic kept behind config for R2, not reachable in R1.
+(condensed 2026-07-07 — full spec in git history)

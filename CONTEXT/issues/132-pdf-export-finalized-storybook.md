@@ -1,24 +1,5 @@
 # 132 — PDF Export of a finalized Storybook (the keepsake)
-
-Triage: ready-for-agent
-
-## Parent
-PRD v14 — `CONTEXT/planning/prd-v14-r1-release.md`. Track C. ADR-0007.
-
-## What to build
-Export a finalized Storybook to the device as a PDF (text + page images composed; web already
-has `pdf-lib`). Mobile share/save sheet. This is the keepsake-survives-deletion mechanism and
-the **only** likeness-egress path in R1 (no Share links).
-
-## Acceptance criteria
-- [ ] A finalized book exports to a non-empty PDF containing all pages (text + images).
-- [ ] Export is user-initiated + local; no network share surface added.
-- [ ] Graceful for a text-viewable draft (text-only PDF when images are missing).
-
-## Verification-command
-```bash
-npm test -- export pdf && tsc --noEmit
-```
-
-## Blocked by
-—
+Status: shipped
+Export a finalized Storybook to the device as PDF (text + page images composed), mobile share/save sheet. This is the keepsake-survives-deletion mechanism.
+Invariant: the **only** likeness-egress path in R1 (no Share links); export is user-initiated + local, no network share surface added. Falls back to a text-only PDF for a text-viewable (unillustrated) draft.
+(condensed 2026-07-07 — full spec in git history)

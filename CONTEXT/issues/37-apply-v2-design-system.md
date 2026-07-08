@@ -1,15 +1,7 @@
 # 37 — Apply the v2 "Maya's World" design system to the real app
 
-## What to build
-Make the cream/Baloo 2 + Nunito design (`src/app/world/page.tsx` prototype) the real
-authed shell, replacing the dark bedtime theme. Extract shared tokens (colors, type,
-nav, cards) and apply to the real authed routes; keep the top nav World/Stories/Create/
-Family/Characters.
+Status: shipped
 
-## Acceptance criteria
-- Authed app renders in the warm daytime system (not the old dark theme).
-- Shared design tokens/components are reused (not duplicated inline everywhere).
-- All existing authed pages remain reachable and functional.
+Made the cream/Baloo 2 + Nunito "Maya's World v2" design (extracted shared tokens: colors, type, nav, cards) the real authed shell, replacing the old dark theme. Binding: "Maya's World v2" is still the current design canon (see `.claude/skills/lullabook-design`, `lullabook-design-check`) — later restyles (175) re-apply this same v2 canon to mobile, they don't replace it.
 
-## Blocked by
-34
+(condensed 2026-07-07 — full spec in git history)

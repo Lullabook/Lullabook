@@ -1,13 +1,4 @@
 # 41 — Short illustrated story (fewer pages, still good)
-
-## What to build
-A **short** generation contract (~5 pages) that keeps writing quality high — "the same
-good story, fewer pages." Length is a tier-agnostic flag now (gating decided later).
-
-## Acceptance criteria
-- A ~5-page illustrated story generates with coherent arc + Style Bible consistency.
-- Length selectable; short books reuse the full curate/reader pipeline.
-- No paywall coupling yet (length is just a parameter).
-
-## Blocked by
-40
+Status: shipped
+Added a ~5-page short-story length as a tier-agnostic generation flag (no paywall coupling at the time). Persisted as the `pageCount`/`resolvePageCount` domain concept (`src/domain/story-type.ts`, `DEFAULT_PAGE_COUNT`), with a Length picker in the web composer. Reuses the same curate/reader pipeline regardless of length.
+(condensed 2026-07-07 — full spec in git history)

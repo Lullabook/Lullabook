@@ -1,606 +1,408 @@
 # CONTEXT — Glossary
 
-The canonical language for this project. This file is a glossary, not a spec.
-No implementation details live here. Terms are defined as they are resolved
-during grilling/planning sessions.
+Canonical language for this project. Glossary, not a spec — no implementation
+details.
 
-> Working name: **Lullabook** — an app where a parent generates AI stories
-> starring their own baby and family as characters. (Name is provisional.)
+> Working name: **Lullabook** — a parent generates AI stories starring their
+> own baby and family as characters. (Provisional.)
 
 ---
 
 ## Story
-The core artifact. A generated narrative that stars the family's personas as
-characters. The story **text** is the single source of truth that every other
-medium (illustration, audio, video) is derived from.
+Core artifact: a generated narrative starring the family's personas. Story
+**text** is the source of truth every other medium derives from.
 
 ## Storybook
-The **v1** deliverable: a Story rendered as a sequence of **Pages**, each pairing
-a passage of text with an AI-generated illustration featuring the relevant
-personas. The shareable/keepsake unit. A Storybook is a **curated draft**, not a
-one-shot output (see [ADR-0004](docs/adr/0004-curated-versioned-storybook.md)):
-it has a lifecycle **`generating → (draft | failed)`**, then **`draft →
-finalized`**. A book becomes **`draft`** once every Page reaches a terminal state
-(a failed/quarantined Page surfaces as a re-rollable hole, not a blocker); it
-becomes **`failed`** only when the generation pass produced no Story at all, or
-too few Pages came back ready to be worth presenting (a configurable
-ready-Page floor). Only a *finalized* Storybook is shareable. **Visibility:** drafts are private to the creating
-Member; finalized Storybooks are visible to all Family Members and shareable
-outside the Family only via a revocable [Share link](#share-link). See
-[ADR-0013](docs/adr/0013-storybook-sharing-privacy.md).
+v1 deliverable: a Story as **Pages**, each pairing text with an illustration.
+Curated draft ([ADR-0004](docs/adr/0004-curated-versioned-storybook.md)):
+`generating → (draft | failed)`, then `draft → finalized`. `draft` once
+every Page is terminal (failed Page = re-rollable hole, not a blocker);
+`failed` only if no Story text or too few Pages ready. Only `finalized` is
+shareable; drafts stay private to the creator
+([ADR-0013](docs/adr/0013-storybook-sharing-privacy.md)).
 
 ## Share link
-A revocable, non-indexed URL granting outside-the-Family view access to one
-finalized Storybook (optional expiry/passcode). The only way a child's likeness
-leaves the Family, and always revocable. See
-[ADR-0013](docs/adr/0013-storybook-sharing-privacy.md).
+Revocable, non-indexed URL for outside-Family view access to one finalized
+Storybook (optional expiry/passcode). The only way a child's likeness
+leaves the Family. See [ADR-0013](docs/adr/0013-storybook-sharing-privacy.md).
 
 ## Page
-One unit of a Storybook: a passage of Story text paired with one illustration of
-its Scene. A Page holds **candidates** — each regeneration produces a new
-candidate; the parent picks which one the Page shows. Text and illustration are
-regenerated **independently**.
+One Storybook unit: text passage + one Scene illustration. Holds
+**candidates** (each regen = new candidate, parent picks). Text and
+illustration regenerate independently.
 
 ## Hard-delete
-Immediate, total erasure of a Family's data across **every** store — photos,
-LoRA weights, Prompts, Persona metadata, and generated Storybooks. A
-Guardian-triggered, always-available action (the "right to be forgotten"), and
-the end-state of the cancellation purge. See
+Immediate, total erasure of a Family's data across every store (photos,
+LoRA weights, Prompts, Persona metadata, Storybooks). Guardian-triggered,
+always available; end-state of the cancellation purge. See
 [ADR-0007](docs/adr/0007-data-lifecycle-and-deletion.md).
-_Avoid_: "soft delete", "archive" (those retain data; hard-delete does not).
+_Avoid_: "soft delete", "archive" (those retain data).
 
 ## Export
-Producing a durable, downloadable copy of a finalized Storybook (PDF) that lives
-on the parent's device. The mechanism by which the keepsake promise survives
+Durable downloadable PDF of a finalized Storybook — keepsake survives
 cancellation/deletion without us hosting a child's likeness indefinitely.
 
 ## Regeneration / re-roll
-Producing a fresh candidate for a single Page's text or illustration. Bounded by
-a per-Storybook **re-roll budget** (free re-rolls, then credit-metered) so a
-single book can't blow up unit economics.
+Fresh candidate for one Page's text or illustration. Bounded by a
+per-Storybook **re-roll budget** (free, then credit-metered).
 
 ## Medium roadmap
-The forms a Story can take, built in dependency order because each consumes the
-one before it:
-1. **Text** — the script / source of truth.
-2. **Illustration** — images anchored to the text (v1 ships text + illustration as the Storybook).
-3. **Audio** — narration of the text (v2).
-4. **Video** — text + illustration + audio in motion (v3).
+1. **Text** (source of truth). 2. **Illustration** (v1 ships both). 3.
+**Audio** (v2). 4. **Video** (v3). Each stage consumes the one before it.
 
 ## Character
-A lightweight, **photo-free** cast member built from a **[Trait
-Questionnaire](#trait-questionnaire)** — a name, nickname, relationships, and
-traits/catchphrases ("what papa generally says") — with **no uploaded photos, no
-LoRA, no biometric data**. Characters power the **free, text-only** story tier:
-because no likeness is generated, they skip the heavy biometric/consent gate that
-[Personas](#persona) require. A Character may be fully fictional or modeled on a
-real family member; the app never asks for photographic proof. A Character is the
-**upgrade seed** for a Persona — a parent who later wants illustrations attaches
-photos to promote a Character into a Persona.
-_Avoid_: "Persona" (that term is reserved for the photo-anchored, LoRA-backed
-kind), "profile" (ambiguous).
+Photo-free cast member from a **[Trait Questionnaire](#trait-questionnaire)**
+— no photos, no LoRA, no biometric data. Powers the free, text-only tier
+(skips [Persona](#persona)'s biometric/consent gate). Upgrade seed for a
+Persona (attach photos later to promote).
+_Avoid_: "Persona" (photo-anchored/LoRA kind only), "profile".
 
 ## Trait Questionnaire
-The guided Q&A a parent fills in to build a [Character](#character): name,
-nickname, full name, family relationships (papa/mama/grandparent names), favorite
-animals/toys (and their names), songs, and topics the child likes (dinosaurs,
-superheroes…). It is the free-tier analogue of uploading photos — it captures
-*who the character is* in words rather than likeness. Feeds the [Prompt](#prompt)
-for text-only Story generation.
+Guided Q&A building a Character: name, relationships, favorite
+animals/toys/songs, topics. Free-tier analogue of photo upload; feeds the
+[Prompt](#prompt) for text-only generation.
 _Avoid_: "onboarding" (broader), "the form".
 
 ## Persona
-A reusable character profile set up once and reused across many Stories.
-**Anchored on uploaded reference photos of a real person** (see
-[ADR-0001](docs/adr/0001-photo-conditioned-likeness.md)) plus descriptive
-traits. Belongs to a [Family](#family) and is usable by every Member of it. Two
-kinds:
-- **Baby Persona** — the starring child. Built from photos of a minor, which
-  carries biometric/consent/COPPA/GDPR obligations. Only a
-  [Guardian](#guardian) may create one.
-- **Adult Persona** — a co-starring adult family member (parent, grandparent,
-  aunt…). Must be the **creator themselves**, gated by a selfie/liveness match
-  ([ADR-0014](docs/adr/0014-adult-persona-self-consent.md)). _Avoid_: "Parent
-  Persona" (a grandparent isn't a parent).
-
-Each Persona is realized as a **per-persona LoRA** fine-tuned on the uploaded
-photos (see [ADR-0002](docs/adr/0002-per-persona-lora.md)). A Persona therefore
-has a lifecycle: **`training` → `ready` / `failed`**, because creating one is an
-async, paid background job.
+Reusable profile anchored on uploaded reference photos of a real person
+([ADR-0001](docs/adr/0001-photo-conditioned-likeness.md)) + traits.
+**Baby Persona** (starring child, COPPA/GDPR obligations, Guardian-only) vs
+**Adult Persona** (co-starring adult, selfie/liveness self-gated,
+[ADR-0014](docs/adr/0014-adult-persona-self-consent.md); avoid "Parent
+Persona"). Per-persona LoRA ([ADR-0002](docs/adr/0002-per-persona-lora.md));
+lifecycle `training → ready/failed`.
 
 ## Jurisdiction
-The legal regime governing a given user, detected/declared at signup. Drives the
-**child-age threshold**, **consent method**, **data-residency region**, and
-notice/retention rules — all **configurable per market**, never hardcoded. v1
-launches across Asia + US, each market gated by its own legal review. See
+Legal regime governing a user, set at signup. Drives child-age threshold,
+consent method, data-residency, retention — per-market config, never
+hardcoded. v1: Asia + US, each legally gated. See
 [ADR-0015](docs/adr/0015-multi-jurisdiction-launch.md).
-_Avoid_: "country" (jurisdiction is the legal-regime unit, not strictly geographic).
+_Avoid_: "country" (legal-regime unit, not geographic).
 
 ## Consent receipt
-The stored proof that a Guardian gave verifiable parental consent — who
-consented, when, and to which version of the consent notice — captured before a
-Baby Persona is created. See
+Stored proof of verifiable parental consent — who, when, notice version —
+captured before Baby Persona creation. See
 [ADR-0008](docs/adr/0008-verifiable-parental-consent.md).
 
 ## Email-Plus VPC
-A **payment-independent** Verifiable Parental Consent method (`consentMethod =
-email_plus`), required on the **iOS** surface because Apple IAP cannot prove the
-payer's identity, so the web "payment = consent" path (ADR-0008) does not hold
-there. The flow: the Guardian enters their email and attests guardianship → the
-backend emails a unique consent link stamped with the current notice version →
-the Guardian opens it, sees exactly what is collected (baby photos → biometric
-LoRA) and confirms → the [Family](#family) is flagged `consent_verified` with a
-version-stamped [Consent receipt](#consent-receipt). The **"plus"** is a
-*delayed second confirmation email* with a revoke link sent after the first
-confirmation. It is one of the configurable per-[Jurisdiction](#jurisdiction)
-consent methods (ADR-0015), and **gates Baby Persona creation** wherever
-configured. The consent request is retained as the audit record; the revoke link
-stays available (a Guardian may **withdraw** consent at any time, COPPA), and
-revoking clears the Family's `consent_verified` — blocking new Baby Persona
-creation and routing existing child data to the [Hard-delete](#hard-delete) /
-purge path (ADR-0007). Adult Persona still uses self + liveness; the
-[Character](#character) tier still uses the light attestation. See
+Payment-independent VPC (`consentMethod = email_plus`), required on **iOS**
+(Apple IAP can't prove payer identity). Flow: Guardian attests + confirms an
+emailed consent link → Family flagged `consent_verified` +
+[Consent receipt](#consent-receipt). "Plus" = delayed second confirmation
+email with a revoke link. Gates Baby Persona creation; revoking routes
+child data to [Hard-delete](#hard-delete)/purge (ADR-0007). See
 [ADR-0018](docs/adr/0018-native-ios-app-iap-and-email-plus-vpc.md).
-_Avoid_: "email verification" (that proves an inbox, not parental consent).
+_Avoid_: "email verification" (proves an inbox, not consent).
 
 ## Subscription
-The paid unlock. A [Family](#family) is `active` or `inactive`; either payment
-rail flips the same state — **Stripe** on web, **Apple IAP via RevenueCat** on
-iOS (ADR-0018). The **gate line is illustration + Personas**: text-only Stories
-from a [Character](#character) are **always free** (the acquisition hook); an
-active Subscription unlocks **everything else** — promoting a Character into a
-[Persona](#persona), illustrated [Storybooks](#storybook), multi-Persona Scenes,
-[Personalized Classics](#personalized-classic), [Share links](#share-link), and
-[Export](#export). Persona count stays the cost lever (ADR-0009); Storybooks are
-unlimited under fair use. See
+Paid unlock. Family `active`/`inactive`; Stripe (web) or Apple IAP via
+RevenueCat (iOS, ADR-0018) flips it. Gate = illustration + Personas:
+Character Stories always free; active Subscription unlocks
+Character→Persona, illustrated Storybooks, multi-Persona Scenes,
+[Personalized Classics](#personalized-classic), [Share links](#share-link),
+[Export](#export). Persona count is the cost lever (ADR-0009). See
 [ADR-0009](docs/adr/0009-subscription-monetization.md),
 [ADR-0016](docs/adr/0016-character-tier-two-tier-consent.md).
-_Avoid_: "premium", "pro" (no named tiers in v1 — it is a single `active` state).
+_Avoid_: "premium", "pro" (single `active` state in v1).
 
 ## Family
-The shared container that owns the Persona roster and is the unit of data
-ownership and the **COPPA consent boundary**. Has one or more
-[Members](#member). Every Member can use every Persona in the Family.
-See [ADR-0006](docs/adr/0006-family-member-guardian-model.md).
+Container owning the Persona roster; unit of data ownership + **COPPA
+consent boundary**. One or more Members, all sharing every Persona. See
+[ADR-0006](docs/adr/0006-family-member-guardian-model.md).
 
 ## Member
-A human login belonging to a Family (mom, dad, grandparent…). Each Member may be
-linked to a **Self Persona** — their own Adult Persona — so their account is
-personalized (e.g. grandma's stories default to grandma + the baby). All Members
-share use of every Persona; a Story is owned by the Member who created it.
-_Avoid_: "User" (too generic), "Account" (the Family is the account-like unit).
+Human login belonging to a Family. May link a **Self Persona** for
+personalization. Story is owned by the Member who created it.
+_Avoid_: "User" (generic), "Account" (Family is the account-like unit).
 
 ## Guardian
-A privileged [Member] role: the legal guardian of the child. **Only a Guardian
-may create a Baby Persona** (the act that captures COPPA consent), invite/remove
-Members, and hard-delete the child's data. Pins COPPA accountability to one
-identifiable adult. Any Member (not just a Guardian) may create their own Adult
-Persona, since that is consent to one's *own* likeness.
+Privileged Member: legal guardian of the child. Only a Guardian creates a
+Baby Persona, invites/removes Members, hard-deletes child data. Any Member
+may create their own Adult Persona (self-consent).
 
 ## Scene
-A single page's illustration request: one or more Personas (their LoRAs) placed
-into a described setting/action derived from the Story text. Multi-Persona scenes
-(baby + parent together) compose multiple LoRAs — see
-[ADR-0005](docs/adr/0005-multi-persona-scenes-in-v1.md).
+One page's illustration request: Personas (LoRAs) placed into a
+setting/action from the Story text. Multi-Persona scenes compose multiple
+LoRAs — see [ADR-0005](docs/adr/0005-multi-persona-scenes-in-v1.md).
 
 ## Style Bible
-The per-Storybook set of visual constants that hold every Page together: each
-Persona's wardrobe/appearance, recurring settings, palette, time-of-day, and the
-chosen art style. Generated once with the Story and injected into every page's
-image Prompt so the book reads as one coherent work rather than 12 unrelated
-images. See [ADR-0012](docs/adr/0012-illustration-pipeline-style-bible.md).
-_Avoid_: "theme" (that's a Brief input), "style" alone (ambiguous).
+Per-Storybook visual constants (wardrobe/appearance per Persona, settings,
+palette, time-of-day, art style) generated once with the Story, injected
+into every Page's Prompt. See
+[ADR-0012](docs/adr/0012-illustration-pipeline-style-bible.md).
+_Avoid_: "theme" (a Brief input), "style" alone.
 
 ## Likeness confirmation
-The post-training step where the parent reviews sample generations of a freshly
-trained Persona and either accepts it or re-trains — *before* investing in a full
-Storybook. See [onboarding](planning/onboarding-and-personas.md).
+Post-training step: parent reviews sample generations of a freshly trained
+Persona, accepts or re-trains — before a full Storybook spend. See
+[onboarding](planning/onboarding-and-personas.md).
 
 ## Brief
-The parent-facing seed for a Story. A **hybrid** input: a selection of starring
-Personas, a chosen **[Story Type](#story-type)**, a curated **theme/lesson**, an
-optional curated **setting/occasion**, and one short optional free-text note
-("anything special to include?"). The Brief is what the parent fills in; it is
-*not* the raw model input.
-_Avoid_: "Idea", "the prompt" (see Prompt below).
+Parent-facing seed for a Story: starring Personas, a
+**[Story Type](#story-type)**, curated theme/lesson, optional
+setting/occasion, one optional free-text note. Not the raw model input.
+_Avoid_: "Idea", "the prompt" (see Prompt).
 
 ## Story Type
-The kind of Story being generated, chosen per Story in the [Brief](#brief). It
-shapes the generation pass's instructions and narrative arc — it is **not** just
-a theme. v1 types:
-- **Bedtime** — a calming wind-down arc with a soft landing (no cliffhanger),
-  engineered to ease the child toward sleep.
-- **Learning** — carries an explicit lesson, message, or early-numeracy/counting
-  thread woven into the narrative, with gentle repetition.
-
-Story Type is distinct from the **theme/lesson** field of a Brief: theme is *what
-the story is about*; Story Type is *what shape the story takes*.
-_Avoid_: "mode", "genre" (overloaded).
+Kind of Story chosen per Story in the Brief; shapes generation + narrative
+arc, not just a theme. v1: **Bedtime** (calming, no cliffhanger) and
+**Learning** (explicit lesson/counting, gentle repetition). Theme = what
+it's about; Story Type = what shape it takes.
+_Avoid_: "mode", "genre".
 
 ## Personalized Classic
-A Story whose origin is an **existing public-domain tale** recast with the
-family's [Personas](#persona) as its characters (e.g. *Alice in Wonderland*
-starring grandma), rather than an original narrative invented from a
-[Brief](#brief). Same downstream pipeline as any Story (Scenes, Style Bible,
-Pages), but a different generation contract: adapt-and-recast, not invent. v1
-scope, but its **own** build slice after the core generate path. Restricted to a
-**curated public-domain catalog** — no arbitrary "famous stories" — to avoid
-copyright exposure stacked on the minor-likeness obligations.
-_Avoid_: "remix", "fan-fiction" (legally loaded).
+Story recast from a public-domain tale with the family's Personas as
+characters, instead of invented from a Brief. Same pipeline, adapt-and-recast
+contract. Curated public-domain catalog only (copyright + minor-likeness
+exposure).
+_Avoid_: "remix", "fan-fiction".
 
 ## Prompt
-The **engineered model input** derived from a Brief — the structured instruction
-sent to Claude to generate Story text. Internal; the parent never writes it
-directly. Distinct from the Brief to keep parent-intent separate from
-machine-facing wording.
+Engineered model input derived from a Brief — sent to Claude for Story text.
+Internal; parent never writes it directly.
 
 ---
 
-## v5 "Maya's World" revamp — incoming language (PRD v5)
+## v5 "Maya's World" revamp (PRD v5)
+> 2026-06-13. Supersedes bedtime framing where conflicting; code rename not
+> done. `planning/prd-v5-maya-world-revamp.md`. Monetization deferred.
 
-> Grilled 2026-06-13. These supersede the bedtime framing where they conflict, but
-> the **code rename has not happened yet** — the terms above still describe current
-> code. See `planning/prd-v5-maya-world-revamp.md`. Monetization/paywall is deferred.
+- **Household** — account/billing/consent boundary (reframes Family). Owns
+  1+ Babies.
+- **Baby** — starring child (reframes "Baby Persona"); a Household may have
+  several.
+- **World** — a Baby's home surface, everything centered on that baby.
+- **Family (roster)** — real people who love a Baby (reframes Persona,
+  retired in UI). Relationship + two nicknames per baby–person pair, photos
+  (ADR-0001/0002), Voice clips. Shared across a Household's babies.
+- **Character** — now fictional-only (no photos/voice); free.
+- **Voice clip** — real recorded audio woven into stories (incl. lullaby
+  weave). Recorded only, no cloning.
+- **Video page** — premium: illustration animated ~5-sec with narration.
 
-- **Household** — the account / billing / consent boundary. Reframes the old
-  [Family](#family)=account. Owns **one or more Babies**.
-- **Baby** — a starring child (reframes "Baby Persona"). A Household may have several.
-- **World** — a Baby's home surface; everything centered on that baby. One per Baby.
-- **Family (roster)** — the real people who love a Baby (reframes [Persona](#persona),
-  retired in UI). Each has a **relationship** + two nicknames (what the baby calls
-  them / what they call the baby) **per baby–person pair**, **photos** (likeness model
-  still per ADR-0001/0002), and **Voice clips**. Shared across a Household's babies by
-  default; a baby added as a "different family" gets its own roster.
-- **Character** — now **fictional-only** (no photos/voice); free. Real people live in
-  the Family roster, not here.
-- **Voice clip** — a real recorded audio line from a Family member, woven into stories
-  (incl. a **lullaby-ending weave**). Recorded only in v1 — **no voice cloning**.
-- **Video page** — premium: a page's illustration animated into a ~5-sec clip with the
-  page's narration over it (short books only).
+## Journal & Moments (PRD v6)
+> 2026-06-13. Real-life capture loop personalizing generation; builds on v5
+> Baby/World. `planning/prd-v6-journal-and-moments.md`,
+> [ADR-0019](docs/adr/0019-moments-auto-context-personalization.md).
 
----
+- **Moment** — single dated parent-logged thing about a Baby. v1: free text
+  + date + optional linked people + `significant` flag. One Baby per Moment;
+  no new biometric data (existing consent + Hard-delete, ADR-0007).
+  _Avoid_: "note", "memory", "entry", "Page"/"Scene".
+- **Significant Moment** — Moment with `significant ✨` set; always reaches
+  the auto-context layer, pins to Journal timeline. Boolean flag, not a
+  score or entity.
+- **Journal** — per-Baby surface: Moment timeline + weekly spread view.
+  _Avoid_: "diary", "feed", "timeline" alone.
+- **Auto-context layer** — injects Moments into the Prompt automatically
+  (not a Brief input). Contract: every Significant Moment + ordinary Moments
+  since last Story. See [ADR-0019](docs/adr/0019-moments-auto-context-personalization.md).
+- **Daily nudge** — once-a-day "What happened today?" card; also push on
+  native iOS (issue 30). Never forces a schedule.
+- **Weekly Story suggestion** — once-a-week offer assembling a suggested
+  Brief from the week's Moments. Parent picks Story Type, confirms before
+  spend — never silent.
 
-## Journal & Moments — incoming language (PRD v6)
+## Roster avatar (PRD v7)
+> 2026-06-14. Display/privacy layer over Persona/roster photos; doesn't
+> change likeness training. [ADR-0020](docs/adr/0020-roster-avatar-generated-not-raw-photo.md).
 
-> Grilled 2026-06-13. Adds a real-life capture loop that personalizes generation.
-> Builds on the v5 [Baby](#baby)/[World](#world) language above. See
-> `planning/prd-v6-journal-and-moments.md` and
-> [ADR-0019](docs/adr/0019-moments-auto-context-personalization.md). Monetization
-> deferred (tier-agnostic, consistent with PRD v5).
+- **Roster avatar** — picture shown for a roster member everywhere: a clean
+  illustration generated from that member's trained LoRA, never the raw
+  photo. Raw photos still stored/train the model, never rendered. Retraining
+  regenerates the avatar; neutral placeholder until `ready`.
+  _Avoid_: "profile picture"/"thumbnail".
 
-- **Moment** — a single dated, parent-logged thing that happened to a **Baby**
-  ("Maya took her first steps today"). The raw material that makes Stories
-  personal. **Light structure (v1):** free text + a date + optional **linked
-  people** (which [Family](#family-roster) members / [Characters](#character) were
-  present) + a **`significant`** flag. Mood and photo attachments are a deliberate
-  later "rich-structure" pass, not v1. A Moment belongs to exactly **one Baby**
-  (one [World](#world)); it carries no new biometric data, so it rides the Baby's
-  existing consent and the [Hard-delete](#hard-delete)/purge path (ADR-0007)
-  rather than a new consent gate.
-  _Avoid_: "note" (too sticky-note), "memory" (collides with the keepsake framing
-  and is undated), "entry" (generic), "Page"/"Scene" (those belong to a Storybook).
+## Photo-to-story & calendar stories (PRD v8)
+> 2026-06-14. Wave on v6 Moment/Journal + lullaby weave, web+native iOS.
+> `planning/prd-v8-photo-stories-and-calendar.md`,
+> [ADR-0021](docs/adr/0021-moment-photos-write-only-vision-to-text.md).
 
-- **Significant Moment** — a Moment with its `significant ✨` flag set. It always
-  reaches the [auto-context layer](#auto-context-layer) regardless of recency and
-  pins to the [Journal](#journal) timeline. The flag is how a parent says "this day
-  mattered — weigh it." Modeled as a boolean flag, **not** a separate "Milestone"
-  entity and **not** a 1–5 score.
+- **Moment photo** — optional photo on a Moment. Write-only: Family-scoped,
+  never rendered (extends ADR-0020), hard-deletable. Vision model reads it
+  into a scene description seeding the Brief/auto-context layer; pixels
+  never condition illustration or train likeness. No new consent gate
+  (ADR-0021).
+  _Avoid_: "attachment", "snapshot/gallery".
+- **Firsts** — filtered Journal view of milestone/`first` Moments. Logging
+  one surfaces an immediate "Make this a Story" offer (distinct from Weekly
+  Story suggestion). Confirms Story Type before spend; never silent.
+- **Birthday Story** — calendar-triggered offer from a Baby's `birthDate`.
+  Same offer→confirm→generate contract. Holiday/jurisdiction calendar
+  stories deferred.
 
-- **Journal** — a **per-Baby** surface inside the [World](#world) ("Maya's
-  Journal") holding the timeline of [Moments](#moment) plus a **weekly spread**
-  view (the "day in the life" layout). One Journal per Baby. The home of the daily
-  capture loop and the weekly-story suggestion.
-  _Avoid_: "diary" (first-person; the baby can't write), "feed", "timeline" alone.
+## Native mobile feature wave (PRD v9)
+> 2026-06-16. Mobile-only (Expo app in `mobile/`, iOS Simulator),
+> features-first; `isActive` gate force-unlocked via
+> `DEV_FORCE_SUBSCRIPTION`. `planning/prd-v9-mobile-feature-wave.md`.
 
-- **Auto-context layer** — the mechanism by which [Moments](#moment) personalize
-  generation. Recent Moments are injected into the [Prompt](#prompt) as background
-  context automatically — they are **not** a [Brief](#brief) input the parent
-  curates per Story. **Contract:** every [Significant Moment](#significant-moment)
-  for the Baby + every ordinary Moment logged **since that Baby's last Story**.
-  See [ADR-0019](docs/adr/0019-moments-auto-context-personalization.md).
-
-- **Daily nudge** — the once-a-day "What happened today?" capture prompt. Surfaces
-  as a card on the [World](#world) home everywhere; on native iOS it additionally
-  fires through the existing push infrastructure (issue 30). It drives the capture
-  habit but never forces a schedule — capture stays free-form (log anytime).
-
-- **Weekly Story suggestion** — a once-a-week offer ("Make Maya's week into a
-  story") that assembles a **suggested [Brief](#brief)** from that week's
-  [Moments](#moment): the Baby stars, the cast is the people linked in the week's
-  Moments, and the theme is seeded from the [Significant Moments](#significant-moment).
-  The parent picks [Story Type](#story-type) and **confirms before any generation
-  spend** — a one-tap suggestion, **never** silent background generation.
-
----
-
-## Roster avatar — incoming language (PRD v7)
-
-> Grilled 2026-06-14. A display/privacy layer over the existing
-> [Persona](#persona)/Family-roster photos. Does **not** change how likeness is
-> trained. See [ADR-0020](docs/adr/0020-roster-avatar-generated-not-raw-photo.md).
-
-- **Roster avatar** — the picture shown for a roster member (Baby or adult)
-  everywhere in the app. It is a clean illustration **generated from that member's
-  trained likeness LoRA**, never their raw uploaded photo. The raw reference photos
-  are still stored and still train the likeness model (Story + video generation);
-  they are simply **never rendered on any display surface** (roster cards, story
-  credits, member pickers). A member can update their reference photos, which
-  retrains the LoRA and regenerates the avatar. Until training reaches `ready`, a
-  neutral placeholder stands in.
-  _Avoid_: "profile picture" / "thumbnail" (both imply the raw selfie this replaces).
-
----
-
-## Photo-to-story & calendar stories — incoming language (PRD v8)
-
-> Grilled 2026-06-14. A feature wave on the v6 [Moment](#journal--moments--incoming-language-prd-v6)/[Journal](#journal)
-> loop plus the already-shipped lullaby weave, web **and** native iOS. Monetization
-> and TestFlight stay deferred. See `planning/prd-v8-photo-stories-and-calendar.md`
-> and [ADR-0021](docs/adr/0021-moment-photos-write-only-vision-to-text.md).
-
-- **Moment photo** — an optional photo attached to a [Moment](#moment) (the
-  rich-structure pass v6 deferred). It is **write-only**: stored Family-scoped,
-  **never rendered on any surface** (extends [ADR-0020](docs/adr/0020-roster-avatar-generated-not-raw-photo.md)),
-  retained and hard-deletable (ADR-0007). A vision model reads it into a **scene
-  description** that seeds the [Brief](#brief) / [auto-context layer](#auto-context-layer);
-  its pixels **never** condition the illustration and it **never** trains likeness.
-  Rides the Baby's existing consent — no new gate. (ADR-0021)
-  _Avoid_: "attachment" (generic), "snapshot/gallery" (imply it's displayed).
-
-- **Firsts** — a filtered [Journal](#journal) view of the Baby's milestone/`first`
-  [Moments](#moment) (the `momentType` already in code). Logging a "first" surfaces
-  an **immediate** "Make this a Story" offer inline — distinct from the once-a-week
-  [Weekly Story suggestion](#weekly-story-suggestion). Still an offer that confirms
-  [Story Type](#story-type) before any generation spend; never silent.
-
-- **Birthday Story** — a calendar-triggered Story offer fired from a Baby's
-  **`birthDate`** (a new field on Baby). Same suggestion contract (offer → confirm →
-  generate; never silent). Holiday/jurisdiction-aware calendar stories are
-  **deferred** to a later wave.
-
----
-
-## Native mobile feature wave — incoming language (PRD v9)
-
-> Grilled 2026-06-16. This wave is **mobile-only** (the Expo app in `mobile/`, driven
-> on the iOS Simulator) and **features-first**. **Monetization is deferred to its own
-> later `/part1`** — no paywall UX, pricing, or live billing ships in this wave; the
-> existing `isActive` gate stays as-is and is force-unlocked in the simulator via
-> `DEV_FORCE_SUBSCRIPTION`. See `planning/prd-v9-mobile-feature-wave.md`.
-
-- **Mobile parity backbone** — the work of making the native app *actually function*:
-  every stubbed submit handler (`daily`, `family/new`, `characters/[id]` edit,
-  `account`) wired to the existing **Bearer-authenticated API** (`mobile/lib/api.ts`
-  → `src/app/api/*`), plus the **missing API routes** the mobile features need
-  (Moments create/list, Storybook create/generate + list). The web stays the backend;
-  mobile is a native front-end over the same domain services (ADR-0018). _Avoid_:
-  "rewrite", "new backend" (the services already exist — this is wiring + a few routes).
-
-- **Mobile Journal** — the [Journal](#journal)/[Moment](#moment)/[Firsts](#firsts)
-  capture loop (PRD v6/v8) brought to the native app over real data: log a Moment,
-  see the per-Baby timeline, filter the Firsts view, and take the inline
-  "make this a Story" offer. Same suggestion contract (offer → confirm Story Type →
-  generate; never silent). Tier-agnostic / free.
-
-- **Mobile Storybook** — native [Storybook](#storybook) generation (Brief → generate)
-  and the **reader** (paged text + illustration, per-Page candidates/re-roll) on the
-  device. Rides the existing generation pipeline + gate; in the simulator the gate is
-  force-unlocked. The future gate-move (illustrations free, paywall = narration +
-  voice + video + length, per `planning/pricing-and-features-2026-06-13.md`) belongs
-  to the deferred **payment `/part1`**, not this wave.
+- **Mobile parity backbone** — wiring every stubbed submit handler (`daily`,
+  `family/new`, `characters/[id]` edit, `account`) to the existing
+  Bearer-authenticated API (`mobile/lib/api.ts` → `src/app/api/*`), plus
+  missing routes (Moments create/list, Storybook create/generate+list). Web
+  stays backend; mobile is a native front-end (ADR-0018).
+  _Avoid_: "rewrite", "new backend".
+- **Mobile Journal** — Journal/Moment/Firsts loop (PRD v6/v8) on native app
+  over real data. Same suggestion contract. Free.
+- **Mobile Storybook** — native generation (Brief→generate) + reader (paged
+  text+illustration, per-Page candidates/re-roll). Force-unlocked in
+  simulator. Gate-move belongs to the deferred payment `/part1`.
 
 ## Tier
-The subscription level a Household is on. **Three paid tiers** — **Basic** ($8), **Normal**
-($15), **Plus** ($25) — entered via a **Trial**. There is **no free tier**. Each tier sets a
-monthly **Story cap**, a Family-member cap, and which capabilities (narration, video,
-**Custom art style**) are unlocked. See
+Subscription level: three paid tiers — **Basic** ($8), **Normal** ($15),
+**Plus** ($25) — entered via a **Trial**; no free tier. Each sets monthly
+**Story cap**, Family-member cap, unlocked capabilities (narration, video,
+**Custom art style**). See
 [ADR-0023](docs/adr/0023-three-tier-monetization-and-credits.md).
 
 ## Trial
-The **7-day free trial of Normal** that is the only entry point. **A card-on-file is
-required to start it**, which is what makes it the Verifiable Parental Consent gate
-([ADR-0008](docs/adr/0008-verifiable-parental-consent.md)): **no child likeness is created
-without it.** The first-open "aha" runs on a pre-baked, **baby-free Demo Story** before the
-card.
+7-day free trial of Normal; the only entry point. Card-on-file =
+[ADR-0008](docs/adr/0008-verifiable-parental-consent.md)'s consent gate: no
+child likeness without it. First-open "aha" runs on a pre-baked baby-free
+Demo Story before the card.
 
 ## Story cap
-The per-Household monthly limit on generated Stories (Basic 4 / Normal 8 / Plus 20). A
-**generous ceiling**, not a hard quota most users reach — margin is protected by **breakage**
-and metering, not by a stingy cap. Enforced server-side and idempotently. Resets monthly.
+Per-Household monthly limit (Basic 4 / Normal 8 / Plus 20). Generous
+ceiling; margin protected by breakage/metering, not a stingy cap.
+Server-side, idempotent, resets monthly.
 
 ## Credit
-The unit that meters **cost-heavy overage** beyond a tier's included allotment — extra
-**Video pages**, extra **Custom art style** trainings, and extra
-[re-rolls](#regeneration--re-roll). Tracked in a per-Household ledger; a **failed** metered
-action **refunds** the credit and never blocks the Story. See
+Meters cost-heavy overage — extra Video pages, Custom art style trainings,
+[re-rolls](#regeneration--re-roll). Per-Household ledger; failed metered
+action refunds the credit, never blocks the Story. See
 [ADR-0023](docs/adr/0023-three-tier-monetization-and-credits.md).
 
 ## Custom art style
-A **Plus**-tier **trained Style LoRA** (from reference images / a seed) bound to the
-Household and used as a book's **Style Bible**. A real training cost (hence credit-metered:
-1 train/mo included); on failure the Story falls back to the default Style Bible. Distinct
-from picking a preset style.
+Plus-tier trained Style LoRA bound to the Household, used as a book's Style
+Bible. Credit-metered (1 train/mo included); failure falls back to default.
 
 ## Story Context Engine
-The **deterministic selector** that assembles a bounded **story context set** for a Baby and
-feeds it to the [Prompt] builder — generalizing the Moments
-[Auto-context layer](#auto-context-layer) to roster cast, age/[Firsts], a **past-Story
-summary** (continuity / anti-repeat), and moment-photo vision-text (never raw images). Bound
-by a token budget; significant [Moments](#moment) always win on trim; the per-Baby watermark
-advances only on a generation that reaches Story text. See
+Deterministic selector assembling bounded story context for a Baby, fed to
+the Prompt builder — generalizes the Auto-context layer to roster cast,
+age/Firsts, past-Story summary (anti-repeat), moment-photo vision-text
+(never raw images). Token-budget bound; significant Moments win on trim;
+per-Baby watermark advances only on generation reaching Story text. See
 [ADR-0022](docs/adr/0022-story-context-engine.md).
 
-## v13 "Working app + family accounts + 2-plan pricing" — incoming language (PRD v13)
-
-> Grilled 2026-06-22 (hands-on Simulator testing). Supersedes the Tier naming where it
-> conflicts: ADR-0025 supersedes ADR-0023, ADR-0024 extends ADR-0006. Code rename not
-> done yet. See `planning/prd-v13-working-app-family-accounts-pricing.md`,
+## v13 "Working app + family accounts + 2-plan pricing" (PRD v13)
+> 2026-06-22. Supersedes Tier naming (ADR-0025 supersedes ADR-0023, ADR-0024
+> extends ADR-0006). `planning/prd-v13-working-app-family-accounts-pricing.md`,
 > [ADR-0024](docs/adr/0024-family-accounts-collaborative-creation.md),
 > [ADR-0025](docs/adr/0025-two-plan-monetization.md).
 
-- **Just Us** — the entry plan ($9.99/mo, $79.99/yr). **One creating parent** (the
-  [Guardian](#guardian)); other people may be invited as **view-only**
-  [Members](#member). Illustrated [Stories](#story); **no [Voice clip](#voice-clip), no
-  Video page**. Replaces the Basic/Normal tier naming.
-- **Our Whole Family** — the premium plan ($24.99/mo, $199.99/yr). **Multiple invited
-  [Members](#member) who can all create** Stories for the [Baby](#baby); includes
-  **[Voice message](#voice-message)** weave + AI narration and **Video pages**
-  (credit-metered), plus [Custom art style](#custom-art-style). The "profitable" tier;
-  replaces Plus. _Avoid_: "Solo"/"Family" as the literal plan names; "Basic/Normal/Plus"
-  (retired).
-- **Invited Member** — a real person (e.g. a grandparent) given their own login in the
-  [Household](#household) by attaching an **email to a roster person** and sending an
-  invite (Guardian-only). On accept they become a **non-Guardian** [Member](#member)
-  linked to their own [Adult Persona](#persona) (their Self Persona) via **self-consent**
-  (ADR-0014). This is the case ADR-0014 deferred ("a persona of another adult who won't
-  make an account") — resolved by having them *make an account*. See ADR-0024.
-- **Member-login cap** — the per-plan limit on how many Member **logins** a Household may
-  have (Just Us = the parent; Our Whole Family = the whole family). **Distinct from** the
-  likeness/[Persona](#persona) cap (which guards LoRA-training cost). The collaboration
-  lever that the Family plan sells.
-- **Create-rights** — whether a given [Member](#member) may generate a Story, derived
-  **server-side** from the Household plan + the Member's role (Just Us → only the
-  Guardian; Our Whole Family → every Member). The per-member generation gate.
-- **Voice message** — an [Invited Member](#invited-member)'s recorded [Voice
-  clip](#voice-clip) contribution. Because the recorder self-consents to their own voice,
-  it posts to the Baby's [World](#world) **immediately** and **notifies** the parents;
-  eligible for the lullaby weave / narration right away. Recorded only — no cloning.
-  Our-Whole-Family only.
-- **Generation terminal state** — a [Storybook](#storybook) generation **always** ends in
-  a terminal status (`draft` | `failed`) on **every** workflow path (including local-dev),
-  never stranded in `generating`/"Illustrating". When illustration is unavailable, the
-  book degrades to a **text-viewable** draft rather than an endless spinner. (Lifecycle
-  per [ADR-0004](docs/adr/0004-curated-versioned-storybook.md).)
+- **Just Us** — entry plan ($9.99/mo, $79.99/yr). One creating parent
+  (Guardian); others invited view-only. Illustrated Stories; no Voice
+  clip/Video page. Replaces Basic/Normal.
+- **Our Whole Family** — premium ($24.99/mo, $199.99/yr). Multiple invited
+  Members can all create Stories; includes Voice message weave + narration +
+  Video pages (credit-metered) + Custom art style. Replaces Plus.
+  _Avoid_: "Solo"/"Family" as literal names; "Basic/Normal/Plus" (retired).
+- **Invited Member** — real person given own login via email-on-roster +
+  invite (Guardian-only). On accept: non-Guardian Member linked to own Adult
+  Persona via self-consent (ADR-0014). Resolves the "persona of another
+  adult" case by having them make an account. See ADR-0024.
+- **Member-login cap** — per-plan limit on Member logins (Just Us = parent
+  only; Our Whole Family = whole family). Distinct from the Persona/likeness
+  cap.
+- **Create-rights** — whether a Member may generate a Story, derived
+  server-side from plan+role (Just Us → Guardian only; Our Whole Family →
+  every Member).
+- **Voice message** — Invited Member's recorded Voice clip; self-consent →
+  posts immediately + notifies parents; eligible for lullaby weave/narration
+  right away. Recorded only. Our-Whole-Family only.
+- **Generation terminal state** — a Storybook generation always ends
+  `draft`|`failed`, never stranded in `generating`. Unavailable illustration
+  degrades to text-viewable draft, not an endless spinner. Per
+  [ADR-0004](docs/adr/0004-curated-versioned-storybook.md).
 
-## R1 simplification + test/observability — incoming language (PRD v16 / v17)
+## R1 simplification + test/observability (PRD v16 / v17)
+> 2026-06-23. v16 cuts R1 scope; v17 makes app verifiable+observable.
+> `planning/r1-simplify-test-logging-invariants.md`. Amends ADR-0024
+> (solo-only), ADR-0025 (solo plan), sequences ADR-0015 (US-only R1.0).
 
-> Grilled 2026-06-23. Two PRDs that sit on top of the R1 release (v14): **v16** cuts R1
-> scope harder and **v17** makes the app verifiable + observable. Decisions/invariants in
-> `planning/r1-simplify-test-logging-invariants.md`. Amends ADR-0024 (solo-only), ADR-0025
-> (solo plan), sequences ADR-0015 (US-only R1.0). Code rename not done yet.
+- **Ruthless cut** — a feature not serving the one R1 promise (solo parent
+  makes one illustrated Bedtime story starring their baby, kept as PDF) is
+  cut. Cuts **audio**, **multi-family**, **Asia** (US-only R1.0). Keeps
+  story creation + **Daily Notes**.
+- **Inert, not broken** — a deferred feature is gated server-side with no
+  reachable UI — never a dead button, 500-ing endpoint, or endless spinner.
+  The server gate *is* the cut.
+  _Avoid_: "hidden" (implies the endpoint still lives).
+- **Daily Notes** — lightweight daily Moment capture kept in R1 (solo, one
+  baby). Distinct from deferred machinery (Story Context Engine, Firsts,
+  Birthday Story, weekly suggestion, photo-to-story, auto-context).
+- **Verify gate** — single command (`npm run verify`) running the whole
+  suite, exits non-zero on any real failure.
+  _Avoid_: "the tests" (this is the one gate over all of them).
+- **Honest seed harness** — deterministic, double-gated fixture: one command
+  yields a known-good Household+baby+family+real illustrated book.
+  Generalizes R1 issue 124's seed.
+- **Error capture** — automatic runtime-error logging from Expo + Next.js
+  API into **Sentry** (free tier, EU), scrubbed of child/PII, fails **open**.
+  Replaces HockeyApp/App Center. New production error auto-opens a tracked
+  GitHub issue (deduped).
+  _Avoid_: "telemetry" (broader), "monitoring" (errors, not uptime).
 
-- **Ruthless cut** — the v16 principle: a feature not serving the one R1 promise (a solo
-  parent makes one illustrated Bedtime story starring their baby, kept as a PDF) is *a way to
-  break*, so it is **cut**. R1 cuts **audio** (voice clips/messages, lullaby weave, narration),
-  **multi-family** (invited members, family logins, collaborative plan, multi-baby), and **Asia**
-  (US-only R1.0). Keeps story creation + **Daily Notes**.
-- **Inert, not broken** — the load-bearing v16 invariant: a deferred feature is **gated
-  server-side with no reachable UI** — never a dead button, a 500-ing endpoint, or an endless
-  spinner. The server gate *is* the cut; hiding a button is not. _Avoid_: "hidden" (implies the
-  endpoint still lives).
-- **Daily Notes** — the lightweight daily [Moment](#moment) capture kept in R1 (solo, one baby).
-  Distinct from the deferred heavy machinery ([Story Context Engine](#story-context-engine),
-  Firsts, Birthday Story, weekly suggestion, photo-to-story, auto-context injection).
-- **Verify gate** — the v17 single command (`npm run verify`) that runs the whole suite and
-  **exits non-zero on any real failure**: the machine-checkable "is the app healthy?" gate an
-  agent loops against instead of judging by eye. _Avoid_: "the tests" (this is the one gate over
-  all of them).
-- **Honest seed harness** — a deterministic, double-gated fixture: one command yields a
-  known-good Household + baby + family + a **real illustrated** book, so testing never starts
-  from zero. Generalizes R1 issue 124's seed into a reusable fixture.
-- **Error capture** — automatic runtime-error logging from **both** the Expo app and the
-  Next.js API into **Sentry** (free tier, EU region), scrubbed of all child/PII data, that
-  **fails open** (a logging outage never breaks the app — the deliberate opposite of moderation,
-  which fails closed). Replaces the retired HockeyApp/App Center lineage. A new production error
-  **auto-opens a tracked GitHub issue** (deduped), closing the "bugs vanish" loop.
-  _Avoid_: "telemetry" (broader/analytics-flavored), "monitoring" (this is errors, not uptime).
+## v19 "Working core loop" (PRD v19)
+> 2026-07-06 (Simulator QA). Partially reverses PRD v16 ruthless cut per
+> [ADR-0026](docs/adr/0026-restore-journal-and-learning-uncut-r1.md). Audio,
+> multi-family, Asia stay cut. `planning/prd-v19-working-core-loop.md`.
 
-## v19 "Working core loop" — incoming language (PRD v19)
+- **Placeholder art** — keeps the core loop working without a trained
+  likeness: a Character-only/persona-free Brief generates a text-viewable
+  Storybook draft with generic art, never `failed`, once text pass succeeds.
+  No raw photo, no likeness training (ADR-0020/0021 hold). Extends
+  Generation terminal state: text-success ⇒ `draft`.
+- **Partial un-cut** — Ruthless cut relaxed for exactly two features —
+  per-Baby Journal and the Learning Story Type — each restored with its own
+  tests. Cut-flag scaffolding stays so either can be re-cut by env
+  (ADR-0026).
 
-> Grilled 2026-07-06 (hands-on Simulator QA). Fixes the core loop and **partially reverses
-> the PRD v16 ruthless cut** per [ADR-0026](docs/adr/0026-restore-journal-and-learning-uncut-r1.md).
-> Audio, multi-family, and Asia stay cut. See `planning/prd-v19-working-core-loop.md`.
+## v20 "Working monetization (R1 entry gates)" (PRD v20)
+> 2026-07-07. Monetization spine already exists in
+> `src/services/{entitlement,story-cap,credit-ledger,subscription,email-plus-vpc,first-open}.ts`;
+> this wires the gates + mobile purchase path. Ships R1 one-plan (Just Us),
+> Simulator-verifiable fake purchase, closes the COPPA consent hole on Baby
+> Persona creation. Real Apple IAP deferred to EAS/TestFlight.
+> `planning/prd-v20-monetization-r1.md`,
+> [ADR-0027](docs/adr/0027-purchase-controller-fake-first-r1-entry.md).
+> Audio, multi-family, Asia stay cut (PRD v16/ADR-0026).
 
-- **Placeholder art** — the degradation that keeps the core loop working without a trained
-  likeness: a [Character](#character)-only or persona-free [Brief](#brief) generates a
-  **text-viewable [Storybook](#storybook) draft with generic art**, never a `failed` book,
-  once the text pass succeeds. Uses no raw photo and trains no likeness (ADR-0020/0021 hold).
-  The [Generation terminal state](#storybook) invariant, extended: text-success ⇒ `draft`.
-- **Partial un-cut** — the [Ruthless cut](#r1-simplification--testobservability--incoming-language-prd-v16--v17)
-  relaxed for exactly two features — the per-Baby [Journal](#journal) and the **Learning**
-  [Story Type](#story-type) — each restored *with its own tests* so it is not a new way to
-  break. The cut-flag scaffolding stays so either can be re-cut by env (ADR-0026).
-
-## v20 "Working monetization (R1 entry gates)" — incoming language (PRD v20)
-
-> Grilled 2026-07-07 (grounded in a codebase read: the monetization spine already exists in
-> `src/services/{entitlement,story-cap,credit-ledger,subscription,email-plus-vpc,first-open}.ts`
-> and is largely built; this effort **wires the gates and the mobile purchase path**, it does
-> not build billing from scratch). Ships the R1 **one-plan** entry (Just Us) with a
-> Simulator-verifiable fake purchase, and closes the **COPPA consent hole** on Baby Persona
-> creation. Real Apple IAP is deferred to the EAS/TestFlight milestone. See
-> `planning/prd-v20-monetization-r1.md` and
-> [ADR-0027](docs/adr/0027-purchase-controller-fake-first-r1-entry.md). Audio, multi-family,
-> and Asia stay cut (PRD v16 / ADR-0026).
-
-- **PurchaseController** — the mobile abstraction over "start the subscription." It has two
-  implementations behind one interface: a **FakePurchaseController** (R1 / Simulator) that
-  activates the trial through the prod-guarded [Start-trial endpoint](#start-trial-endpoint),
-  and a **real `react-native-purchases` (RevenueCat) implementation** deferred to the EAS
-  milestone. Both converge on the **same server subscription state** — the real one via the
-  RevenueCat webhook, the fake one via the endpoint — so swapping in the native SDK later
-  changes *who tells the server*, not the state-flip. Because `react-native-purchases` is a
-  native module, it cannot run in Expo Go; the fake keeps the whole entry flow verifiable on
-  the Simulator (ADR-0027). _Avoid_: "mock" (this is a shipped controller, not a test double),
-  "IAP" alone (that names the real path only).
-
-- **Start-trial endpoint** — the **prod-guarded** `POST /api/billing/start-trial` that
-  activates a 7-day [Trial](#trial) [Subscription](#subscription) idempotently (status
-  `active`, plan `just_us`, `trialEndsAt = now + 7d`) — the **same state the RevenueCat
-  webhook writes**. It is refused outside non-production / `DEV_*` env so it can never mint a
-  free subscription for a real payer. The [FakePurchaseController](#purchasecontroller) calls
-  it; real IAP does not (the webhook does). _Avoid_: "checkout" (that is the Stripe/web path).
-
-- **Trial expiry** — the R1 [Trial](#trial) now carries a **`trialEndsAt`** timestamp;
-  `SubscriptionService.isActive` is `active` **AND** `now < trialEndsAt`. Past expiry the
-  Household re-hits the paywall (403 → paywall). **Auto-renew / charge / `past_due` grace is
-  RevenueCat's job and is deferred** — R1 models the *end* of the trial, not the billing that
-  would follow it.
-
-- **Consent gate (Baby Persona)** — the server check `requireConsentVerified(familyId)` that
-  **blocks Baby Persona (minor biometric LoRA) creation until the Household is
-  `consent_verified`** via [Email-Plus VPC](#email-plus-vpc). This closes a live COPPA hole:
-  before v20, `PersonaService.createBaby` had **no** consent check. On the mobile surface,
-  **consent and payment are separate gates** (ADR-0018/0025: Apple IAP cannot prove payer
-  identity, so payment is *not* VPC on iOS) — the [Trial](#trial) card unlocks *paying* for
-  likeness; **Email-Plus** unlocks *the legal right* to create it. Both are required before a
-  baby's photos are accepted. Fails **closed** (a consent-engine error denies, never permits).
-
-- **R1 entry flow** — the canonical first-open order the app walks a new Household through:
-  **demo → signup → trial → consent → photos** (`FirstOpenService.getFlow`). The
-  [Demo Story](#demo-story) earns trust before the wall; the wall appears at the first gated
-  action (403 → paywall); consent (Email-Plus) and payment (trial) are both cleared before
-  the baby's photos are accepted. If the demo asset fails, the flow degrades to
-  skip-to-paywall (`onDemoFailed`), never a white screen.
-
-- **Demo Story** — the **pre-baked, baby-free** Story ("Maya and the Moon") shown first-open
-  as the free "aha" **before** any card or signup. Static content (no generation spend, no
-  child likeness), served by `DemoStoryService`. Distinct from a real [Story](#story): it
-  stars no [Persona](#persona), requires no card, and is the same for every user.
-  _Avoid_: "sample"/"preview" (ambiguous); "template" (it is not a starting point a user edits).
+- **PurchaseController** — mobile abstraction over "start the subscription."
+  **FakePurchaseController** (R1/Simulator) activates the trial via the
+  Start-trial endpoint; real **react-native-purchases** (RevenueCat)
+  deferred to EAS. Both converge on the same server subscription state
+  (real via webhook, fake via endpoint); `react-native-purchases` can't run
+  in Expo Go, so the fake keeps entry verifiable on Simulator (ADR-0027).
+  _Avoid_: "mock" (a shipped controller), "IAP" alone (real path only).
+- **Start-trial endpoint** — prod-guarded `POST /api/billing/start-trial`,
+  activates a 7-day Trial idempotently (`active`, `just_us`,
+  `trialEndsAt = now + 7d`) — same state the RevenueCat webhook writes.
+  Refused outside non-production/`DEV_*` env; FakePurchaseController only.
+  _Avoid_: "checkout" (Stripe/web path).
+- **Trial expiry** — Trial carries `trialEndsAt`;
+  `SubscriptionService.isActive` = `active` **AND** `now < trialEndsAt`.
+  Past expiry → 403 → paywall. Auto-renew/`past_due` grace deferred to
+  RevenueCat.
+- **Consent gate (Baby Persona)** — server check
+  `requireConsentVerified(familyId)` blocking Baby Persona creation until
+  `consent_verified` via Email-Plus VPC — closes the COPPA hole
+  (`PersonaService.createBaby` had no check before v20). Consent and
+  payment are separate mobile gates (ADR-0018/0025): Trial unlocks paying;
+  Email-Plus unlocks the legal right. Both required before photos accepted;
+  fails closed.
+- **R1 entry flow** — first-open order: demo → signup → trial → consent →
+  photos (`FirstOpenService.getFlow`). Demo Story earns trust before the
+  wall (403→paywall); consent+payment both cleared before photos accepted.
+  Demo failure degrades to skip-to-paywall (`onDemoFailed`), never white.
+- **Demo Story** — pre-baked, baby-free Story ("Maya and the Moon") shown
+  first-open before any card/signup. Static, no spend, no likeness;
+  `DemoStoryService`. Stars no Persona, same for every user.
+  _Avoid_: "sample"/"preview" (ambiguous); "template" (not editable).
 
 ---
 
-_Last updated 2026-07-07: added PRD v20 language (Working monetization / R1 entry gates —
-PurchaseController fake-first, Start-trial endpoint, Trial expiry, Consent gate on Baby
-Persona [closes the COPPA hole], R1 entry flow, Demo Story; ADR-0027 records the fake-first
-purchase seam and the payment-vs-consent split. R1 ships one plan [Just Us]; real Apple IAP
-deferred to EAS). Prior update 2026-07-06: added PRD v19 language (Working core loop — Placeholder art
-degradation, Partial un-cut of Journal + Learning; ADR-0026 relaxes the PRD v16 ruthless cut
-for those two only). Prior update 2026-06-23: added PRD v16/v17 language (Ruthless cut, Inert-not-broken, Daily
-Notes, Verify gate, Honest seed harness, Error capture [Sentry, fail-open, error→issue]; amends
-ADR-0024 solo-only + ADR-0025 solo plan, sequences ADR-0015 US-only R1.0). Prior update
-2026-06-22: added PRD v13 language (Just Us / Our Whole Family two-plan
-model superseding the Basic/Normal/Plus Tier; Invited Member, Member-login cap,
-Create-rights, Voice message, Generation terminal state; ADR-0024 family accounts extends
-ADR-0006, ADR-0025 monetization supersedes ADR-0023). Prior update 2026-06-21: added PRD v12 language (Tier [Basic/Normal/Plus], Trial-as-entry
-[no free tier], Story cap, Credit, Custom art style [Style LoRA], Story Context Engine;
-ADR-0022 supersedes ADR-0019, ADR-0023 supersedes ADR-0009 + parts of ADR-0016 and updates
-ADR-0008). Prior update 2026-06-16: added PRD v9 language (mobile feature wave — parity
-backbone, mobile Journal, mobile Storybook; payment deferred with Free+paid+credits direction
-recorded). Prior update 2026-06-14: added PRD v8 language (Moment photo write-only + vision→text,
-Firsts, Birthday Story; ADR-0021). Prior update 2026-06-14: added Roster avatar language
-(display generated avatars, never raw photos; PRD v7, ADR-0020). Prior update 2026-06-13:
-added Journal & Moments language (Moment, Significant Moment, Journal, Auto-context layer,
-Daily nudge, Weekly Story suggestion; PRD v6, ADR-0019), and v5 "Maya's World" revamp
-language (Household, World, multi-Baby, Family-roster, Voice clip, Video page)._
+_Last updated 2026-07-07 (PRD v20). Provenance for each version's PRD/ADR
+links is in that version's blockquote above; versions in order: v5 → v6 →
+v7 → v8 → v9 → v12 (Tier/Trial/Story cap/Credit/Custom art
+style/Story Context Engine; ADR-0022/0023) → v13 → v16/v17 → v19 → v20._

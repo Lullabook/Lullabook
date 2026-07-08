@@ -1,17 +1,7 @@
 # 34 — Household + multiple babies + per-baby World
 
-## What to build
-Introduce **Household** as the account/billing/consent boundary (reframing the old
-`Family`=account) and allow it to own **multiple Babies**, each with its own **World**
-surface. Migration adds a `babies` table (household_id, name, nicknames defaults) and
-a household concept; keep `family_id` plumbing working via an alias/compat shim so
-existing services don't break. World home reads the selected baby from real data.
+Status: superseded by 146-cut-multi-family-solo-only.md
 
-## Acceptance criteria
-- A Household can have ≥1 Baby; default Baby selected; a baby switcher exists.
-- Migration is additive + reversible; existing 33-issue tests stay green.
-- World home renders the real selected Baby (name/initial/counts) not mock data.
-- Adding a baby supports "same family" (default, shares roster) vs "different family".
+Introduced Household as the account/billing/consent boundary (reframing `Family`) with a `babies` table and per-baby World surface; `family_id` kept working via a compat shim. The Household/World naming and account-boundary model is foundational and persisted, but the multiple-babies capability itself was cut for R1 (146: one baby per Household, enforced server-side) — multi-baby code stays behind config for R2.
 
-## Blocked by
-(none — foundation)
+(condensed 2026-07-07 — full spec in git history)

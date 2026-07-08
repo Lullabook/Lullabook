@@ -1,37 +1,13 @@
 # 92 — RevenueCat Apple IAP + 7-day trial as VPC (ADR-0023, ADR-0018, ADR-0008)
 
-Triage: ready-for-agent
+Status: superseded by 121-trial-and-revenuecat-stripe-mapping.md
 
-## Parent
-PRD v12 — `CONTEXT/planning/prd-v12-release-grade-monetization-context-ux.md`. Track A.
+Shipped the original 3-tier RevenueCat product config + 7-day Normal trial where the
+trial's card-on-file is the VPC gate: no baby/Family-member photo upload without a
+payment method on file; cached last-known entitlement on RC outage; entitlement check
+<300ms.
+Replaced by the two-plan Stripe/RevenueCat product mapping (121, ADR-0025), later
+refined again for R1 by 128 (simple trial-start + server-flip entitlement). The core
+invariant — card-on-file trial = VPC before any child likeness — persisted through both.
 
-## What to build
-Purchase + entitlement sync via **RevenueCat Apple IAP**, with the **7-day free trial of
-Normal** as the entry — and the trial's **card-on-file = the VPC** (ADR-0008 as updated).
-Supersedes/extends issue 25.
-
-- RevenueCat product config for Basic/Normal/Plus (monthly; annual carries forward) +
-  the Normal trial offer. Validate receipts; map the active entitlement to issue 91's model.
-- **Starting the trial requires a payment method** — this is the VPC gate; no child
-  likeness (Family-member/baby photo upload) is permitted without it.
-- Cache the last-known entitlement so a RevenueCat outage degrades gracefully.
-
-## Acceptance criteria
-- [ ] Trial/purchase round-trip maps to the correct server entitlement (faked RevenueCat
-      adapter in tests).
-- [ ] **Security invariant (cornerstone):** **no child likeness without a card-on-file
-      VPC** — baby/Family-member photo upload is blocked until a paid entry (incl. trial)
-      exists.
-- [ ] **Failure invariant:** RevenueCat down / receipt validation fails → keep last-known
-      cached entitlement, **no crash**, retry; surface only if unconfirmable.
-- [ ] **Latency invariant:** entitlement check **<300ms** cached and never blocks render.
-- [ ] No secrets committed — RevenueCat keys referenced by env-var name only.
-- [ ] Tests cover trial→entitlement, the VPC upload-block, and the outage-degrade path.
-
-## Verification-command
-```bash
-npm test -- revenuecat && tsc --noEmit
-```
-
-## Blocked by
-91
+(condensed 2026-07-07 — full spec in git history)

@@ -1,35 +1,11 @@
 # 90 — Past-Story continuity summary (anti-repeat input)
 
-Triage: ready-for-agent
+Status: superseded by 148-keep-daily-notes-defer-rest.md
 
-## Parent
-PRD v12 — `CONTEXT/planning/prd-v12-release-grade-monetization-context-ux.md`. Track B.
+Shipped (commit `4a88074`) as the bounded per-Baby rolling summary (protagonist beats,
+theme, named entities) written on Storybook finalization, capped to a newest-N window,
+fed to the context engine (89) as an anti-repeat instruction; empty when no prior Stories
+(no error). Family-scoped, no raw photo data, purged by hard-delete (ADR-0007).
+Deferred alongside the context engine by issue 148 for R1; code kept behind config for R2.
 
-## What to build
-The bounded per-Baby artifact the context engine (issue 89) uses for **continuity and
-anti-repeat**, so generation doesn't retell the same plot.
-
-- On Storybook **finalization**, produce and store a **short rolling summary** (bounded
-  length) of the Story: protagonist beats, theme, notable named entities used.
-- Maintain a per-Baby rolling window (newest-N finalized Stories) so the summary stays
-  small and cheap.
-- Expose it to the engine as the `past-Story summary` input; the engine instructs the
-  Prompt to **avoid repeating** recent plots/themes.
-
-## Acceptance criteria
-- [ ] Finalizing a Storybook writes a bounded summary; the rolling window caps total size.
-- [ ] The engine receives the summary and the generated Prompt reflects an anti-repeat
-      instruction when prior Stories exist.
-- [ ] **Failure invariant:** no prior Stories → summary input is empty and generation
-      proceeds normally (no error).
-- [ ] **Security invariant:** the summary is Family-scoped, contains no raw photo data,
-      and is purged by hard-delete (ADR-0007).
-- [ ] Tests cover summary creation on finalize, the rolling-window cap, and the empty case.
-
-## Verification-command
-```bash
-npm test -- past-story-summary && tsc --noEmit
-```
-
-## Blocked by
-89
+(condensed 2026-07-07 — full spec in git history)

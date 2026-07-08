@@ -1,30 +1,12 @@
 # 84 — HITL: family & roster (create member, photo upload, avatars, edit)
 
-Triage: ready-for-agent (HITL)
+Status: cut
 
-## Parent
-PRD v10 — `CONTEXT/planning/prd-v10-hitl-smoke-verification.md`
+Scoped as the manual Simulator pass verifying photo-upload wiring (70), roster avatars,
+and Character edit (80) against the real backend. Never executed: GH #31 sat open past
+2026-06-21, deprioritized behind PRD v12, never revisited by later PRDs.
+`HITL-SMOKE-RUNBOOK.md` §2 still reads "_to be completed in issue 84_" (only the
+issue-70/PRD-v11 §2.x sub-step has real content). Superseded in practice by
+`/live-app-audit` + `/verify`.
 
-## What to build
-The family/roster section of the smoke runbook. Verifies the photo-upload wiring (issue
-70), roster avatars, and Character edit (issue 80) against the real backend on Simulator.
-
-- **Create member/persona:** add a roster member with a dev sample photo; confirm it
-  persists and the **training → ready** lifecycle copy reflects real state.
-- **Photo upload (issue 70):** the authenticated Add-Family photo upload completes end to
-  end (no minor photo reaches storage before the consent gate + moderation — ADR-0010);
-  confirm the upload lands in blob storage.
-- **Roster avatar:** the generated avatar appears per the roster-avatar rule (issues 58/62).
-- **Edit Character (issue 80):** open edit, confirm existing questionnaire values load,
-  change one, save, confirm it persists on reload.
-
-## Acceptance criteria
-- [ ] Creating a roster member persists and shows the correct training/ready state.
-- [ ] Photo upload completes; the photo is in blob storage and respects the consent/
-      moderation gate (no raw minor photo bypasses it).
-- [ ] The roster avatar renders per the established rule.
-- [ ] Editing a Character loads existing values and saves changes (survives reload).
-- [ ] Each step recorded PASS/FAIL; any FAIL filed as a `bug` issue with repro.
-
-## Blocked by
-82, 83
+(condensed 2026-07-07 — full spec in git history)

@@ -1,28 +1,5 @@
 # 120 — Two-plan paywall UI (shared config, web + mobile)
-
-Triage: ready-for-agent
-
-## Parent
-PRD v13 — `CONTEXT/planning/prd-v13-working-app-family-accounts-pricing.md`. Track C. ADR-0025.
-
-## What to build
-Render the **two plans** (Just Us $9.99/$79.99 · Our Whole Family $24.99/$199.99) from **one
-shared config** — retire mobile's hardcoded `TIERS` duplicate. Annual pre-selected; voice +
-video presented as the Our-Whole-Family hook; entitlement-aware gating routes to upgrade
-(the server 403 stays the boundary). Use `lullabook-design`; finish with
-`lullabook-design-check`.
-
-## Acceptance criteria
-- [ ] Web + mobile paywall render the two plans from one shared config, annual default.
-- [ ] Gated features show an upgrade affordance routing to billing; the server 403 remains
-      the gate (UI gating never trusted).
-- [ ] Cap/credit usage + exhaustion states render (never a dead end). Passes
-      `lullabook-design-check`.
-
-## Verification-command
-```bash
-npm test -- paywall && tsc --noEmit && (cd mobile && npx tsc --noEmit)
-```
-
-## Blocked by
-105, 116
+Status: superseded by 129-collapse-to-one-plan.md
+Rendered two plans (Just Us $9.99/$79.99, Our Whole Family $24.99/$199.99) from one shared web+mobile config, annual pre-selected, voice+video as the upgrade hook; gated features routed to upgrade with the server 403 as the real boundary; cap/credit exhaustion states rendered (never a dead end).
+Superseded — R1 collapsed to one plan (129), hiding the premium tier until it exists.
+(condensed 2026-07-07 — full spec in git history)

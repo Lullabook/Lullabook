@@ -1,33 +1,13 @@
 # 98 — First-open demo "aha" + Day-0 paywall placement
 
-Triage: ready-for-agent
+Status: superseded by 131-onboarding-aha-demo-consent-trial.md
 
-## Parent
-PRD v12 — `CONTEXT/planning/prd-v12-release-grade-monetization-context-ux.md`. Track C.
+Shipped (PRD v12, 3-tier era) the original first-open flow: a baby-free pre-baked demo
+Story playable in <90s with no signup/card, followed by a Day-0 paywall (annual-default,
+trial-of-Normal CTA) — trial-start (card = VPC) required before uploading the real baby.
+Superseded by 131's fuller onboarding chain (demo → signup → trial → consent → photos)
+for PRD v14/R1, and again refined into the 5-step `FirstOpenService` flow by issue 174
+for PRD v20. The core "aha before paywall, baby-free demo" invariant persisted through
+all revisions.
 
-## What to build
-The first-open experience that earns trust **before** the card, then places the paywall
-at the moment of highest intent — required because there is no free tier (ADR-0023).
-
-- A **pre-baked, baby-free demo Story** ("meet Maya") a new user can read + hear in
-  <90s, no signup/card — the aha.
-- After the aha, present the **Day-0 paywall** (annual-default; trial-of-Normal CTA);
-  starting the trial requires a card (= VPC, ADR-0008) and unlocks putting **their** baby
-  in stories.
-
-## Acceptance criteria
-- [ ] A first-time user reaches a playable demo Story without signup or card.
-- [ ] **Security invariant:** the demo is **baby-free** (no child likeness); uploading the
-      real baby is gated behind starting the trial (card-on-file VPC).
-- [ ] The paywall appears **after** the aha, not before; annual is the default option.
-- [ ] **Failure invariant:** if the demo asset fails to load, the user still reaches a
-      usable state (retry / skip-to-paywall), never a white screen.
-- [ ] Tests cover the demo-before-card flow, the baby-upload gate, and paywall placement.
-
-## Verification-command
-```bash
-npm test -- first-open && tsc --noEmit
-```
-
-## Blocked by
-91, 92, 96
+(condensed 2026-07-07 — full spec in git history)
