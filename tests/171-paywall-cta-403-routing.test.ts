@@ -83,6 +83,29 @@ describe("171 — server puts the entitlement code on the wire (SEC-1)", () => {
     expect(typed?.code).toBe("not_entitled");
     expect(isEntitlementError(typed)).toBe(true);
   });
+
+  it("jsonDomainError never leaks third-party status/code shapes (Postgrest etc.)", async () => {
+    const { jsonDomainError } = await import("@/lib/api-route");
+
+    // A PostgrestError-shaped object: has code + status but is NOT a domain error.
+    const leaky = Object.assign(new Error("relation \"secret_table\" does not exist"), {
+      code: "PGRST116",
+      status: 406,
+    });
+    const res = jsonDomainError(leaky, 400);
+    expect(res.status).toBe(400); // fallback, not the foreign status
+    const body = await res.json();
+    expect(body.code).toBeUndefined(); // internal code never crosses the wire
+
+    // Whitelisted domain codes still pass through untouched.
+    const domain = Object.assign(new Error("An active subscription is required."), {
+      code: "not_entitled",
+      status: 403,
+    });
+    const ok = jsonDomainError(domain, 400);
+    expect(ok.status).toBe(403);
+    expect((await ok.json()).code).toBe("not_entitled");
+  });
 });
 
 describe("171 — client classification is code-gated, never message-sniffed", () => {

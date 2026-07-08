@@ -39,11 +39,19 @@ export function jsonError(message: string, status = 400): NextResponse {
  * stays the only entitlement boundary — errors without a code keep the
  * caller-supplied fallback status and get no code field.
  */
+const DOMAIN_ERROR_CODES = new Set([
+  "not_entitled",
+  "create_not_allowed",
+  "story_cap_reached",
+]);
+
 export function jsonDomainError(err: unknown, fallbackStatus = 400): NextResponse {
   const message = err instanceof Error ? err.message : "Failed";
   if (err && typeof err === "object" && "status" in err && "code" in err) {
     const { status, code } = err as { status: unknown; code: unknown };
-    if (typeof status === "number" && typeof code === "string") {
+    // Whitelisted: third-party errors (Postgrest etc.) also carry status/code
+    // fields — never let an internal code or message-status leak to clients.
+    if (typeof status === "number" && typeof code === "string" && DOMAIN_ERROR_CODES.has(code)) {
       return NextResponse.json({ error: message, code }, { status });
     }
   }
