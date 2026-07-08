@@ -3,6 +3,7 @@ import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead, Card, Chip, PrimaryButton, SkeletonCard } from "@/components/maya-ui";
 import { createStorybook, fetchHome, type HomeResponse } from "@/lib/api";
+import { isEntitlementError } from "@/lib/entitlement-error";
 import { isR1MultiStoryTypeEnabled } from "@/lib/r1-flags";
 import { C, F } from "@/constants/theme";
 import type { StoryType } from "@domain/types";
@@ -94,6 +95,14 @@ export default function NewStorybookScreen() {
       });
       router.replace(`/stories/${result.storybookId}` as never);
     } catch (e) {
+      // Issue 171 (SEC-1/SEC-4): a 403 entitlement code from the server IS
+      // the paywall boundary — route to billing instead of message-sniffing.
+      // The client never decides entitlement locally.
+      if (isEntitlementError(e)) {
+        setError("Illustrated Stories need an active plan.");
+        router.push("/billing" as never);
+        return;
+      }
       const message = e instanceof Error ? e.message : "Could not generate Storybook";
       setError(message.includes("subscription") ? "Illustrated Stories need an active plan." : message);
     } finally {

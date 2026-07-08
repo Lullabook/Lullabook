@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withBearerAuth, jsonOk, jsonError } from "@/lib/api-route";
+import { withBearerAuth, jsonOk, jsonError, jsonDomainError } from "@/lib/api-route";
 import type { Brief, Storybook } from "@/domain/types";
 
 function serializeStorybook(book: Storybook) {
@@ -32,9 +32,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       } catch {
         /* ignore sync failure; surface the original error */
       }
+      // Issue 171 (SEC-1): entitlement/cap failures cross the wire as 403 +
+      // machine code so the client can route to the paywall without message
+      // sniffing; everything else keeps the legacy status mapping.
       const message = err instanceof Error ? err.message : "Failed";
-      const status = message.includes("subscription") ? 402 : 400;
-      return jsonError(message, status);
+      return jsonDomainError(err, message.includes("subscription") ? 402 : 400);
     }
   });
 }

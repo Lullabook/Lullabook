@@ -5,6 +5,7 @@ import { BrandGradient, Screen, Eyebrow, Lead, AnimatedToggle, PrimaryButton } f
 import { isR1AudioEnabled, isR1MultiFamilyEnabled } from "@/lib/r1-flags";
 import { C, F, R } from "@/constants/theme";
 import { fetchPaywallConfig, type PaywallPlanResponse } from "@/lib/api";
+import { getPurchaseController } from "@/lib/purchases";
 
 /** ADR-0025 / issue 129 — plan shape (shared with web paywall-config). */
 interface PlanInfo {
@@ -43,9 +44,15 @@ const FALLBACK_PLANS: PlanInfo[] = [
 function PlanCard({
   plan,
   billing,
+  onStartTrial,
+  trialBusy,
+  trialError,
 }: {
   plan: PlanInfo;
   billing: "monthly" | "annual";
+  onStartTrial: () => void;
+  trialBusy: boolean;
+  trialError: string | null;
 }) {
   const price = billing === "annual" ? plan.annualPrice : plan.monthlyPrice;
   const priceLabel = billing === "annual" ? `$${price}/yr` : `$${price}/mo`;
@@ -87,12 +94,17 @@ function PlanCard({
           </View>
         ))}
       </View>
-      {/* The trial is the only entry point (R1 one-plan). Purchase wiring
-          (RevenueCat IAP) is its own issue; this CTA currently dismisses. */}
+      {/* Issue 171 (D5): the CTA runs the PurchaseController seam (issue
+          170). Success = the controller refetched a server-verified
+          entitlement → dismiss back to the unlocked action. Failure =
+          retryable inline error; the Household stays unentitled (FAIL-2) —
+          never an optimistic local unlock. */}
       <View style={{ marginTop: 16 }}>
+        {trialError ? <Text style={st.trialError}>{trialError}</Text> : null}
         <PrimaryButton
-          title="✨ Start your 7-day free trial"
-          onPress={() => router.dismiss()}
+          title={trialBusy ? "Starting your trial…" : "✨ Start your 7-day free trial"}
+          disabled={trialBusy}
+          onPress={onStartTrial}
         />
       </View>
     </>
@@ -135,6 +147,25 @@ function toPlanInfo(p: PaywallPlanResponse): PlanInfo {
 export default function PaywallScreen() {
   const [billing, setBilling] = useState<"monthly" | "annual">("annual");
   const [plans, setPlans] = useState<PlanInfo[]>(FALLBACK_PLANS);
+  const [trialBusy, setTrialBusy] = useState(false);
+  const [trialError, setTrialError] = useState<string | null>(null);
+
+  // Issue 171 (D5/FAIL-2): start the trial through the PurchaseController
+  // seam — entitlement comes back server-verified (SEC-1); this screen never
+  // flips a local entitlement bit. On failure the button stays enabled for
+  // retry and the user remains on the paywall.
+  async function startTrial() {
+    if (trialBusy) return;
+    setTrialBusy(true);
+    setTrialError(null);
+    const result = await getPurchaseController().startTrial();
+    setTrialBusy(false);
+    if (result.ok) {
+      router.dismiss();
+    } else {
+      setTrialError(result.error);
+    }
+  }
 
   // Issue 129: fetch the R1-visible plans from the server so the one-plan
   // collapse is server-authoritative (R1_ONE_PLAN), not duplicated here.
@@ -176,7 +207,14 @@ export default function PaywallScreen() {
           momentum; plans render directly in Screen's scroll view. */}
       <View>
         {plans.map((plan) => (
-          <PlanCard key={plan.id} plan={plan} billing={billing} />
+          <PlanCard
+            key={plan.id}
+            plan={plan}
+            billing={billing}
+            onStartTrial={startTrial}
+            trialBusy={trialBusy}
+            trialError={trialError}
+          />
         ))}
         <Text style={st.foundingNote}>
           💛 Founding families get the first month free after the trial.
@@ -228,6 +266,13 @@ const st = StyleSheet.create({
   featureRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   check: { color: C.green, fontFamily: F.bodyBold, fontSize: 14 },
   featureText: { fontFamily: F.body, fontSize: 14, color: C.muted, flex: 1 },
+  trialError: {
+    fontFamily: F.body,
+    fontSize: 13,
+    color: C.danger,
+    marginBottom: 8,
+    lineHeight: 18,
+  },
   foundingNote: {
     fontFamily: F.body,
     fontSize: 13,

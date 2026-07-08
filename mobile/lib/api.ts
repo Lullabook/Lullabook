@@ -1,5 +1,6 @@
 import { getApiUrl } from "@/lib/env";
 import { getAccessToken } from "@/lib/supabase";
+import { classifyEntitlementError } from "@/lib/entitlement-error";
 import type { Character, Persona, StoryType } from "@domain/types";
 
 const apiBase = getApiUrl();
@@ -15,7 +16,12 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    // Issue 171 (SEC-1): a 403 carrying a known entitlement code is the
+    // server's paywall boundary — surface it typed so callers route to
+    // billing.tsx. Non-entitlement 403s stay plain errors (never hijacked).
+    const entitlementErr = classifyEntitlementError(res.status, body);
+    if (entitlementErr) throw entitlementErr;
     throw new Error(body.error ?? `Request failed (${res.status})`);
   }
   return res.json() as Promise<T>;
@@ -387,6 +393,24 @@ export function revokeVoiceConsent(personaId: string): Promise<{ revoked: boolea
     method: "POST",
     body: JSON.stringify({ personaId }),
   });
+}
+
+// Issue 170 (ADR-0027) — PurchaseController wire calls. The seam itself is
+// mobile/lib/purchase-controller.ts (pure DI); mobile/lib/purchases.ts binds
+// these two functions into it. Both hit real, server-authoritative routes.
+
+/** Prod-guarded fake-trial start — POST /api/billing/start-trial (issue 168). */
+export function startTrialRequest(): Promise<
+  import("@/lib/purchase-controller").StartTrialWire
+> {
+  return apiFetch("/api/billing/start-trial", { method: "POST", body: JSON.stringify({}) });
+}
+
+/** SEC-1 refetch — GET /api/entitlement is the only entitlement authority. */
+export function fetchEntitlementSnapshot(): Promise<
+  import("@/lib/purchase-controller").EntitlementSnapshot
+> {
+  return apiFetch("/api/entitlement");
 }
 
 export async function illustrationSource(blobKey: string): Promise<{ uri: string; headers?: Record<string, string> }> {

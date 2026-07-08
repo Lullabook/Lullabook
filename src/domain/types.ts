@@ -246,6 +246,13 @@ export interface Subscription {
   stripeSubscriptionId: string | null;
   /** ADR-0023 paid tier; set by RevenueCat (issue 92). Undefined → Normal default for an active sub. */
   tier?: Tier;
+  /**
+   * ADR-0027 (issue 168) — trial expiry. A trial is `status: "active"` WITH
+   * `trialEndsAt` set; `isActive` = active AND now < trialEndsAt. Null/absent
+   * on a non-trial active sub → unaffected (reads active). No new
+   * SubscriptionStatus for trials.
+   */
+  trialEndsAt?: Date | null;
   updatedAt: Date;
 }
 
