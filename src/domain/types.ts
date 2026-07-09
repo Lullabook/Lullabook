@@ -202,6 +202,12 @@ export interface ConsentReceipt {
   memberId: string;
   jurisdiction: string;
   noticeVersion: string;
+  /**
+   * Issue 172 — HOW consent was obtained ("payment_vpc" | "email_plus" |
+   * "signed_form"). Legacy receipts omit it and are treated as payment_vpc,
+   * so they fail closed in markets that require a stronger method (ADR-0018).
+   */
+  method?: string;
   consentedAt: Date;
 }
 

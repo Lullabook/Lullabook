@@ -43,6 +43,9 @@ const DOMAIN_ERROR_CODES = new Set([
   "not_entitled",
   "create_not_allowed",
   "story_cap_reached",
+  // Issue 172: ConsentRequiredError — mobile routes this to the consent
+  // flow (issue 173), NOT the paywall. Payment never satisfies consent.
+  "consent_required",
 ]);
 
 export function jsonDomainError(err: unknown, fallbackStatus = 400): NextResponse {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { withBearerAuth, jsonOk, jsonError } from "@/lib/api-route";
+import { withBearerAuth, jsonOk, jsonError, jsonDomainError } from "@/lib/api-route";
 import { castLimitError, castSlotInfo } from "@/lib/cast-limits";
 import type { RequestContext } from "@/lib/context";
 
@@ -46,7 +46,22 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
       if (mode === "baby") {
         const gate = ctx.subscriptions.canCreateBabyPersona(member.id);
-        if (!gate.allowed) return jsonError(gate.reason ?? "Not allowed", 403);
+        if (!gate.allowed) {
+          // Issue 172: consent denials carry a machine code so the client can
+          // route to the consent flow — never inferred from message text.
+          if (gate.code === "consent_required") {
+            return NextResponse.json(
+              {
+                error:
+                  gate.reason ??
+                  "Verified parental consent is required before creating a baby profile",
+                code: "consent_required",
+              },
+              { status: 403 }
+            );
+          }
+          return jsonError(gate.reason ?? "Not allowed", 403);
+        }
       }
 
       const stagingId = randomUUID();
@@ -74,7 +89,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
       return jsonOk({ queued: true }, 202);
     } catch (err) {
-      return jsonError(err instanceof Error ? err.message : "Failed", 400);
+      return jsonDomainError(err, 400);
     }
   });
 }

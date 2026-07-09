@@ -11,7 +11,7 @@ import type { DataStore } from "@/db/store";
 import type { Persona, PersonaKind, TraitQuestionnaire } from "@/domain/types";
 import { rosterAvatarBlobKey } from "@/lib/roster-avatar";
 import { runPreflightChecks } from "@/services/preflight";
-import { SubscriptionService } from "@/services/subscription";
+import { ConsentRequiredError, SubscriptionService } from "@/services/subscription";
 import { ChildSafetyService } from "@/services/child-safety";
 import type { EntitlementService } from "@/services/entitlement";
 
@@ -56,8 +56,13 @@ export class PersonaService {
   }
 
   async createBaby(input: CreatePersonaInput): Promise<Persona> {
+    // Issue 172: the consent gate runs FIRST — before any photo is staged,
+    // moderated, or sent to LoRA training (COPPA launch blocker).
     const gate = this.subscriptions.canCreateBabyPersona(input.memberId);
     if (!gate.allowed) {
+      if (gate.code === "consent_required") {
+        throw new ConsentRequiredError(gate.reason);
+      }
       throw new Error(gate.reason ?? "Baby persona creation blocked");
     }
     const member = this.store.members.get(input.memberId);

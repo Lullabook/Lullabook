@@ -81,6 +81,11 @@ function RootLayoutNav() {
         <Stack.Screen name="characters/[id]" options={{ title: "Edit character", ...stackHeader }} />
         <Stack.Screen name="family/new" options={{ title: "Add someone who loves them", ...stackHeader }} />
         <Stack.Screen name="family/[id]" options={{ title: "Family member", ...stackHeader }} />
+        {/* Issue 173 (ADR-0018): Email-Plus verified parental consent. */}
+        <Stack.Screen
+          name="consent"
+          options={{ title: "Parental consent", ...stackHeader }}
+        />
         {/* Issue 105: billing is a reachable, dismissible modal. */}
         <Stack.Screen
           name="billing"

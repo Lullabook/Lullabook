@@ -7,6 +7,7 @@ import { BrandGradient, HERO_GRAD, Screen, Eyebrow, Lead, Card, Field, Chip, Pri
 import { PhotoUploadStatus, RosterAvatar } from "@/components/roster-avatar";
 import { usePressFeedback } from "@/lib/use-press-feedback";
 import { createPersona } from "@/lib/api";
+import { isConsentRequiredError } from "@/lib/entitlement-error";
 import { appendNativeFile, setNativeFile, type NativeUploadFile } from "@/lib/form-data";
 import { C, F } from "@/constants/theme";
 
@@ -120,6 +121,14 @@ export default function AddFamilyScreen() {
       await createPersona(fd);
       router.replace("/(tabs)");
     } catch (e) {
+      // Issue 172/173 — createBaby's consent gate answered 403
+      // `consent_required`: route into the Email-Plus consent flow instead of
+      // showing a dead-end error. Nothing was created; the form stays intact
+      // for when the parent returns verified.
+      if (isConsentRequiredError(e)) {
+        router.push("/consent");
+        return;
+      }
       setError(e instanceof Error ? e.message : "Could not start training");
     } finally {
       setSaving(false);

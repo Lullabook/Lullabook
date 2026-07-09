@@ -118,7 +118,8 @@ export class SubscriptionService {
   recordConsent(
     familyId: string,
     memberId: string,
-    jurisdiction: string
+    jurisdiction: string,
+    method?: string
   ): ConsentReceipt {
     const config = ConsentEngine.getJurisdiction(jurisdiction);
     if (!config) throw new Error("Unknown jurisdiction");
@@ -128,22 +129,89 @@ export class SubscriptionService {
       memberId,
       jurisdiction,
       noticeVersion: config.noticeVersion,
+      // Issue 172 (SEC-3): receipts record HOW consent was obtained. Payment
+      // paths must pin "payment_vpc" explicitly — the default is only correct
+      // for flows that actually completed the jurisdiction's required method.
+      method: method ?? config.consentMethod,
       consentedAt: new Date(),
     };
     this.store.saveConsentReceipt(receipt);
     return receipt;
   }
 
-  canCreateBabyPersona(memberId: string): { allowed: boolean; reason?: string } {
+  /**
+   * Issue 172 — method-aware consent. A receipt only satisfies the
+   * jurisdiction when it was obtained via the REQUIRED method: payment must
+   * not satisfy consent and consent must not satisfy payment (ADR-0018).
+   * Legacy receipts without a method are treated as payment_vpc, so they
+   * fail closed in email_plus / signed_form markets.
+   */
+  private consentSatisfied(familyId: string, jurisdiction: string): boolean {
+    const config = ConsentEngine.getJurisdiction(jurisdiction);
+    if (!config) return false;
+    const receipt = this.store.getConsentReceiptForFamily(familyId);
+    if (!receipt) return false;
+    return (receipt.method ?? "payment_vpc") === config.consentMethod;
+  }
+
+  /** Issue 172 (SEC-4): throws a structured 403; consent-store read errors deny. */
+  requireConsentVerified(familyId: string): void {
+    let ok = false;
+    try {
+      const guardian = this.store
+        .getMembersByFamily(familyId)
+        .find((m) => m.role === "guardian");
+      ok = guardian ? this.consentSatisfied(familyId, guardian.jurisdiction) : false;
+    } catch {
+      ok = false; // fail closed — a read error must never mint consent
+    }
+    if (!ok) throw new ConsentRequiredError();
+  }
+
+  canCreateBabyPersona(memberId: string): {
+    allowed: boolean;
+    reason?: string;
+    code?: "consent_required";
+  } {
     const member = this.store.members.get(memberId);
     if (!member) return { allowed: false, reason: "Member not found" };
+    let hasVerifiedConsent = false;
+    try {
+      hasVerifiedConsent = this.consentSatisfied(member.familyId, member.jurisdiction);
+    } catch {
+      // SEC-4: consent store unreadable — deny, never allow.
+      return {
+        allowed: false,
+        code: "consent_required",
+        reason: "Consent verification is temporarily unavailable",
+      };
+    }
     const result = this.consentEngine.check({
       jurisdiction: member.jurisdiction,
       actorRole: member.role,
       action: "create_baby_persona",
       hasActiveSubscription: this.isActive(member.familyId),
-      hasConsentReceipt: !!this.store.getConsentReceiptForFamily(member.familyId),
+      hasConsentReceipt: hasVerifiedConsent,
     });
-    return { allowed: result.allowed, reason: result.reason };
+    return {
+      allowed: result.allowed,
+      reason: result.reason,
+      code:
+        !result.allowed && result.reason === "Consent receipt required"
+          ? "consent_required"
+          : undefined,
+    };
+  }
+}
+
+/** 403 raised when verified parental consent is missing (issue 172, ADR-0018). */
+export class ConsentRequiredError extends Error {
+  readonly status = 403;
+  readonly code = "consent_required";
+  constructor(
+    message = "Verified parental consent is required before creating a baby profile"
+  ) {
+    super(message);
+    this.name = "ConsentRequiredError";
   }
 }

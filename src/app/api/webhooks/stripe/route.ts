@@ -46,7 +46,10 @@ export async function POST(req: Request): Promise<NextResponse> {
       (m) => m.familyId === familyId && m.role === "guardian"
     );
     if (guardian) {
-      ctx.subscriptions.recordConsent(familyId, guardian.id, guardian.jurisdiction);
+      // Issue 172: a payment-derived receipt is pinned to "payment_vpc". It
+      // satisfies consent ONLY in payment_vpc jurisdictions — never email_plus
+      // (US_IOS, ADR-0018) or signed_form markets.
+      ctx.subscriptions.recordConsent(familyId, guardian.id, guardian.jurisdiction, "payment_vpc");
     }
     await ctx.persist();
   }

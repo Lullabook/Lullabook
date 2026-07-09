@@ -68,6 +68,7 @@ export class EmailPlusVpcService {
       memberId: request.memberId,
       jurisdiction: this.store.members.get(request.memberId)?.jurisdiction ?? "US_IOS",
       noticeVersion: request.noticeVersion,
+      method: "email_plus", // issue 172: this flow IS the email_plus method
       consentedAt: new Date(),
     };
     this.store.saveConsentReceipt(receipt);
