@@ -46,6 +46,9 @@ const DOMAIN_ERROR_CODES = new Set([
   // Issue 172: ConsentRequiredError — mobile routes this to the consent
   // flow (issue 173), NOT the paywall. Payment never satisfies consent.
   "consent_required",
+  // Issue 168 audit fix: one trial per family ever — mobile routes this to
+  // the real purchase paywall, never a retry of start-trial.
+  "trial_already_used",
 ]);
 
 export function jsonDomainError(err: unknown, fallbackStatus = 400): NextResponse {

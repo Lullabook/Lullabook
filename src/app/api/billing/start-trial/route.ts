@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { withBearerAuth, jsonOk, jsonError } from "@/lib/api-route";
+import { withBearerAuth, jsonOk, jsonDomainError } from "@/lib/api-route";
 
 /**
  * Issue 169 (ADR-0027, SEC-2) — prod-guarded `POST /api/billing/start-trial`.
@@ -47,9 +47,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         },
       });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Trial activation failed";
-      return jsonError(message, 400);
+      // Audit fix: TrialAlreadyUsedError crosses the wire as a typed 403
+      // (`trial_already_used`) so mobile routes to the real paywall instead
+      // of retrying; anything else stays a retryable 400 (FAIL-2).
+      return jsonDomainError(err, 400);
     }
   });
 }

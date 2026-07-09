@@ -100,6 +100,11 @@ export default function ConsentScreen() {
             how to revoke later. Baby photo upload stays locked until you confirm.
           </Text>
         </Card>
+        {/* Audit fix (FAIL-2): mistyped email must never be a dead end. */}
+        <GhostButton
+          title="Re-send or use a different email"
+          onPress={() => controller.restart()}
+        />
         <GhostButton title="Back" onPress={() => router.back()} />
       </Screen>
     );

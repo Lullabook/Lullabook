@@ -79,7 +79,7 @@ describe("173 — consent flow state machine", () => {
     expect(hit).toBe(false);
   });
 
-  it("SEC-4: poll only advances on server 'verified' — 'pending'/'none' never regress or advance", async () => {
+  it("SEC-4: poll only advances on server 'verified'; a definitive 'none' returns to attest", async () => {
     let wire: ConsentStatusWire = { status: "pending", email: "p@e.com" };
     const c = new ConsentFlowController(
       makeDeps({ fetchStatus: async () => wire }),
@@ -90,13 +90,27 @@ describe("173 — consent flow state machine", () => {
     await c.poll();
     expect(c.state.step).toBe("pending"); // still pending
 
+    // Audit fix (FAIL-2): server "none" while pending = link expired/revoked
+    // — regress to attest so the Guardian can re-send, never wait forever.
     wire = { status: "none" };
     await c.poll();
-    expect(c.state.step).toBe("pending"); // poll never regresses
+    expect(c.state.step).toBe("attest");
 
+    await c.send("p@e.com");
     wire = { status: "verified" };
     const end = await c.poll();
     expect(end).toEqual({ step: "verified" });
+  });
+
+  it("restart() is an explicit escape hatch from pending back to attest (mistyped email)", async () => {
+    const c = new ConsentFlowController(
+      makeDeps({ fetchStatus: async () => ({ status: "pending" }) }),
+    );
+    await c.send("typo@wrong.com");
+    expect(c.state.step).toBe("pending");
+    expect(c.restart()).toEqual({ step: "attest" });
+    // Never mints anything — only the server can say "verified".
+    expect(c.state.step).toBe("attest");
   });
 
   it("SEC-4: poll errors keep the current step (no fabricated verification)", async () => {

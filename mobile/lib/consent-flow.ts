@@ -112,15 +112,29 @@ export class ConsentFlowController {
   /**
    * One poll tick. Only a server "verified" advances the flow (SEC-4);
    * poll errors keep the current step (they never regress a pending state
-   * or fabricate verification).
+   * or fabricate verification). Audit fix: a definitive server "none" while
+   * we sit in "pending" means the link expired or was revoked — return to
+   * "attest" so the Guardian can re-send instead of waiting forever.
    */
   async poll(): Promise<ConsentFlowStep> {
     try {
       const wire = await this.deps.fetchStatus();
       if (wire.status === "verified") this.set({ step: "verified" });
+      else if (wire.status === "none" && this.current.step === "pending")
+        this.set({ step: "attest" });
     } catch {
       // transient — keep waiting; the next tick retries.
     }
+    return this.current;
+  }
+
+  /**
+   * Audit fix (FAIL-2): explicit escape hatch from "pending" — the Guardian
+   * mistyped the email or never got it. Server-side, a fresh request
+   * invalidates the prior token, so this can never mint anything.
+   */
+  restart(): ConsentFlowStep {
+    this.set({ step: "attest" });
     return this.current;
   }
 }

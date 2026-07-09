@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { withBearerAuth, jsonOk } from "@/lib/api-route";
 import { ConsentEngine } from "@/services/consent-engine";
+import { EmailPlusVpcService } from "@/services/email-plus-vpc";
 
 /**
  * Issue 173 — mobile consent-flow resume point.
@@ -24,8 +25,18 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (required && ctx.store.getConsentReceiptForFamily(member.familyId, required)) {
       return jsonOk({ status: "verified" as const });
     }
+    // Audit fix (FAIL-2): a link_sent older than the confirm-side TTL can
+    // never be confirmed — reporting it "pending" forever strands a Guardian
+    // who mistyped their email. Mirror the TTL here so stale requests read
+    // "none" and the client re-shows the attest+email step.
+    const now = Date.now();
     const pending = [...ctx.store.emailPlusVpcRequests.values()]
-      .filter((r) => r.familyId === member.familyId && r.status === "link_sent")
+      .filter(
+        (r) =>
+          r.familyId === member.familyId &&
+          r.status === "link_sent" &&
+          now - r.requestedAt.getTime() <= EmailPlusVpcService.CONSENT_LINK_TTL_MS
+      )
       .sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime())[0];
     if (pending) {
       // Red-team fix (PII): the entered email is shown to the Guardian who

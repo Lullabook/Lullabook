@@ -102,6 +102,14 @@ export class SubscriptionService {
     const existing = this.store.getSubscription(familyId);
     if (subscriptionIsLive(existing, now)) return existing as Subscription;
 
+    // Audit fix (MAJOR): "one trial per family EVER". A non-live sub that
+    // ever carried a trialEndsAt means the trial was already granted and
+    // lapsed (expired or canceled) — re-minting here would hand out serial
+    // free weeks. 403 domain error; the client routes it to the real paywall.
+    if (existing?.trialEndsAt != null) {
+      throw new TrialAlreadyUsedError();
+    }
+
     const sub: Subscription = {
       familyId,
       status: "active",
@@ -200,6 +208,21 @@ export class SubscriptionService {
       // sniffing — copy edits must never silently drop the typed 403.
       code: !result.allowed && result.code === "consent_required" ? "consent_required" : undefined,
     };
+  }
+}
+
+/**
+ * 403 raised when a family's one-and-only trial was already used (issue 168,
+ * ADR-0027). Machine code so mobile routes straight to the purchase paywall.
+ */
+export class TrialAlreadyUsedError extends Error {
+  readonly status = 403;
+  readonly code = "trial_already_used";
+  constructor(
+    message = "Your family's free trial has already been used — choose a plan to continue"
+  ) {
+    super(message);
+    this.name = "TrialAlreadyUsedError";
   }
 }
 

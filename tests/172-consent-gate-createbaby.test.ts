@@ -361,4 +361,28 @@ describe("172 red-team — consent links expire", () => {
     // ConsentRequiredError import keeps this file honest about the gate type.
     expect(new ConsentRequiredError().code).toBe("consent_required");
   });
+
+  it("audit fix: status route reads a stale link_sent as 'none', not eternal 'pending'", async () => {
+    const ctx = createTestContext();
+    harness.ctx = ctx;
+    const member = ctx.onboarding.ensureFamilyForNewUser(
+      harness.authSub,
+      `${harness.authSub}@example.com`,
+      "US_IOS"
+    );
+    const vpc = vpcService(ctx);
+    const req = vpc.requestConsent(member.id, "typo@wrong.com");
+    await vpc.sendConsentLink(req.id);
+
+    let res = await consentStatusGET(statusRequest());
+    expect((await res.json()).status).toBe("pending");
+
+    // Backdate past the confirm-side TTL: this link can never be confirmed,
+    // so "pending" here would strand the Guardian forever (FAIL-2).
+    req.requestedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    ctx.store.emailPlusVpcRequests.set(req.id, req);
+
+    res = await consentStatusGET(statusRequest());
+    expect((await res.json()).status).toBe("none");
+  });
 });

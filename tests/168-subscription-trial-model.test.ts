@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestContext } from "@/test/fixtures";
 import { tierToPlan } from "@/services/entitlement";
+import { TrialAlreadyUsedError } from "@/services/subscription";
 
 /**
  * Issue 168 — Subscription trial model (`trialEndsAt`) + `activateTrial`.
@@ -57,6 +58,38 @@ describe("168 — Subscription trial model + activateTrial", () => {
 
       expect(second.trialEndsAt).toEqual(first.trialEndsAt);
       expect(ctx.store.subscriptions.size).toBe(1);
+    });
+
+    it("audit fix: refuses a second trial after the first expired (one trial per family ever)", () => {
+      const ctx = createTestContext();
+      const guardian = newGuardian(ctx);
+      ctx.subscriptions.activateTrial(guardian.familyId);
+
+      vi.advanceTimersByTime(8 * DAY_MS); // trial lapsed
+      expect(ctx.subscriptions.isActive(guardian.familyId)).toBe(false);
+
+      let err: unknown;
+      try {
+        ctx.subscriptions.activateTrial(guardian.familyId);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(TrialAlreadyUsedError);
+      expect((err as TrialAlreadyUsedError).status).toBe(403);
+      expect((err as TrialAlreadyUsedError).code).toBe("trial_already_used");
+      // Fail closed: nothing re-minted, Household still inactive.
+      expect(ctx.subscriptions.isActive(guardian.familyId)).toBe(false);
+    });
+
+    it("audit fix: refuses a re-trial after cancel of a trial sub", () => {
+      const ctx = createTestContext();
+      const guardian = newGuardian(ctx);
+      ctx.subscriptions.activateTrial(guardian.familyId);
+      ctx.subscriptions.cancel(guardian.familyId);
+
+      expect(() => ctx.subscriptions.activateTrial(guardian.familyId)).toThrow(
+        TrialAlreadyUsedError,
+      );
     });
 
     it("does not clobber an existing non-trial active subscription", () => {
