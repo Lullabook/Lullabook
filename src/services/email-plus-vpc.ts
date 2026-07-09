@@ -52,11 +52,19 @@ export class EmailPlusVpcService {
     return request;
   }
 
+  /** Red-team fix: consent links expire — an old emailed/logged URL must not mint consent. */
+  static readonly CONSENT_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
   confirmConsent(token: string): ConsentReceipt {
     const request = [...this.store.emailPlusVpcRequests.values()].find(
       (r) => r.token === token && r.status === "link_sent"
     );
     if (!request) throw new Error("Invalid or expired consent link");
+    if (Date.now() - request.requestedAt.getTime() > EmailPlusVpcService.CONSENT_LINK_TTL_MS) {
+      request.status = "expired";
+      this.store.emailPlusVpcRequests.set(request.id, request);
+      throw new Error("Invalid or expired consent link");
+    }
 
     request.status = "confirmed";
     request.confirmedAt = new Date();

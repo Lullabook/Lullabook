@@ -4,8 +4,16 @@ import type { RequestContext } from "@/lib/context";
 export interface JwtClaims {
   sub: string;
   email?: string;
+  /** Server-set (app_metadata) only — never a client-writable claim (SEC, 172). */
   jurisdiction?: string;
 }
+
+/**
+ * SEC (172 red-team): a token with NO server-set jurisdiction must fail
+ * CLOSED to the strictest US consent method (US_IOS = email_plus), not open
+ * to US/payment_vpc — otherwise stripping the claim skips the COPPA gate.
+ */
+const FALLBACK_JURISDICTION = "US_IOS";
 
 export interface JwtVerifier {
   verify(token: string): Promise<JwtClaims>;
@@ -35,7 +43,7 @@ async function resolveMember(
       member = ctx.onboarding.ensureFamilyForNewUser(
         claims.sub,
         claims.email ?? "",
-        claims.jurisdiction ?? "US"
+        claims.jurisdiction ?? FALLBACK_JURISDICTION
       );
       await ctx.persist();
     }
@@ -47,7 +55,7 @@ async function resolveMember(
     member = ctx.onboarding.ensureFamilyForNewUser(
       claims.sub,
       claims.email ?? "",
-      claims.jurisdiction ?? "US"
+      claims.jurisdiction ?? FALLBACK_JURISDICTION
     );
   }
   return member;

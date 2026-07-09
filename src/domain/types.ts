@@ -383,7 +383,7 @@ export interface EmailPlusVpcRequest {
   familyId: string;
   memberId: string;
   email: string;
-  status: "requested" | "link_sent" | "confirmed" | "revoked";
+  status: "requested" | "link_sent" | "confirmed" | "revoked" | "expired";
   token: string;
   noticeVersion: string;
   requestedAt: Date;

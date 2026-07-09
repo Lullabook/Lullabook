@@ -338,8 +338,19 @@ export class DataStore {
     this.consentReceipts.set(receipt.id, receipt);
   }
 
-  getConsentReceiptForFamily(familyId: string): ConsentReceipt | undefined {
-    return [...this.consentReceipts.values()].find((r) => r.familyId === familyId);
+  /**
+   * SEC (172 red-team): a family can legitimately hold receipts of SEVERAL
+   * methods (e.g. Stripe webhook writes payment_vpc, then the Guardian
+   * completes email_plus). First-receipt-wins bricked verified families, so
+   * when `method` is given, only a receipt of THAT method matches. Legacy
+   * receipts without a method count as payment_vpc (fail closed elsewhere).
+   */
+  getConsentReceiptForFamily(familyId: string, method?: string): ConsentReceipt | undefined {
+    return [...this.consentReceipts.values()].find(
+      (r) =>
+        r.familyId === familyId &&
+        (method === undefined || (r.method ?? "payment_vpc") === method)
+    );
   }
 
   getPushSubscriptionsForMember(

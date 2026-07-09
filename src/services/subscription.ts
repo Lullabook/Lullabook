@@ -149,9 +149,9 @@ export class SubscriptionService {
   private consentSatisfied(familyId: string, jurisdiction: string): boolean {
     const config = ConsentEngine.getJurisdiction(jurisdiction);
     if (!config) return false;
-    const receipt = this.store.getConsentReceiptForFamily(familyId);
-    if (!receipt) return false;
-    return (receipt.method ?? "payment_vpc") === config.consentMethod;
+    // Red-team fix: select the receipt whose method MATCHES the required one
+    // (families can hold payment_vpc + email_plus receipts side-by-side).
+    return !!this.store.getConsentReceiptForFamily(familyId, config.consentMethod);
   }
 
   /** Issue 172 (SEC-4): throws a structured 403; consent-store read errors deny. */
@@ -196,10 +196,9 @@ export class SubscriptionService {
     return {
       allowed: result.allowed,
       reason: result.reason,
-      code:
-        !result.allowed && result.reason === "Consent receipt required"
-          ? "consent_required"
-          : undefined,
+      // Red-team fix: machine code from the engine, not reason-string
+      // sniffing — copy edits must never silently drop the typed 403.
+      code: !result.allowed && result.code === "consent_required" ? "consent_required" : undefined,
     };
   }
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { withBearerAuth, jsonOk } from "@/lib/api-route";
+import { ConsentEngine } from "@/services/consent-engine";
 
 /**
  * Issue 173 — mobile consent-flow resume point.
@@ -16,16 +17,23 @@ import { withBearerAuth, jsonOk } from "@/lib/api-route";
  */
 export async function GET(request: Request): Promise<NextResponse> {
   return withBearerAuth(request, async (ctx, member) => {
-    if (ctx.store.getConsentReceiptForFamily(member.familyId)) {
+    // Red-team fix: method-aware — a payment_vpc receipt must NOT read as
+    // "verified" in an email_plus market, or the client loops between the
+    // 403 gate and a status that claims it is done.
+    const required = ConsentEngine.getJurisdiction(member.jurisdiction)?.consentMethod;
+    if (required && ctx.store.getConsentReceiptForFamily(member.familyId, required)) {
       return jsonOk({ status: "verified" as const });
     }
     const pending = [...ctx.store.emailPlusVpcRequests.values()]
       .filter((r) => r.familyId === member.familyId && r.status === "link_sent")
       .sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime())[0];
     if (pending) {
-      // Guardian's own entered email only — lets the pending screen say
-      // "we emailed you@x" after an app restart.
-      return jsonOk({ status: "pending" as const, email: pending.email });
+      // Red-team fix (PII): the entered email is shown to the Guardian who
+      // owns the flow — never to non-guardian Household members.
+      return jsonOk({
+        status: "pending" as const,
+        ...(member.role === "guardian" ? { email: pending.email } : {}),
+      });
     }
     return jsonOk({ status: "none" as const });
   });
