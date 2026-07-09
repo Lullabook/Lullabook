@@ -323,7 +323,7 @@ describe("172 red-team — jurisdiction claim is fail-closed", () => {
     const { member } = await requireBearerMember(
       new Request("http://localhost/x", { headers: { Authorization: "Bearer t" } }),
       { verify: async () => ({ sub: "auth-172-noclaim", email: "n@example.com" }) },
-      () => ctx
+      () => ctx as unknown as ReturnType<typeof import("@/lib/context").createRequestContext>
     );
     expect(member.jurisdiction).toBe("US_IOS");
     // And the strict method is what the gate now requires:
