@@ -17,11 +17,15 @@ export function createSupabaseJwtVerifier(): JwtVerifier {
       if (!jwks) jwks = createRemoteJWKSet(new URL(jwksUrl()));
       const { payload } = await jwtVerify(token, jwks);
       if (!payload.sub) throw new Error("Missing sub claim");
-      const meta = payload.user_metadata as { jurisdiction?: string } | undefined;
+      // SEC (172 red-team): jurisdiction MUST come from app_metadata, which
+      // only the service role can write. user_metadata is client-writable
+      // (auth.updateUser), so trusting it let a US_IOS user claim "US" and
+      // convert a Stripe payment receipt into a COPPA consent bypass.
+      const appMeta = payload.app_metadata as { jurisdiction?: string } | undefined;
       return {
         sub: payload.sub,
         email: typeof payload.email === "string" ? payload.email : undefined,
-        jurisdiction: meta?.jurisdiction,
+        jurisdiction: typeof appMeta?.jurisdiction === "string" ? appMeta.jurisdiction : undefined,
       };
     },
   };

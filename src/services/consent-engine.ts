@@ -19,6 +19,8 @@ export interface ConsentCheckInput {
 export interface ConsentCheckResult {
   allowed: boolean;
   requiredMethod?: string;
+  /** Machine-readable gate code (172 red-team) — stable across copy edits. */
+  code?: "consent_required";
   reason?: string;
 }
 
@@ -148,6 +150,9 @@ export class ConsentEngine {
         return {
           allowed: false,
           requiredMethod: config.consentMethod,
+          // Machine-readable gate code (172 red-team): callers must key off
+          // this, never the human copy.
+          code: "consent_required",
           reason: "Consent receipt required",
         };
       }

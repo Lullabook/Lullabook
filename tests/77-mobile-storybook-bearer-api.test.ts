@@ -85,7 +85,12 @@ describe("77 — mobile storybook bearer API", () => {
         }),
       })
     );
-    expect(res.status).toBe(402);
+    // Issue 171 (SEC-1): entitlement refusals now cross the wire as 403 with
+    // the machine code (was a message-sniffed 402) so the mobile client can
+    // route to the paywall without string matching.
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.code).toBe("not_entitled");
   });
 
   it("creates a storybook and lists it", async () => {

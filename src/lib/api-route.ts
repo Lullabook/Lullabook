@@ -30,3 +30,36 @@ export function jsonOk<T>(data: T, status = 200): NextResponse {
 export function jsonError(message: string, status = 400): NextResponse {
   return NextResponse.json({ error: message }, { status });
 }
+
+/**
+ * Issue 171 (SEC-1) — domain errors that carry an HTTP status and a machine
+ * code (EntitlementError `not_entitled`/`create_not_allowed`, StoryCapError
+ * `story_cap_reached`) must cross the wire WITH the code, so the mobile
+ * client can route 403s to the paywall without message-sniffing. The server
+ * stays the only entitlement boundary — errors without a code keep the
+ * caller-supplied fallback status and get no code field.
+ */
+const DOMAIN_ERROR_CODES = new Set([
+  "not_entitled",
+  "create_not_allowed",
+  "story_cap_reached",
+  // Issue 172: ConsentRequiredError — mobile routes this to the consent
+  // flow (issue 173), NOT the paywall. Payment never satisfies consent.
+  "consent_required",
+  // Issue 168 audit fix: one trial per family ever — mobile routes this to
+  // the real purchase paywall, never a retry of start-trial.
+  "trial_already_used",
+]);
+
+export function jsonDomainError(err: unknown, fallbackStatus = 400): NextResponse {
+  const message = err instanceof Error ? err.message : "Failed";
+  if (err && typeof err === "object" && "status" in err && "code" in err) {
+    const { status, code } = err as { status: unknown; code: unknown };
+    // Whitelisted: third-party errors (Postgrest etc.) also carry status/code
+    // fields — never let an internal code or message-status leak to clients.
+    if (typeof status === "number" && typeof code === "string" && DOMAIN_ERROR_CODES.has(code)) {
+      return NextResponse.json({ error: message, code }, { status });
+    }
+  }
+  return NextResponse.json({ error: message }, { status: fallbackStatus });
+}

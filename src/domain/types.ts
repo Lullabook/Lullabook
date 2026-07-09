@@ -202,6 +202,12 @@ export interface ConsentReceipt {
   memberId: string;
   jurisdiction: string;
   noticeVersion: string;
+  /**
+   * Issue 172 — HOW consent was obtained ("payment_vpc" | "email_plus" |
+   * "signed_form"). Legacy receipts omit it and are treated as payment_vpc,
+   * so they fail closed in markets that require a stronger method (ADR-0018).
+   */
+  method?: string;
   consentedAt: Date;
 }
 
@@ -246,6 +252,13 @@ export interface Subscription {
   stripeSubscriptionId: string | null;
   /** ADR-0023 paid tier; set by RevenueCat (issue 92). Undefined → Normal default for an active sub. */
   tier?: Tier;
+  /**
+   * ADR-0027 (issue 168) — trial expiry. A trial is `status: "active"` WITH
+   * `trialEndsAt` set; `isActive` = active AND now < trialEndsAt. Null/absent
+   * on a non-trial active sub → unaffected (reads active). No new
+   * SubscriptionStatus for trials.
+   */
+  trialEndsAt?: Date | null;
   updatedAt: Date;
 }
 
@@ -370,7 +383,7 @@ export interface EmailPlusVpcRequest {
   familyId: string;
   memberId: string;
   email: string;
-  status: "requested" | "link_sent" | "confirmed" | "revoked";
+  status: "requested" | "link_sent" | "confirmed" | "revoked" | "expired";
   token: string;
   noticeVersion: string;
   requestedAt: Date;

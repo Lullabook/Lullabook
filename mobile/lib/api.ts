@@ -1,5 +1,9 @@
 import { getApiUrl } from "@/lib/env";
 import { getAccessToken } from "@/lib/supabase";
+import {
+  classifyConsentRequiredError,
+  classifyEntitlementError,
+} from "@/lib/entitlement-error";
 import type { Character, Persona, StoryType } from "@domain/types";
 
 const apiBase = getApiUrl();
@@ -15,7 +19,15 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
     },
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    // Issue 171 (SEC-1): a 403 carrying a known entitlement code is the
+    // server's paywall boundary — surface it typed so callers route to
+    // billing.tsx. Non-entitlement 403s stay plain errors (never hijacked).
+    const entitlementErr = classifyEntitlementError(res.status, body);
+    if (entitlementErr) throw entitlementErr;
+    // Issue 173: the 172 consent gate's 403 routes to the consent flow.
+    const consentErr = classifyConsentRequiredError(res.status, body);
+    if (consentErr) throw consentErr;
     throw new Error(body.error ?? `Request failed (${res.status})`);
   }
   return res.json() as Promise<T>;
@@ -57,7 +69,15 @@ export async function apiFormData<T>(path: string, body: FormData): Promise<T> {
       } else {
         done(() => {
           try {
-            const body = JSON.parse(xhr.responseText) as { error?: string };
+            const body = JSON.parse(xhr.responseText) as { error?: string; code?: string };
+            // Issue 173: createPersona (baby) uploads go through this XHR
+            // path — the 172 consent-gate 403 must stay typed here too, so
+            // family/new.tsx can route to the consent screen, not a dead end.
+            const consentErr = classifyConsentRequiredError(xhr.status, body);
+            if (consentErr) {
+              reject(consentErr);
+              return;
+            }
             reject(new Error(body.error ?? `Upload failed (${xhr.status})`));
           } catch {
             reject(new Error(`Upload failed (${xhr.status})`));
@@ -146,6 +166,23 @@ export function updateCharacter(
 
 export function createPersona(formData: FormData): Promise<{ queued: boolean }> {
   return apiFormData("/api/personas", formData);
+}
+
+/** Issue 173 — Guardian attests + enters their email; server sends the link. */
+export function requestEmailPlusConsent(
+  email: string
+): Promise<{ requestId: string; status: string }> {
+  return apiFetch("/api/consent/email-plus/request", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+/** Issue 173 — server-authoritative resume/poll point for the consent flow. */
+export function fetchEmailPlusConsentStatus(): Promise<
+  import("@/lib/consent-flow").ConsentStatusWire
+> {
+  return apiFetch("/api/consent/email-plus/status");
 }
 
 export function createTextStory(
@@ -387,6 +424,24 @@ export function revokeVoiceConsent(personaId: string): Promise<{ revoked: boolea
     method: "POST",
     body: JSON.stringify({ personaId }),
   });
+}
+
+// Issue 170 (ADR-0027) — PurchaseController wire calls. The seam itself is
+// mobile/lib/purchase-controller.ts (pure DI); mobile/lib/purchases.ts binds
+// these two functions into it. Both hit real, server-authoritative routes.
+
+/** Prod-guarded fake-trial start — POST /api/billing/start-trial (issue 168). */
+export function startTrialRequest(): Promise<
+  import("@/lib/purchase-controller").StartTrialWire
+> {
+  return apiFetch("/api/billing/start-trial", { method: "POST", body: JSON.stringify({}) });
+}
+
+/** SEC-1 refetch — GET /api/entitlement is the only entitlement authority. */
+export function fetchEntitlementSnapshot(): Promise<
+  import("@/lib/purchase-controller").EntitlementSnapshot
+> {
+  return apiFetch("/api/entitlement");
 }
 
 export async function illustrationSource(blobKey: string): Promise<{ uri: string; headers?: Record<string, string> }> {

@@ -542,7 +542,9 @@ export async function cancelSubscriptionAction(): Promise<ActionResult> {
 export async function recordConsentAction(): Promise<ActionResult> {
   const { ctx, member } = await requireAuthedContext();
   try {
-    ctx.subscriptions.recordConsent(member.familyId, member.id, member.jurisdiction);
+    // Issue 172: the web self-serve action can only attest payment_vpc — it
+    // must never mint an email_plus/signed_form receipt without that flow.
+    ctx.subscriptions.recordConsent(member.familyId, member.id, member.jurisdiction, "payment_vpc");
     await ctx.persist();
     return { ok: true, data: undefined };
   } catch (err) {
