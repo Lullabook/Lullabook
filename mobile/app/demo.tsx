@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 
@@ -19,10 +19,16 @@ export default function DemoScreen() {
   const [page, setPage] = useState(0);
 
   const story = useMemo(() => DEMO_STORY, []);
-  if (!isRenderableDemoStory(story)) {
-    void finish();
-    return null;
-  }
+  const renderable = isRenderableDemoStory(story);
+
+  // FAIL-5 escape hatch in an effect, not the render body: navigating or
+  // writing storage during render double-fires under StrictMode and warns
+  // ("navigate before mount") on expo-router.
+  useEffect(() => {
+    if (!renderable) void finish();
+  }, [renderable]);
+
+  if (!renderable) return null;
 
   const isLast = page >= story.pages.length - 1;
 
