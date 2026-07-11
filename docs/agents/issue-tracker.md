@@ -24,3 +24,44 @@ Create a GitHub issue.
 ## When a skill says "fetch the relevant ticket"
 
 Run `gh issue view <number> --comments`.
+
+## Wayfinding operations
+
+Where the `/wayfinder` skill's artifacts live in this repo.
+
+### The map
+A single GitHub issue labelled **`wayfinder:map`** (one per effort). Its body holds
+`## Notes`, `## Decisions so far` (the index), and `## Fog`. Every one of its tickets
+carries a shared **map-slug label** (e.g. `wayfinder:postr1`) so the whole ticket set
+is queryable by that label; the map itself is found by `wayfinder:map`.
+
+### Tickets
+Each ticket is a GitHub issue carrying: the map-slug label; exactly one **type**
+label (`wayfinder:research` | `wayfinder:prototype` | `wayfinder:grilling` |
+`wayfinder:task`); and `wayfinder:claimed` once a session claims it (set **first**,
+before any work). Body:
+```
+## Question
+<the decision or investigation this ticket resolves>
+
+---
+Part of the map: #<map-issue>
+Blocked by: #<n>, #<m>        <!-- omitted when nothing blocks it -->
+```
+
+### Blocking + the frontier
+Blocking is the **`Blocked by: #n, #m`** body line (authoritative; matches the
+`/wayfinder` local-markdown fallback — GitHub's native dependency API is not used).
+A ticket is **unblocked** when every issue on its `Blocked by` line is CLOSED. The
+**frontier** = open, unblocked, unclaimed tickets of a map:
+```bash
+gh issue list --label wayfinder:postr1 --state open --limit 100 \
+  --json number,title,labels,body        # then drop wayfinder:claimed,
+                                          # and any whose Blocked-by issues aren't all closed
+```
+
+### Resolving a ticket
+Post the answer as a **resolution comment**, **close** the issue, and append a
+one-line pointer to the map's `## Decisions so far`. Link created assets from the
+issue; don't paste them in. A resolved chunk that's become grillable re-enters
+`/part1`.
