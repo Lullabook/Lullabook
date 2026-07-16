@@ -7,7 +7,11 @@
 
 import { DevFalFallbackAdapter } from "@/adapters/dev-fal-fallback";
 import { RealFalAdapter } from "@/adapters/fal";
-import type { FalAdapter } from "@/adapters/types";
+import {
+  ConsoleDevNotificationAdapter,
+  RealNotificationAdapter,
+} from "@/adapters/notifications";
+import type { FalAdapter, NotificationAdapter } from "@/adapters/types";
 
 /** Whether the Rekognition liveness check should be bypassed with FakeLiveness. */
 export function shouldDevBypassLiveness(): boolean {
@@ -35,4 +39,18 @@ export function shouldDevFalFallback(): boolean {
  */
 export function selectFalAdapter(): FalAdapter {
   return shouldDevFalFallback() ? new DevFalFallbackAdapter() : new RealFalAdapter();
+}
+
+/**
+ * Select the notification adapter by key presence (ADR-0010 moderation
+ * precedent): RESEND_API_KEY present OR production → RealNotificationAdapter
+ * (production keeps failing loud on a missing key); otherwise the console dev
+ * adapter, so the inline persona workflow can finish locally without Resend.
+ * Never a silent fallback in production.
+ */
+export function selectNotificationAdapter(): NotificationAdapter {
+  if (process.env.RESEND_API_KEY || process.env.NODE_ENV === "production") {
+    return new RealNotificationAdapter();
+  }
+  return new ConsoleDevNotificationAdapter();
 }
