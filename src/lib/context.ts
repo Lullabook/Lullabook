@@ -5,9 +5,12 @@ import { optionalEnv } from "@/adapters/env";
 import { FakeLiveness } from "@/adapters/fakes";
 import { createWorkflowAdapter } from "@/lib/create-workflow-adapter";
 import { RekognitionLivenessAdapter } from "@/adapters/liveness";
-import { selectFalAdapter, shouldDevBypassLiveness } from "@/lib/dev-bypass";
+import {
+  selectFalAdapter,
+  selectNotificationAdapter,
+  shouldDevBypassLiveness,
+} from "@/lib/dev-bypass";
 import { PermissiveDevModeration, RealModerationAdapter } from "@/adapters/moderation";
-import { RealNotificationAdapter } from "@/adapters/notifications";
 import { PdfLibAdapter } from "@/adapters/pdf";
 import { RealStripeAdapter } from "@/adapters/stripe";
 import { RealRevenueCatPurchaseAdapter } from "@/adapters/revenuecat-purchase";
@@ -75,7 +78,12 @@ export function createRequestContext() {
     : new RekognitionLivenessAdapter();
   const blobs = createBlobStore();
   const workflow = createWorkflowAdapter();
-  const notifications = new RealNotificationAdapter();
+  // Persona-create fix: without INNGEST_EVENT_KEY the training workflow runs
+  // INLINE (LocalDevWorkflowAdapter), so a missing RESEND_API_KEY made
+  // `sendEmail` throw inside `POST /api/personas` → 400 (no Persona was ever
+  // creatable locally). Key-presence gated like moderation above; production
+  // always gets RealNotificationAdapter and keeps failing loud.
+  const notifications = selectNotificationAdapter();
   const stripe = new RealStripeAdapter();
   const pdf = new PdfLibAdapter();
   const subscriptions = new SubscriptionService(store, stripe);

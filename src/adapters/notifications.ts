@@ -14,6 +14,24 @@ export interface PushSubscriptionStore {
   >;
 }
 
+/**
+ * Dev-only notifications: logs the intent and never throws. Selected by
+ * `selectNotificationAdapter()` (ADR-0010 moderation precedent) when
+ * RESEND_API_KEY is absent outside production, so the inline persona-training
+ * workflow (LocalDevWorkflowAdapter + DEV_FAL_FALLBACK) can complete a
+ * `POST /api/personas` request without Resend. Never selected in production.
+ * Logs recipient + subject only — no body content, no secrets.
+ */
+export class ConsoleDevNotificationAdapter implements NotificationAdapter {
+  async sendEmail(to: string, subject: string, _body: string): Promise<void> {
+    console.info(`[dev-notifications] email to=${to} subject="${subject}" (not sent)`);
+  }
+
+  async sendWebPush(memberId: string, title: string, _body: string): Promise<void> {
+    console.info(`[dev-notifications] push member=${memberId} title="${title}" (not sent)`);
+  }
+}
+
 export class RealNotificationAdapter implements NotificationAdapter {
   constructor(private readonly pushSubscriptions?: PushSubscriptionStore) {}
 

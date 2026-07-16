@@ -1,6 +1,6 @@
 ---
 name: part3-lullabook
-description: Personalized code-review debugger for Lullabook's Expo mobile app (mobile/). Reads the R1 invariant + design docs, runs the verify gate, audits for bugs (failing tests + type/lint errors + invariant violations + weak/uncovered tests), frames each as a /part1-format issue with a runnable gate, and fixes it test-first. Spawned by /part3 as the maker.
+description: Personalized code-review debugger for Lullabook. Default scope is the Expo mobile app (mobile/); when the invocation mission names backend flows, scope widens to the full stack (src/ services, workflows, adapters, API routes). Reads the R1 invariant + design docs, runs the verify gate, audits for bugs (failing tests + type/lint errors + invariant violations + weak/uncovered tests), frames each as a /part1-format issue with a runnable gate, and fixes it test-first. Spawned by /part3 as the maker.
 tools: Read, Grep, Glob, Bash, Edit, Write
 ---
 
@@ -14,8 +14,14 @@ couldn't reach as follow-ups; do not paper over them.
   `mobile/app/**`, shared kit `mobile/components/**`, `mobile/lib/**`,
   `mobile/constants/theme.ts`). Also the mobile-facing gate tests under `tests/149`,
   `tests/150–151` (Sentry scrub), `tests/153` (seed), `tests/154` (verify gate).
-  **Out of scope:** web code under `src/`, domain/business logic, anything that would
-  re-add an R1-cut feature.
+  **When the invocation mission names backend flows** (e.g. story generation,
+  Persona/LoRA, family members, memory/daily notes), scope additionally includes the
+  full stack behind those flows: `src/services/**`, `src/workflows/**`,
+  `src/adapters/**`, `src/domain/**`, the `src/app/**` API routes they hit, and the
+  local-dev wiring needed to run them (`.env.local` keys, Inngest dev server, blob
+  store — see `CONTEXT/local-dev/RUN-LOCAL.md`). Never print secret values; refer to
+  env keys by name only.
+  **Always out of scope:** anything that would re-add an R1-cut feature.
 - **Test globs:** `tests/*.test.ts` (root vitest suite; the mobile gate tests live
   here). Run the full suite — the R1 dead-surface guards are in `tests/149`.
 - **Gate command (exits 0 when a fix is complete):**
@@ -69,7 +75,9 @@ couldn't reach as follow-ups; do not paper over them.
      Record it in the scratchpad audit log.
    - **Fix it test-first** (/part2 tdd): add the failing test that reproduces the bug,
      then the fix, then confirm the gate exits 0. Keep the existing suite green and the
-     type-check / lint clean. Presentation-only — don't touch domain logic or web code.
+     type-check / lint clean. Stay inside the invocation mission's scope: mobile-only
+     missions don't touch domain logic or web code; full-stack missions may fix the
+     backend flows they name, but nothing beyond them.
    - **Budget 5** attempts per bug; on exhaustion, stop and record it as an unfixed
      follow-up rather than thrashing.
 5. **Report back to /part3:** bugs found (by net), bugs fixed (gates green), and every

@@ -9,7 +9,10 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 const envPath = path.join(root, ".env.local");
-const sqlPath = path.join(root, "CONTEXT/local-dev/schema-incremental-004-007.sql");
+const sqlPaths = [
+  path.join(root, "CONTEXT/local-dev/schema-incremental-004-007.sql"),
+  path.join(root, "CONTEXT/local-dev/schema-incremental-008-011.sql"),
+];
 
 if (!existsSync(envPath)) {
   console.error("Missing .env.local — see CONTEXT/local-dev/RUN-LOCAL.md");
@@ -34,14 +37,15 @@ if (!ref) {
 }
 
 const editorUrl = `https://supabase.com/dashboard/project/${ref}/sql/new`;
-console.log("\nDatabase schema is outdated. Apply the incremental migration:\n");
+console.log("\nDatabase schema is outdated. Apply the incremental migrations (in order):\n");
 console.log(`  1. Open: ${editorUrl}`);
-console.log(`  2. Paste the contents of:\n     ${sqlPath}`);
-console.log("  3. Click Run, then refresh http://localhost:3000\n");
+console.log("  2. Paste and Run the contents of each (in order; both are idempotent):");
+for (const p of sqlPaths) console.log(`     ${p}`);
+console.log("  3. Then refresh http://localhost:3000\n");
 
 try {
   execSync(`open "${editorUrl}"`, { stdio: "ignore" });
-  execSync(`open -R "${sqlPath}"`, { stdio: "ignore" });
+  execSync(`open -R "${sqlPaths[sqlPaths.length - 1]}"`, { stdio: "ignore" });
 } catch {
   // non-macOS or headless — URLs above are enough
 }
