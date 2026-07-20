@@ -1,6 +1,7 @@
 # Session Handoff — 2026-07-20 — R1 Family, Persona, provider, and economics plan
 
 **Branch:** `feat/prd-v20-pillar-a-payment`
+**Planning PR:** [GitHub #160](https://github.com/VrajGupta/Lullabook/pull/160)
 **Planning parent:** [GitHub #149](https://github.com/VrajGupta/Lullabook/issues/149)
 **Provider umbrella:** [GitHub #136](https://github.com/VrajGupta/Lullabook/issues/136)
 **Spec:** `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`
@@ -59,6 +60,7 @@ After #150 resolves:
 - Deterministic verification before this planning wave: `npm run verify` passed; 127 test files / 740 tests passed; focused Family/Persona/consent/Story suite passed 68 tests.
 - Planning-wave verification: `npm run verify` passed again (root/mobile typecheck, Vitest, Sentry automation, dead-surface and deterministic-seed checks); browser Playwright remained skipped because no server was running.
 - Kaizen Domain Coach passed glossary, organization, architecture/secrets, and tests (8/10), but its extra `next build` failed on the pre-existing `@typescript-eslint/no-require-imports` error in `src/instrumentation.ts`. This planning diff does not touch that source file; the generated `next-env.d.ts` change was removed before staging.
+- PR #160 GitHub `migration-smoke` passed. GitHub `test` failed because CI installs only the root workspace and cannot resolve `expo/tsconfig.base` from `mobile`; the same defect is present on the latest `main` run (29482180379). The PR changes only `CONTEXT/` documentation and records the failure rather than implying a green remote gate.
 - No paid provider calls were run during planning; recorded spend is `$0`.
 - Current Anthropic adapter already uses JSON-schema structured output. Work is semantic validation, golden-set routing, usage/stop evidence, and output safety ceiling—not adding structured output from scratch.
 - Current fal training sends the wrong input shape; V2 requires one ZIP URL.
