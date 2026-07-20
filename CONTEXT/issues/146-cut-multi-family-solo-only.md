@@ -1,11 +1,11 @@
 # 146 — Cut multi-family: solo Guardian, one baby, solo plan only
 
-Status: shipped
+Status: partially superseded by PRD v21 / ADR-0028
 
-Collapsed R1 to solo Guardian + one baby: family-invite/invited-member/voice-message endpoints
-disabled server-side (404/403, never 500); create-rights default solo-Guardian-only; one-baby-
-per-Household enforced server-side; paywall sells solo plan(s) only (subsumes issue 129).
-Multi-member/two-plan code kept behind config for R2, not deleted. Binding: solo-only scoping
-governs all later work (165's Journal is explicitly "solo, one Baby").
+Collapsed R1 to a solo creating Guardian: family-invite/invited-member/voice-message endpoints
+stay disabled server-side (404/403, never 500), create-rights remain Guardian-only, and the
+collaborative plan stays hidden. PRD v21 / ADR-0028 supersede only the one-Baby restriction:
+one Guardian may now own multiple Family people and Babies up to the shared three-Persona plan
+cap. Multi-Member/two-plan code remains behind config for a later release.
 
 (condensed 2026-07-07 — full spec in git history)
