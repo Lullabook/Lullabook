@@ -67,9 +67,9 @@ export class StoryCapService {
     private readonly entitlements: EntitlementService
   ) {}
 
-  /** The Household's current monthly Story usage. */
+  /** The Household's current monthly Story usage, including in-flight reservations. */
   getUsage(familyId: string, actorMemberId: string): StoryCapUsage {
-    const ent = this.entitlements.getEntitlement(familyId);
+    const ent = this.entitlements.getPlanEntitlement(familyId);
     const cap = ent.storyCap;
     const count = this.countStoriesThisMonth(familyId, actorMemberId);
     return {
@@ -78,6 +78,55 @@ export class StoryCapService {
       resetDate: nextResetDate(),
       remaining: Math.max(0, cap - count),
     };
+  }
+
+  /** Reserve one shared Story allowance before the durable generation enqueue. */
+  reserve(familyId: string, actorMemberId: string, storybookId: string): void {
+    if (this.store.storyAllowanceReservations.has(storybookId)) return;
+    const usage = this.getUsage(familyId, actorMemberId);
+    if (usage.count >= usage.cap) {
+      throw new StoryCapError(usage.count, usage.cap, usage.resetDate);
+    }
+    this.store.storyAllowanceReservations.set(storybookId, {
+      storybookId,
+      familyId,
+      status: "reserved",
+      createdAt: new Date(),
+    });
+  }
+
+  /** Commit only after the text provider returns a valid Story. */
+  commit(storybookId: string): void {
+    const reservation = this.store.storyAllowanceReservations.get(storybookId);
+    if (reservation?.status === "reserved") {
+      reservation.status = "committed";
+      this.store.storyAllowanceReservations.set(storybookId, reservation);
+    }
+  }
+
+  /** Release a still-reserved allowance after text generation fails. */
+  release(storybookId: string): void {
+    const reservation = this.store.storyAllowanceReservations.get(storybookId);
+    if (reservation?.status === "reserved") {
+      // Refunds are state transitions, not deletes: finance/support must be
+      // able to audit why an allowance became available again.
+      reservation.status = "released";
+      reservation.releasedAt = new Date();
+      reservation.releaseReason = "story_text_generation_failed";
+      this.store.storyAllowanceReservations.set(storybookId, reservation);
+    }
+  }
+
+  getReservation(storybookId: string) {
+    const reservation = this.store.storyAllowanceReservations.get(storybookId);
+    // Preserve the existing generation seam: released reservations are no
+    // longer active reservations. The append-only audit remains available via
+    // getReservationAudit (and the server-side ledger map).
+    return reservation?.status === "released" ? undefined : reservation;
+  }
+
+  getReservationAudit(storybookId: string) {
+    return this.store.storyAllowanceReservations.get(storybookId);
   }
 
   /** Gate: throw StoryCapError if the Household is at or over its cap. */
@@ -102,25 +151,49 @@ export class StoryCapService {
     void storybookId;
   }
 
-  /** Count stories in the current month (excluding failed). Idempotent by construction. */
+  /** Count committed/reserved ledger entries plus legacy books without a ledger row. */
   private countStoriesThisMonth(familyId: string, actorMemberId: string): number {
     const period = periodKey();
-    const storybooks = [...this.store.storybooks.values()].filter(
+    const ledgerIds = new Set(
+      [...this.store.storyAllowanceReservations.values()]
+        .filter(
+          (r) =>
+            r.familyId === familyId &&
+            (r.status === "reserved" || r.status === "committed") &&
+            r.createdAt.toISOString().slice(0, 7) === period
+        )
+        // A Storybook that reached `failed` never produced usable Story text
+        // (glossary: `failed` = no Story text or too few Pages) — its
+        // allowance is released whether or not the release seam ran, and
+        // whether the ledger row was still `reserved` or already `committed`.
+        // A `draft` with failed Pages is NOT refunded: holes are re-rollable.
+        .filter((r) => this.store.storybooks.get(r.storybookId)?.status !== "failed")
+        .map((r) => r.storybookId)
+    );
+    const legacyBooks = [...this.store.storybooks.values()].filter(
       (s) =>
         s.familyId === familyId &&
         s.status !== "failed" &&
+        !ledgerIds.has(s.id) &&
         s.createdAt.toISOString().slice(0, 7) === period
     );
-    // Distinct by id (Map dedupes)
-    return new Map(storybooks.map((s) => [s.id, s])).size;
+    return new Set([...ledgerIds, ...legacyBooks.map((s) => s.id)]).size;
   }
 
-  /** Test-only: reset the current period's count by clearing storybooks for this family. */
+  /** Test-only: reset the current period's count by clearing storybooks and ledger rows. */
   resetForTesting(familyId: string, actorMemberId: string): void {
     const period = periodKey();
     for (const [id, s] of this.store.storybooks) {
       if (s.familyId === familyId && s.createdAt.toISOString().slice(0, 7) === period) {
         this.store.storybooks.delete(id);
+      }
+    }
+    for (const [id, reservation] of this.store.storyAllowanceReservations) {
+      if (
+        reservation.familyId === familyId &&
+        reservation.createdAt.toISOString().slice(0, 7) === period
+      ) {
+        this.store.storyAllowanceReservations.delete(id);
       }
     }
   }

@@ -2,6 +2,7 @@ import type { Plan, Tier } from "@/domain/types";
 import type { StoryCapUsage } from "@/services/story-cap";
 import type { CreditBalance } from "@/services/credit-ledger";
 import { isR1MultiFamilyEnabled } from "@/lib/r1-config";
+import { R1_PLAN_DEFINITION } from "@/domain/plan";
 
 /**
  * Paywall UI config + plan badges + credit/upgrade surfaces (ADR-0025).
@@ -18,6 +19,7 @@ export interface PaywallPlan {
   annualPrice: number;
   storyCap: number;
   memberCap: number;
+  starringPersonaCap: number;
   memberLoginCap: number;
   canNarrate: boolean;
   canVideo: boolean;
@@ -34,6 +36,7 @@ export const PAYWALL_PLANS: PaywallPlan[] = [
     annualPrice: 79.99,
     storyCap: 8,
     memberCap: 3,
+    starringPersonaCap: 3,
     memberLoginCap: 2,
     canNarrate: false,
     canVideo: false,
@@ -47,6 +50,7 @@ export const PAYWALL_PLANS: PaywallPlan[] = [
     annualPrice: 199.99,
     storyCap: 20,
     memberCap: Infinity,
+    starringPersonaCap: Infinity,
     memberLoginCap: Infinity,
     canNarrate: true,
     canVideo: true,
@@ -55,6 +59,20 @@ export const PAYWALL_PLANS: PaywallPlan[] = [
     valueProp: "Everyone creates, voice messages, video pages, and custom art styles.",
   },
 ];
+
+/** Canonical R1 paywall projection used by web and native configuration routes. */
+const R1_PAYWALL_PLAN: PaywallPlan = {
+  id: R1_PLAN_DEFINITION.plan,
+  label: R1_PLAN_DEFINITION.label,
+  monthlyPrice: R1_PLAN_DEFINITION.pricing.monthly,
+  annualPrice: R1_PLAN_DEFINITION.pricing.annual,
+  storyCap: R1_PLAN_DEFINITION.limits.storybooksPerMonth,
+  memberCap: R1_PLAN_DEFINITION.limits.personas,
+  starringPersonaCap: R1_PLAN_DEFINITION.limits.starringPersonas,
+  memberLoginCap: R1_PLAN_DEFINITION.limits.memberLogins,
+  ...R1_PLAN_DEFINITION.capabilities,
+  valueProp: R1_PLAN_DEFINITION.valueProp,
+};
 
 /** Legacy compat: PAYWALL_TIERS maps to the new plans. */
 export const PAYWALL_TIERS = PAYWALL_PLANS;
@@ -71,10 +89,12 @@ export const PAYWALL_TIERS = PAYWALL_PLANS;
  * collapses to the solo plan.
  */
 export function getR1VisiblePlans(): PaywallPlan[] {
-  if (process.env.R1_ONE_PLAN === "true" || !isR1MultiFamilyEnabled()) {
-    return PAYWALL_PLANS.filter((p) => p.id === "just_us");
+  // R1 is always the accepted Just Us plan. The old two-plan array remains
+  // readable only for explicitly opted-in R2 compatibility tests/runtime.
+  if (process.env.R1_MULTI_FAMILY_ENABLED === "true" && process.env.R1_ONE_PLAN !== "true") {
+    return PAYWALL_PLANS;
   }
-  return PAYWALL_PLANS;
+  return [R1_PAYWALL_PLAN];
 }
 
 /** Whether R1 is hiding the premium plan (amends ADR-0025). */

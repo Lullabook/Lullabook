@@ -29,6 +29,7 @@ import type {
   JournalNudgeState,
   Invite,
 } from "@/domain/types";
+import type { FalTrainingRequestRecord, FalWebhookReceipt } from "@/adapters/types";
 
 export class DataStore {
   families = new Map<string, Family>();
@@ -49,6 +50,22 @@ export class DataStore {
   purgeScheduled = new Map<string, { familyId: string; purgeAt: Date }>();
   persistedGenerations = new Map<string, PersistedGeneration>();
   textStories = new Map<string, TextStory>();
+  /** Server-side Story allowance ledger: append-only reservation/refund history. */
+  storyAllowanceReservations = new Map<
+    string,
+    {
+      storybookId: string;
+      familyId: string;
+      status: "reserved" | "committed" | "released";
+      createdAt: Date;
+      releasedAt?: Date;
+      releaseReason?: string;
+    }
+  >();
+  /** Provider COGS attempts; rows are sanitized before they enter this map. */
+  providerCostLedgerEntries = new Map<string, import("@/services/provider-cost-metering").ProviderCostLedgerEntry>();
+  /** Active cost/reliability kill switches, also server-authoritative. */
+  providerKillSwitches = new Map<string, import("@/services/provider-cost-metering").ProviderKillSwitch>();
   pushSubscriptions = new Map<string, PushSubscription>();
   emailPlusVpcRequests = new Map<string, EmailPlusVpcRequest>();
   babies = new Map<string, Baby>();
@@ -64,6 +81,23 @@ export class DataStore {
   babyPastStorySummaries = new Map<string, BabyPastStorySummary>();
   journalNudgeStates = new Map<string, JournalNudgeState>();
   customStyles = new Map<string, CustomStyle>();
+  /** Durable provider request metadata; credentials and raw image bytes never enter these rows. */
+  falTrainingRequests = new Map<string, FalTrainingRequestRecord>();
+  /** Callback fingerprints make at-least-once provider delivery harmless. */
+  falWebhookReceipts = new Map<string, FalWebhookReceipt>();
+  /** Family-scoped, ID-only Story Context provenance; never raw prompt/photo content. */
+  storyContextProvenance = new Map<string, {
+    id: string;
+    familyId: string;
+    storybookId: string;
+    babyId?: string;
+    personaIds: string[];
+    momentIds: string[];
+    firstCount?: number;
+    pastStorySummaryIncluded?: boolean;
+    photoDescriptionCount?: number;
+    tokenEstimate: number;
+  }>();
 
   createFamily(): Family {
     const family: Family = { id: uuid(), createdAt: new Date() };
@@ -107,10 +141,19 @@ export class DataStore {
   getBondsForBaby(babyId: string, actorMemberId: string): BabyPersonBond[] {
     const baby = this.getBaby(babyId, actorMemberId);
     if (!baby) throw new RlsViolationError("Cannot read bonds for another family");
-    return [...this.babyPersonBonds.values()].filter((b) => b.babyId === babyId);
+    return [...this.babyPersonBonds.values()].filter((b) => {
+      if (b.babyId !== babyId) return false;
+      const persona = this.personas.get(b.personaId);
+      return persona?.familyId === baby.familyId;
+    });
   }
 
   saveBabyPersonBond(bond: BabyPersonBond): void {
+    const baby = this.babies.get(bond.babyId);
+    const persona = this.personas.get(bond.personaId);
+    if (!baby || !persona || baby.familyId !== persona.familyId) {
+      throw new RlsViolationError("Cannot create a bond across families");
+    }
     this.babyPersonBonds.set(bond.id, bond);
   }
 
@@ -271,6 +314,62 @@ export class DataStore {
     this.personas.set(persona.id, persona);
   }
 
+  /** RLS-gated update seam used by direct-client contract tests. */
+  updatePersona(
+    id: string,
+    actorMemberId: string,
+    patch: Partial<Pick<Persona, "displayName" | "status" | "loraWeightKey" | "avatarKey">>
+  ): Persona {
+    const persona = this.getPersona(id, actorMemberId);
+    if (!persona) throw new Error("Persona not found");
+    Object.assign(persona, patch);
+    this.personas.set(id, persona);
+    return persona;
+  }
+
+  /** RLS-gated delete seam; callers cannot turn a foreign id into a probe. */
+  deletePersona(id: string, actorMemberId: string): void {
+    const persona = this.getPersona(id, actorMemberId);
+    if (!persona) return;
+    this.personas.delete(id);
+  }
+
+  /**
+   * Return only Family-owned object keys after enforcing the authenticated
+   * Member's Family boundary. Provider URLs are intentionally not represented.
+   */
+  getFamilyOwnedObjectKeys(familyId: string, actorMemberId: string): string[] {
+    const actor = this.members.get(actorMemberId);
+    if (!actor || actor.familyId !== familyId) {
+      throw new RlsViolationError("Cannot infer object keys for another family");
+    }
+    const keys = new Set<string>();
+    for (const persona of this.personas.values()) {
+      if (persona.familyId !== familyId) continue;
+      if (persona.loraWeightKey) keys.add(persona.loraWeightKey);
+      if (persona.avatarKey) keys.add(persona.avatarKey);
+      for (const key of persona.reviewSampleKeys ?? []) keys.add(key);
+    }
+    for (const request of this.falTrainingRequests.values()) {
+      if (request.familyId !== familyId) continue;
+      for (const key of [request.inputZipKey, request.loraWeightKey, request.configurationKey]) {
+        if (key) keys.add(key);
+      }
+    }
+    for (const style of this.customStyles.values()) {
+      if (style.familyId === familyId && style.loraWeightKey) keys.add(style.loraWeightKey);
+    }
+    const bookIds = new Set(
+      [...this.storybooks.values()].filter((book) => book.familyId === familyId).map((book) => book.id)
+    );
+    for (const page of this.pages.values()) {
+      if (!bookIds.has(page.storybookId)) continue;
+      if (page.illustrationBlobKey) keys.add(page.illustrationBlobKey);
+      if (page.videoBlobKey) keys.add(page.videoBlobKey);
+    }
+    return [...keys];
+  }
+
   getCharactersByFamily(familyId: string, actorMemberId: string): Character[] {
     const actor = this.members.get(actorMemberId);
     if (!actor || actor.familyId !== familyId) {
@@ -345,11 +444,18 @@ export class DataStore {
    * when `method` is given, only a receipt of THAT method matches. Legacy
    * receipts without a method count as payment_vpc (fail closed elsewhere).
    */
-  getConsentReceiptForFamily(familyId: string, method?: string): ConsentReceipt | undefined {
+  getConsentReceiptForFamily(
+    familyId: string,
+    method?: string,
+    jurisdiction?: string
+  ): ConsentReceipt | undefined {
     return [...this.consentReceipts.values()].find(
       (r) =>
         r.familyId === familyId &&
-        (method === undefined || (r.method ?? "payment_vpc") === method)
+        (method === undefined || (r.method ?? "payment_vpc") === method) &&
+        (jurisdiction === undefined || r.jurisdiction === jurisdiction) &&
+        (r.status ?? "verified") === "verified" &&
+        (r.expiresAt === undefined || r.expiresAt === null || r.expiresAt.getTime() > Date.now())
     );
   }
 
@@ -475,12 +581,16 @@ export class DataStore {
       .filter((p) => p.familyId === familyId)
       .map((p) => p.id);
 
+    const deletedPageIds = new Set(
+      [...this.pages.values()]
+        .filter((page) => bookIds.includes(page.storybookId))
+        .map((page) => page.id)
+    );
     for (const [id, p] of this.pages) {
-      if (bookIds.includes(p.storybookId)) this.pages.delete(id);
+      if (deletedPageIds.has(p.id)) this.pages.delete(id);
     }
     for (const [id, c] of this.pageCandidates) {
-      const page = this.pages.get(c.pageId);
-      if (!page) this.pageCandidates.delete(id);
+      if (deletedPageIds.has(c.pageId)) this.pageCandidates.delete(id);
     }
     for (const [id, l] of this.shareLinks) {
       if (bookIds.includes(l.storybookId)) this.shareLinks.delete(id);
@@ -513,6 +623,9 @@ export class DataStore {
     for (const [id, s] of this.textStories) {
       if (s.familyId === familyId) this.textStories.delete(id);
     }
+    for (const [id, reservation] of this.storyAllowanceReservations) {
+      if (reservation.familyId === familyId) this.storyAllowanceReservations.delete(id);
+    }
     for (const [key] of this.pendingBriefs) {
       const pending = this.pendingBriefs.get(key);
       if (pending && memberIds.has(pending.memberId)) this.pendingBriefs.delete(key);
@@ -532,6 +645,17 @@ export class DataStore {
     }
     for (const [id, r] of this.emailPlusVpcRequests) {
       if (r.familyId === familyId) this.emailPlusVpcRequests.delete(id);
+    }
+    const familyRequestIds = new Set(
+      [...this.falTrainingRequests.values()]
+        .filter((request) => request.familyId === familyId)
+        .map((request) => request.requestId)
+    );
+    for (const [id, request] of this.falTrainingRequests) {
+      if (request.familyId === familyId) this.falTrainingRequests.delete(id);
+    }
+    for (const [id, receipt] of this.falWebhookReceipts) {
+      if (familyRequestIds.has(receipt.requestId)) this.falWebhookReceipts.delete(id);
     }
     const babyIds = [...this.babies.values()]
       .filter((b) => b.familyId === familyId)
@@ -566,6 +690,38 @@ export class DataStore {
     }
     for (const [id, s] of this.customStyles) {
       if (s.familyId === familyId) this.customStyles.delete(id);
+    }
+
+    for (const [id, provenance] of this.storyContextProvenance) {
+      if (provenance.familyId === familyId) this.storyContextProvenance.delete(id);
+    }
+    for (const [id, reservation] of this.storyAllowanceReservations) {
+      if (reservation.familyId === familyId) this.storyAllowanceReservations.delete(id);
+    }
+
+    // Financial evidence may be retained after erasure, but only its explicit
+    // non-content allow-list survives. Never carry caller-supplied payloads.
+    for (const [id, entry] of this.providerCostLedgerEntries) {
+      if (entry.owningEntityIds.familyId !== familyId) continue;
+      const sanitized = {
+        id: entry.id,
+        provider: entry.provider,
+        endpoint: entry.endpoint,
+        model: entry.model,
+        pricingVersion: entry.pricingVersion,
+        units: { ...entry.units },
+        estimatedCostUsd: entry.estimatedCostUsd,
+        actualCostUsd: entry.actualCostUsd,
+        latencyMs: entry.latencyMs,
+        requestId: entry.requestId,
+        providerRequestId: entry.providerRequestId,
+        owningEntityIds: { ...entry.owningEntityIds },
+        attemptType: entry.attemptType,
+        outcome: entry.outcome,
+        costCategory: entry.costCategory,
+        createdAt: entry.createdAt,
+      };
+      this.providerCostLedgerEntries.set(id, sanitized);
     }
 
     this.subscriptions.delete(familyId);

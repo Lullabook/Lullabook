@@ -18,6 +18,8 @@ import type {
   PushSubscription,
   EmailPlusVpcRequest,
 } from "@/domain/types";
+import type { FalTrainingRequestRecord, FalWebhookReceipt } from "@/adapters/types";
+import type { ProviderCostLedgerEntry } from "@/services/provider-cost-metering";
 
 /**
  * DECISION: SupabaseDataStore keeps the synchronous DataStore shape the
@@ -263,6 +265,9 @@ export class SupabaseDataStore extends DataStore {
         memberId: r.member_id,
         jurisdiction: r.jurisdiction,
         noticeVersion: r.notice_version,
+        method: r.method ?? undefined,
+        status: r.status ?? "verified",
+        expiresAt: r.expires_at ? new Date(r.expires_at) : null,
         consentedAt: new Date(r.consented_at),
       };
       this.consentReceipts.set(receipt.id, receipt);
@@ -665,6 +670,9 @@ export class SupabaseDataStore extends DataStore {
           member_id: r.memberId,
           jurisdiction: r.jurisdiction,
           notice_version: r.noticeVersion,
+          method: r.method ?? null,
+          status: r.status ?? "verified",
+          expires_at: r.expiresAt?.toISOString() ?? null,
           consented_at: r.consentedAt.toISOString(),
         }))
       ),

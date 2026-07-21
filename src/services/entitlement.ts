@@ -2,6 +2,7 @@ import type { DataStore } from "@/db/store";
 import type { Plan, Tier } from "@/domain/types";
 import type { SubscriptionService } from "@/services/subscription";
 import { isR1MultiFamilyEnabled } from "@/lib/r1-config";
+import { LEGACY_TIER_COMPATIBILITY, R1_PLAN_DEFINITION } from "@/domain/plan";
 
 /**
  * Tier & entitlement model (ADR-0025 supersedes ADR-0023).
@@ -80,9 +81,9 @@ export const PLAN_ENTITLEMENTS: Record<Plan, PlanEntitlement> = {
   just_us: {
     plan: "just_us",
     tier: "normal", // legacy compat
-    storyCap: 8,
-    memberCap: 3,
-    memberLoginCap: 2, // parent + co-parent (view-only)
+    storyCap: R1_PLAN_DEFINITION.limits.storybooksPerMonth,
+    memberCap: R1_PLAN_DEFINITION.limits.personas,
+    memberLoginCap: R1_PLAN_DEFINITION.limits.memberLogins,
     canNarrate: false,
     canVideo: false,
     canCustomStyle: false,
@@ -101,8 +102,7 @@ export const PLAN_ENTITLEMENTS: Record<Plan, PlanEntitlement> = {
 
 /** Maps a legacy Tier to the new Plan (ADR-0025). */
 export function tierToPlan(tier: Tier | undefined): Plan {
-  if (tier === "plus") return "our_whole_family";
-  return "just_us"; // basic + normal → Just Us
+  return LEGACY_TIER_COMPATIBILITY[tier ?? "normal"];
 }
 
 /** The unentitled bundle (no active subscription). */
@@ -269,19 +269,26 @@ export class EntitlementService {
    * gate (issue 92) blocks that path separately; the member cap only constrains
    * *entitled* households.
    */
-  requireMemberSlot(familyId: string, actorMemberId: string): void {
+  /**
+   * R1 shared likeness allowance. Babies and Adults consume the same Persona
+   * slots, and the check runs before photo persistence or provider training.
+   */
+  requirePersonaSlot(familyId: string, actorMemberId: string): void {
     const tier = this.getTier(familyId);
     if (tier === "none") return;
-    const ent = this.getEntitlement(familyId);
+    const ent = this.getPlanEntitlement(familyId);
     if (ent.memberCap === Infinity) return;
-    const adults = this.store
-      .getPersonasByFamily(familyId, actorMemberId)
-      .filter((p) => p.kind === "adult").length;
-    if (adults >= ent.memberCap) {
+    const personas = this.store.getPersonasByFamily(familyId, actorMemberId);
+    if (personas.length >= ent.memberCap) {
       throw new EntitlementError(
-        `Family member cap reached (${ent.memberCap} for the ${ent.tier} tier)`,
-        "member_cap_reached"
+        `Persona cap reached (${ent.memberCap} Personas for the ${ent.plan} plan)`,
+        "persona_cap_reached"
       );
     }
+  }
+
+  /** Backward-compatible name for callers that used the old adult-only gate. */
+  requireMemberSlot(familyId: string, actorMemberId: string): void {
+    this.requirePersonaSlot(familyId, actorMemberId);
   }
 }

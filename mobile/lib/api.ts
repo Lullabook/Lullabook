@@ -143,6 +143,26 @@ export function acceptLikeness(personaId: string): Promise<{ ok: boolean; person
   });
 }
 
+/** Issue 180 — fetch generated likeness-review samples, never source photos. */
+export function fetchLikenessSamples(personaId: string): Promise<{ samples: string[] }> {
+  return apiFetch(`/api/personas/${encodeURIComponent(personaId)}/likeness-samples`);
+}
+
+/**
+ * Issue 180 — resolve one generated likeness-review sample path to a full
+ * URL. Sanctioned render helper (see tests/156-mobile-render-invariants):
+ * samples come from the authenticated generated-samples endpoint and are
+ * derivatives of the trained LoRA, never uploaded source photos.
+ */
+export function likenessSampleUrl(samplePath: string): string {
+  return `${apiBase}${samplePath}`;
+}
+
+/** Issue 180 — retrain a Persona with a replacement photo set. */
+export function retrainLikeness(personaId: string, body: FormData): Promise<{ queued: boolean }> {
+  return apiFormData(`/api/personas/${encodeURIComponent(personaId)}/retrain`, body);
+}
+
 export function createCharacter(body: {
   questionnaire: import("@domain/types").TraitQuestionnaire;
   attestation?: string;

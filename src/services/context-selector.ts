@@ -57,6 +57,24 @@ export interface StoryContextSet {
   promptBlock: string;
   /** Rough token estimate of {@link promptBlock} (chars / 4). */
   tokenEstimate: number;
+  /** IDs and bounded source counts retained for Story provenance. */
+  sourceManifest: StoryContextSourceManifest;
+}
+
+/**
+ * Family-scoped provenance for a selected context set. This is deliberately an
+ * ID manifest, not a copy of source content: raw photos and lifetime
+ * transcripts must never be persisted on a Story.
+ */
+export interface StoryContextSourceManifest {
+  familyId: string;
+  babyId: string;
+  personaIds: string[];
+  momentIds: string[];
+  firstCount: number;
+  pastStorySummaryIncluded: boolean;
+  photoDescriptionCount: number;
+  tokenEstimate: number;
 }
 
 /** Seam: supplies the rolling past-Story summary (issue 90). Default = none. */
@@ -227,6 +245,16 @@ export class StoryContextSelector implements ContextSelector {
       visionText,
       promptBlock,
       tokenEstimate: estimateTokens(promptBlock),
+      sourceManifest: {
+        familyId: baby.familyId,
+        babyId,
+        personaIds: cast.map((member) => member.personaId),
+        momentIds: moments.map((moment) => moment.id),
+        firstCount: firsts.length,
+        pastStorySummaryIncluded: Boolean(pastStorySummary),
+        photoDescriptionCount: visionText.length,
+        tokenEstimate: estimateTokens(promptBlock),
+      },
     };
   }
 

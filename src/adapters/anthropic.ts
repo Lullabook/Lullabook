@@ -7,9 +7,23 @@ import type {
 import type { GeneratedStory, StoryType, TraitQuestionnaire } from "@/domain/types";
 import { requireEnv } from "@/adapters/env";
 
-// Story text generation model — locked by stack.md ("Claude Sonnet 4.6").
-const STORY_MODEL = "claude-sonnet-4-6";
-const MAX_TOKENS = 16000;
+// Sonnet 4.6 remains the production default. Sonnet 5 is opt-in only after the
+// fixed golden-set quality/latency/cost decision is recorded by the caller.
+export const SONNET_4_6_MODEL = "claude-sonnet-4-6";
+export const SONNET_5_MODEL = "claude-sonnet-5";
+export interface SonnetRoutingDecision {
+  sonnet5GoldenSetWins?: boolean;
+}
+
+export function getProductionStoryModel(
+  decision: SonnetRoutingDecision = {}
+): string {
+  return decision.sonnet5GoldenSetWins === true ? SONNET_5_MODEL : SONNET_4_6_MODEL;
+}
+
+// R1's output safety ceiling is intentionally above the old 16K default; the
+// retained stop-reason/usage evidence distinguishes capacity from spend.
+const MAX_TOKENS = 24000;
 
 /**
  * JSON schema for the single structured pass (ADR-0012): Story text +
@@ -103,6 +117,52 @@ interface WireGeneratedStory {
   };
 }
 
+export type StoryGenerationOutcome = "success" | "refusal" | "max_tokens" | "provider_error";
+
+export interface AnthropicGenerationEvidence {
+  model: string;
+  outcome: StoryGenerationOutcome;
+  stopReason?: string;
+  inputTokens: number;
+  outputTokens: number;
+  error?: string;
+}
+
+/** Semantic contract checked after JSON-schema parsing and before spend. */
+export function validateGeneratedStoryContract(
+  story: GeneratedStory,
+  expectedPageCount = 12,
+  selectedPersonaIds: string[] = []
+): void {
+  if (!story.text?.trim()) throw new Error("Story text is empty");
+  if (story.pages.length !== expectedPageCount) {
+    throw new Error(`Story must contain exactly ${expectedPageCount} Pages`);
+  }
+  if (story.scenes.length !== expectedPageCount) {
+    throw new Error(`Story must contain exactly ${expectedPageCount} Scenes`);
+  }
+  story.pages.forEach((page, index) => {
+    if (page.index !== index) throw new Error("Page indexes must be sequential from 0");
+    if (!page.text?.trim()) throw new Error(`Page ${index} text is empty`);
+  });
+  story.scenes.forEach((scene, index) => {
+    if (scene.pageIndex !== index) throw new Error("Scene indexes must be sequential from 0");
+    if (!scene.description?.trim()) throw new Error(`Scene ${index} description is empty`);
+    if (scene.personaIds.some((id) => !selectedPersonaIds.includes(id))) {
+      throw new Error("Scenes may use selected Persona IDs only");
+    }
+  });
+  if (
+    !story.styleBible ||
+    !story.styleBible.palette?.trim() ||
+    !story.styleBible.artStyle?.trim() ||
+    !story.styleBible.wardrobe ||
+    typeof story.styleBible.wardrobe !== "object"
+  ) {
+    throw new Error("Story Style Bible is incomplete");
+  }
+}
+
 /** Story Type shapes the narrative arc, not just the theme (CONTEXT.md). */
 function storyTypeInstructions(storyType: StoryType): string {
   const t = storyType === "learning" ? "lesson" : storyType;
@@ -181,6 +241,26 @@ function parseGeneratedStory(message: Anthropic.Message): GeneratedStory {
  * Story + per-Page Scenes + Style Bible). Mirrors FakeAnthropic's contract.
  */
 export class RealAnthropicAdapter implements AnthropicAdapter {
+  public lastGenerationEvidence: AnthropicGenerationEvidence | undefined;
+
+  constructor(private readonly routingDecision: SonnetRoutingDecision = {}) {}
+
+  private recordEvidence(message: Anthropic.Message): void {
+    const outcome: StoryGenerationOutcome =
+      message.stop_reason === "refusal"
+        ? "refusal"
+        : message.stop_reason === "max_tokens"
+          ? "max_tokens"
+          : "success";
+    this.lastGenerationEvidence = {
+      model: getProductionStoryModel(this.routingDecision),
+      outcome,
+      stopReason: message.stop_reason ?? undefined,
+      inputTokens: message.usage?.input_tokens ?? 0,
+      outputTokens: message.usage?.output_tokens ?? 0,
+    };
+  }
+
   async generateStory(input: {
     brief: string;
     personaNames: string[];
@@ -204,18 +284,20 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
       ? `LULLABY WEAVE: The final page must naturally lead into this exact recorded phrase: "${input.lullabyPhrase}".`
       : "";
 
-    const message = await client.messages.create({
-      model: STORY_MODEL,
-      max_tokens: MAX_TOKENS,
-      system: [
-        "You are Lullabook's storyteller: you write personalized picture-book Stories starring",
-        "a real family's cast, for a parent to read aloud to a child aged 1–6.",
-        SAFETY_CONSTRAINTS,
-        "In ONE pass produce: the Story text, exactly the requested number of Pages",
-        "(1–3 short simple sentences each), one Scene per Page, and a Style Bible that keeps",
-        "wardrobe, palette, and art style identical across every Page.",
-        "Scenes' personaIds must use the exact cast names provided.",
-      ].join(" "),
+    let message: Anthropic.Message;
+    try {
+      message = await client.messages.create({
+        model: getProductionStoryModel(this.routingDecision),
+        max_tokens: MAX_TOKENS,
+        system: [
+          "You are Lullabook's storyteller: you write personalized picture-book Stories starring",
+          "a real family's cast, for a parent to read aloud to a child aged 1–6.",
+          SAFETY_CONSTRAINTS,
+          "In ONE pass produce: the Story text, exactly the requested number of Pages",
+          "(1–3 short simple sentences each), one Scene per Page, and a Style Bible that keeps",
+          "wardrobe, palette, and art style identical across every Page.",
+          "Scenes' personaIds must use the exact cast names provided.",
+        ].join(" "),
       messages: [
         {
           role: "user",
@@ -237,8 +319,21 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
           schema: GENERATED_STORY_SCHEMA,
         },
       },
-    });
-    return parseGeneratedStory(message);
+      });
+    } catch (error) {
+      this.lastGenerationEvidence = {
+        model: getProductionStoryModel(this.routingDecision),
+        outcome: "provider_error",
+        inputTokens: 0,
+        outputTokens: 0,
+        error: error instanceof Error ? error.message : String(error),
+      };
+      throw error;
+    }
+    this.recordEvidence(message);
+    const story = parseGeneratedStory(message);
+    validateGeneratedStoryContract(story, input.pageCount, input.personaNames);
+    return story;
   }
 
   async generateTextStory(input: TextStoryGenerationInput): Promise<{ text: string }> {
@@ -259,7 +354,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
     });
 
     const message = await client.messages.create({
-      model: STORY_MODEL,
+      model: getProductionStoryModel(this.routingDecision),
       max_tokens: MAX_TOKENS,
       system: [
         "You are Lullabook's storyteller: you write short personalized read-aloud Stories",
@@ -312,7 +407,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
       .join("; ");
 
     const message = await client.messages.create({
-      model: STORY_MODEL,
+      model: getProductionStoryModel(this.routingDecision),
       max_tokens: 80,
       system: [
         "You write ONE short, warm, whimsical sentence (max ~20 words) describing a",
@@ -350,7 +445,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
   }): Promise<GeneratedStory> {
     const client = buildClient();
     const message = await client.messages.create({
-      model: STORY_MODEL,
+      model: getProductionStoryModel(this.routingDecision),
       max_tokens: MAX_TOKENS,
       system: [
         "You are Lullabook's storyteller adapting a public-domain classic into a Personalized",
@@ -387,6 +482,9 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
         },
       },
     });
-    return parseGeneratedStory(message);
+    this.recordEvidence(message);
+    const story = parseGeneratedStory(message);
+    validateGeneratedStoryContract(story, input.pageCount, input.personaNames);
+    return story;
   }
 }

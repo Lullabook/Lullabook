@@ -191,18 +191,18 @@ describe("91 — Tier & entitlement model (ADR-0023)", () => {
       }
     }
 
-    it("Basic cap=2: below cap allowed; at/over cap rejected 403", async () => {
+    it("Basic maps to Just Us (ADR-0028): shared 3-Persona cap enforced at 403", async () => {
       const ctx = createTestContext();
       const guardian = await subscribedGuardian(ctx);
       const ent = new EntitlementService(ctx.store, ctx.subscriptions);
       setTier(ctx, guardian.familyId, "basic");
 
-      seedAdult(ctx, guardian.familyId, 1);
+      seedAdult(ctx, guardian.familyId, 2);
       expect(() =>
         ent.requireMemberSlot(guardian.familyId, guardian.id)
       ).not.toThrow();
 
-      seedAdult(ctx, guardian.familyId, 1); // roster now 2 == cap
+      seedAdult(ctx, guardian.familyId, 1); // roster now 3 == plan cap
       const atCap = capture(() =>
         ent.requireMemberSlot(guardian.familyId, guardian.id)
       );
@@ -210,17 +210,17 @@ describe("91 — Tier & entitlement model (ADR-0023)", () => {
       expect((atCap as EntitlementError).status).toBe(403);
     });
 
-    it("Normal cap=4: 3 allowed, 4 rejected", async () => {
+    it("Normal maps to Just Us (ADR-0028): 2 allowed, 3rd slot request rejected", async () => {
       const ctx = createTestContext();
       const guardian = await subscribedGuardian(ctx);
       const ent = new EntitlementService(ctx.store, ctx.subscriptions);
       setTier(ctx, guardian.familyId, "normal");
 
-      seedAdult(ctx, guardian.familyId, 3);
+      seedAdult(ctx, guardian.familyId, 2);
       expect(() =>
         ent.requireMemberSlot(guardian.familyId, guardian.id)
       ).not.toThrow();
-      seedAdult(ctx, guardian.familyId, 1); // roster 4 == cap
+      seedAdult(ctx, guardian.familyId, 1); // roster 3 == plan cap
       expect(
         capture(() => ent.requireMemberSlot(guardian.familyId, guardian.id))
       ).toBeInstanceOf(EntitlementError);

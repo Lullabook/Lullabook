@@ -4,6 +4,8 @@ import type {
   BlobStore,
   ClassicCatalog,
   FalAdapter,
+  FalPageImageRequest,
+  FalPageRepairRequest,
   VideoAdapter,
   WorkflowAdapter,
   WorkflowStep,
@@ -26,9 +28,83 @@ import type { EntitlementService } from "@/services/entitlement";
 import { EntitlementService as EntitlementServiceImpl } from "@/services/entitlement";
 import type { SubscriptionService } from "@/services/subscription";
 import { StoryCapService } from "@/services/story-cap";
-import { isR1AudioEnabled, isR1JournalMachineryEnabled } from "@/lib/r1-config";
+import { isR1AudioEnabled } from "@/lib/r1-config";
+import { R1_PLAN_DEFINITION } from "@/domain/plan";
+import { validateGeneratedStoryContract } from "@/adapters/anthropic";
+import { optionalEnv } from "@/adapters/env";
 
 const FREE_REROLL_BUDGET = 5;
+
+export const DEFAULT_PAGE_CONCURRENCY = 4;
+
+export interface StorybookGenerationConfig {
+  pageConcurrency?: number;
+  defaultRoute?: {
+    provider: string;
+    endpoint: string;
+    model: string;
+    modelVersion: string;
+  };
+  repair?: {
+    cheap: { provider: string; endpoint: string; model: string; modelVersion: string };
+    pro: { provider: string; endpoint: string; model: string; modelVersion: string };
+    maxPerPage?: number;
+    maxPerStorybook?: number;
+  };
+}
+
+export const DEFAULT_STORYBOOK_GENERATION_CONFIG: Required<StorybookGenerationConfig> = {
+  pageConcurrency: DEFAULT_PAGE_CONCURRENCY,
+  defaultRoute: {
+    provider: optionalEnv("FAL_STORYBOOK_PROVIDER") ?? "fal.ai",
+    endpoint: optionalEnv("FAL_STORYBOOK_ENDPOINT") ?? "fal-ai/flux-2/lora",
+    model: optionalEnv("FAL_STORYBOOK_MODEL") ?? "flux-2-lora",
+    modelVersion: optionalEnv("FAL_STORYBOOK_MODEL_VERSION") ?? "flux-2-lora-v1",
+  },
+  repair: {
+    cheap: {
+      provider: "fal.ai",
+      endpoint: "fal-ai/nano-banana-2/edit",
+      model: "Nano Banana 2 Edit",
+      modelVersion: "nano-banana-2-edit-v1",
+    },
+    pro: {
+      provider: "fal.ai",
+      endpoint: "fal-ai/nano-banana-pro/edit",
+      model: "Nano Banana Pro Edit",
+      modelVersion: "nano-banana-pro-edit-v1",
+    },
+    maxPerPage: 2,
+    maxPerStorybook: 4,
+  },
+};
+
+function deterministicPageSeed(storybookId: string, pageIndex: number): number {
+  let hash = 2166136261;
+  for (const char of `${storybookId}:${pageIndex}`) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+async function mapWithConcurrency<T>(
+  values: T[],
+  limit: number,
+  worker: (value: T) => Promise<void>
+): Promise<void> {
+  const concurrency = Math.max(1, Math.min(limit, values.length || 1));
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: concurrency }, async () => {
+      while (true) {
+        const index = next++;
+        if (index >= values.length) return;
+        await worker(values[index]!);
+      }
+    })
+  );
+}
 
 /**
  * Watchdog budget: a Storybook may not remain in `generating` longer than this
@@ -60,7 +136,8 @@ export class StorybookService {
     private readonly video: VideoAdapter | null = null,
     contextSelector: ContextSelector | null = null,
     pastStorySummary: PastStorySummaryService | null = null,
-    entitlements: EntitlementService | null = null
+    entitlements: EntitlementService | null = null,
+    generationConfig: StorybookGenerationConfig = {}
   ) {
     this.autoContext = new AutoContextService(store);
     this.pastStorySummary = pastStorySummary ?? new PastStorySummaryService(store);
@@ -74,7 +151,29 @@ export class StorybookService {
         pastStorySummaryProvider(this.pastStorySummary),
         NO_VISION_TEXT
       );
+    this.generationConfig = {
+      ...DEFAULT_STORYBOOK_GENERATION_CONFIG,
+      ...generationConfig,
+      defaultRoute: {
+        ...DEFAULT_STORYBOOK_GENERATION_CONFIG.defaultRoute,
+        ...generationConfig.defaultRoute,
+      },
+      repair: {
+        ...DEFAULT_STORYBOOK_GENERATION_CONFIG.repair,
+        ...generationConfig.repair,
+        cheap: {
+          ...DEFAULT_STORYBOOK_GENERATION_CONFIG.repair.cheap,
+          ...generationConfig.repair?.cheap,
+        },
+        pro: {
+          ...DEFAULT_STORYBOOK_GENERATION_CONFIG.repair.pro,
+          ...generationConfig.repair?.pro,
+        },
+      },
+    };
   }
+
+  private readonly generationConfig: Required<StorybookGenerationConfig>;
 
   private normalizeBrief(memberId: string, brief: Brief): Brief {
     const member = this.store.members.get(memberId);
@@ -86,6 +185,12 @@ export class StorybookService {
     const starringPersonaIds = [...brief.starringPersonaIds];
     if (babyPersona && !starringPersonaIds.includes(babyPersona.id)) {
       starringPersonaIds.unshift(babyPersona.id);
+    }
+
+    if (starringPersonaIds.length > R1_PLAN_DEFINITION.limits.starringPersonas) {
+      throw new Error(
+        `A Storybook may star at most ${R1_PLAN_DEFINITION.limits.starringPersonas} Personas`
+      );
     }
 
     return {
@@ -154,6 +259,7 @@ export class StorybookService {
       createdAt: new Date(),
       finalizedAt: null,
     };
+    this.storyCap.reserve(member.familyId, memberId, storybook.id);
     this.store.saveStorybook(storybook);
 
     // Thin request, fat workflow (ADR-0011): the closure is what the
@@ -193,6 +299,12 @@ export class StorybookService {
     const twist = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
     if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`);
 
+    if (brief.starringPersonaIds.length > R1_PLAN_DEFINITION.limits.starringPersonas) {
+      throw new Error(
+        `A Storybook may star at most ${R1_PLAN_DEFINITION.limits.starringPersonas} Personas`
+      );
+    }
+
     for (const id of brief.starringPersonaIds) {
       const p = this.store.getPersona(id, memberId);
       if (!p || p.status !== "ready") throw new Error(`Persona ${id} not ready`);
@@ -220,6 +332,7 @@ export class StorybookService {
       createdAt: new Date(),
       finalizedAt: null,
     };
+    this.storyCap.reserve(member.familyId, memberId, storybook.id);
     this.store.saveStorybook(storybook);
 
     this.workflow.enqueue(
@@ -257,6 +370,7 @@ export class StorybookService {
   private markFailedIfGenerating(storybookId: string): void {
     const storybook = this.store.storybooks.get(storybookId);
     if (storybook && storybook.status === "generating") {
+      this.storyCap.release(storybookId);
       storybook.status = "failed";
       this.store.saveStorybook(storybook);
     }
@@ -309,16 +423,18 @@ export class StorybookService {
     const artNote = brief.artStyle ? `Art style: ${brief.artStyle}.` : "";
 
     let momentContext: string | undefined;
-    // Issue 148 — the Story Context Engine (auto-context injection) is deferred
-    // from R1. When the journal-machinery flag is off, generation does NOT
-    // depend on it — momentContext stays undefined and the book still generates.
-    if (isR1JournalMachineryEnabled() && brief.babyId) {
+    let sourceManifest: unknown;
+    // R1 restores the bounded Story Context Engine. The complete authorized
+    // corpus remains in Family-scoped storage; only this deterministic selected
+    // set is disclosed to the provider.
+    if (brief.babyId) {
       const contextSet = await this.contextSelector.selectForBaby(
         memberId,
         brief.babyId,
         brief.starringPersonaIds
       );
       momentContext = contextSet.promptBlock || undefined;
+      sourceManifest = contextSet.sourceManifest;
     }
 
     const generateStory = storybook.classicId
@@ -344,7 +460,7 @@ export class StorybookService {
             momentContext,
           });
 
-    await this.runGeneration(memberId, storybookId, brief, personas, generateStory);
+    await this.runGeneration(memberId, storybookId, brief, personas, generateStory, sourceManifest);
   }
 
   recoverPage(memberId: string, pageId: string): void {
@@ -359,7 +475,19 @@ export class StorybookService {
       throw new Error("Persisted generation not found");
     }
 
-    const recoverAttempt = this.countRecoveryAttempts(pageId) + 1;
+    const priorPageAttempts = this.countRecoveryAttempts(pageId);
+    const priorBookAttempts = this.store
+      .getPagesForStorybook(book.id)
+      .reduce((total, candidatePage) => total + this.countRecoveryAttempts(candidatePage.id), 0);
+    const maxPerPage = this.generationConfig.repair.maxPerPage ?? 2;
+    const maxPerStorybook = this.generationConfig.repair.maxPerStorybook ?? 4;
+    if (priorPageAttempts >= maxPerPage) {
+      throw new Error("Page repair limit exhausted");
+    }
+    if (priorBookAttempts >= maxPerStorybook) {
+      throw new Error("Storybook repair limit exhausted");
+    }
+    const recoverAttempt = priorPageAttempts + 1;
 
     this.workflow.enqueue(
       `recover-${pageId}`,
@@ -404,10 +532,18 @@ export class StorybookService {
     storybookId: string,
     brief: Brief,
     personas: PersonaRecord[],
-    generateStory: () => Promise<GeneratedStory>
+    generateStory: () => Promise<GeneratedStory>,
+    sourceManifest?: unknown
   ): Promise<void> {
     const storybook = this.store.storybooks.get(storybookId);
     if (!storybook) return;
+
+    if (sourceManifest) {
+      // Storybook's persisted domain shape predates the R1 provenance field;
+      // retain only the bounded ID manifest as an additive field.
+      (storybook as Storybook & { sourceManifest?: unknown }).sourceManifest = sourceManifest;
+      this.store.saveStorybook(storybook);
+    }
 
     await this.workflow.run([
       {
@@ -415,6 +551,17 @@ export class StorybookService {
         idempotencyKey: `${storybookId}/story`,
         run: async () => {
           const generated = await generateStory();
+          try {
+            validateGeneratedStoryContract(generated, resolvePageCount(brief), brief.starringPersonaIds);
+          } catch {
+            // Semantically invalid Story text is a terminal generation
+            // outcome, not a workflow crash: persist nothing so the
+            // post-step readback below takes the failed path — release the
+            // reserved allowance, mark the book failed, and spend zero
+            // illustration budget. (The validator's throwing contract is
+            // still exercised directly by callers/tests that need it.)
+            return;
+          }
 
           this.store.savePersistedGeneration({
             storybookId,
@@ -429,6 +576,12 @@ export class StorybookService {
     ]);
 
     const persistedAfterText = this.store.getPersistedGeneration(storybookId);
+    const textIsValid = Boolean(
+      persistedAfterText?.story.text?.trim() &&
+        persistedAfterText.story.pages?.length === resolvePageCount(brief) &&
+        persistedAfterText.story.scenes?.length === resolvePageCount(brief)
+    );
+    if (textIsValid) this.storyCap.commit(storybookId);
     if (persistedAfterText?.story.pages?.length && brief.babyId) {
       this.autoContext.advanceWatermark(brief.babyId);
     }
@@ -437,7 +590,8 @@ export class StorybookService {
     // at-least-once replay the memoized claude-pass step does not re-execute,
     // and only persisted state survives the step boundary (PRD v2).
     const persisted = this.store.getPersistedGeneration(storybookId);
-    if (!persisted?.story.pages?.length || !persisted.story.scenes?.length) {
+    if (!textIsValid || !persisted?.story.pages?.length || !persisted.story.scenes?.length) {
+      this.storyCap.release(storybookId);
       storybook.status = "failed";
       this.store.saveStorybook(storybook);
       return;
@@ -447,10 +601,14 @@ export class StorybookService {
       personaIds: brief.starringPersonaIds,
     }));
 
-    for (const pageData of persisted.story.pages) {
-      const scene = scenes.find((s) => s.pageIndex === pageData.index)!;
-      await this.runPagePipeline(storybook, pageData, scene, personas, persisted.story, 0);
-    }
+    await mapWithConcurrency(
+      persisted.story.pages,
+      this.generationConfig.pageConcurrency,
+      async (pageData) => {
+        const scene = scenes.find((s) => s.pageIndex === pageData.index)!;
+        await this.runPagePipeline(storybook, pageData, scene, personas, persisted.story, 0);
+      }
+    );
 
     await this.finalizeStorybookStatus(storybookId);
   }
@@ -463,9 +621,103 @@ export class StorybookService {
     story: GeneratedStory,
     attempt: number
   ): Promise<void> {
+    if (process.env.NODE_ENV === "production" && this.fal.isDevOnly) {
+      throw new Error("Development fal fallback is unavailable in production");
+    }
     await this.workflow.run(
       this.buildPageWorkflowSteps(storybook, pageData, scene, personas, story, attempt)
     );
+  }
+
+  private async generatePageImageForAttempt(
+    storybook: Storybook,
+    pageIndex: number,
+    scene: { pageIndex: number; description: string; personaIds: string[] },
+    personas: PersonaRecord[],
+    story: GeneratedStory,
+    attempt: number,
+    prefix: string
+  ): Promise<{ imageUrl: string; bytes?: Buffer }> {
+    const personaIds = scene.personaIds;
+    const loras = personaIds.map((personaId) => {
+      const persona = personas.find((candidate) => candidate.id === personaId) ?? this.store.personas.get(personaId);
+      return {
+        personaId,
+        path: persona?.loraWeightKey ?? "lora/default",
+        scale: 1,
+      };
+    });
+    const styleBible = story.styleBible;
+    const basePrompt = `${styleBible.artStyle} | ${styleBible.palette} | Style Bible: ${JSON.stringify(styleBible)} | ${scene.description}`;
+    const defaultRoute = this.generationConfig.defaultRoute;
+    const baseRequest: FalPageImageRequest = {
+      pageIndex,
+      prompt: basePrompt,
+      loras,
+      personaIds,
+      styleBible,
+      seed: deterministicPageSeed(storybook.id, pageIndex),
+      seedMetadata: {
+        storybookId: storybook.id,
+        pageIndex,
+        algorithm: "storybook-page-seed-v1",
+      },
+      provider: defaultRoute.provider,
+      model: defaultRoute.model,
+      modelVersion: defaultRoute.modelVersion,
+      endpoint: defaultRoute.endpoint,
+      safety: { enabled: true },
+      idempotencyKey: `${prefix}/fal-generate`,
+    };
+
+    // The reference model remains an explicit canary fallback only. It is not
+    // the default and does not reinterpret Persona IDs as image coordinates.
+    if (attempt === 0 && personaIds.length > 1 && this.useReferenceModelForMulti) {
+      return this.fal.generateWithReferenceModel(
+        basePrompt,
+        personaIds.map((id) => `https://example.com/ref/${id}.png`)
+      );
+    }
+
+    if (attempt > 0 && this.fal.repairPageImage) {
+      let lastError: unknown;
+      const routes = [
+        { ...this.generationConfig.repair.cheap, tier: "nano-banana-2-edit" as const },
+        { ...this.generationConfig.repair.pro, tier: "nano-banana-pro-edit" as const },
+      ];
+      for (const [routeIndex, route] of routes.entries()) {
+        const request: FalPageRepairRequest = {
+          ...baseRequest,
+          provider: route.provider,
+          endpoint: route.endpoint,
+          model: route.model,
+          modelVersion: route.modelVersion,
+          tier: route.tier,
+          referenceImageUrls: personaIds.map((id) => `https://example.com/ref/${id}.png`),
+          idempotencyKey: routeIndex === 0 ? baseRequest.idempotencyKey : `${baseRequest.idempotencyKey}/pro`,
+        };
+        try {
+          return await this.fal.repairPageImage(request);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error("Page repair failed");
+    }
+
+    if (this.fal.generatePageImage) {
+      return this.fal.generatePageImage(baseRequest);
+    }
+
+    // Compatibility for adapters that predate the structured Page seam. This
+    // branch is only for single-Persona/legacy fakes; current adapters implement
+    // generatePageImage and never collapse multi-Persona input to one face.
+    if (personaIds.length > 1) {
+      throw new Error("Multi-Persona Page adapter is not configured");
+    }
+    return this.fal.generateImage(basePrompt, loras[0]?.path ?? "lora/default", {
+      idempotencyKey: baseRequest.idempotencyKey,
+    });
   }
 
   private buildPageWorkflowSteps(
@@ -494,38 +746,15 @@ export class StorybookService {
             const existing = await this.blobs.get(rawKey);
             if (existing) return;
 
-            let imageResult: { imageUrl: string; bytes?: Buffer };
-            if (personaCount > 1 && this.useReferenceModelForMulti) {
-              imageResult = await this.fal.generateWithReferenceModel(
-                `${story.styleBible.artStyle}: ${scene.description}`,
-                scene.personaIds.map((id) => `https://example.com/ref/${id}.png`)
-              );
-            } else if (personaCount > 1) {
-              const base = await this.fal.generateImage(scene.description, "base", {
-                idempotencyKey: `${prefix}/fal-base`,
-              });
-              imageResult = await this.fal.inpaintFaces(
-                base.imageUrl,
-                scene.personaIds.map((id, i) => ({
-                  region: `face-${i}`,
-                  loraKey: this.store.personas.get(id)?.loraWeightKey ?? "lora/default",
-                }))
-              );
-            } else {
-              // Issue 162: persona-free / Character-only Brief — no persona
-              // LoRA available. Use "lora/default" (placeholder art: a generic
-              // illustration from the scene description, no raw photo, no
-              // likeness trained — I3.1). Previously `personas[0]!` threw a
-              // TypeError here, which the fal-gen catch swallowed into a
-              // uniformly-failed page; now fal is called with lora/default.
-              const loraKey = personas.length > 0
-                ? (personas[0]!.loraWeightKey ?? "lora/default")
-                : "lora/default";
-              const prompt = `${story.styleBible.artStyle} | ${story.styleBible.palette} | ${scene.description}`;
-              imageResult = await this.fal.generateImage(prompt, loraKey, {
-                idempotencyKey: falIdempotencyKey,
-              });
-            }
+            const imageResult = await this.generatePageImageForAttempt(
+              storybook,
+              pageIndex,
+              scene,
+              personas,
+              story,
+              attempt,
+              prefix
+            );
 
             const bytes =
               imageResult.bytes ?? Buffer.from(`fetched:${imageResult.imageUrl}`);
@@ -648,6 +877,16 @@ export class StorybookService {
             generationStatus,
             personaCount,
           });
+          if (attempt > 0) {
+            this.store.savePageCandidate({
+              id: `${pageId}-recover-${attempt}`,
+              pageId,
+              kind: "image",
+              content: illustrationBlobKey ?? `${blobKey}.attempt-${attempt}`,
+              selected: generationStatus === "ready",
+              createdAt: new Date(),
+            });
+          }
         },
       },
     ];

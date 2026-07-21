@@ -12,6 +12,7 @@ const envPath = path.join(root, ".env.local");
 const sqlPaths = [
   path.join(root, "CONTEXT/local-dev/schema-incremental-004-007.sql"),
   path.join(root, "CONTEXT/local-dev/schema-incremental-008-011.sql"),
+  path.join(root, "CONTEXT/local-dev/schema-incremental-012.sql"),
 ];
 
 if (!existsSync(envPath)) {

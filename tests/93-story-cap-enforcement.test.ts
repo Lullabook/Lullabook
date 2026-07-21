@@ -174,17 +174,18 @@ describe("93 — Story-cap & member-cap enforcement (ADR-0023)", () => {
   });
 
   describe("member cap", () => {
-    it("creating a member beyond the tier cap is rejected server-side", async () => {
+    it("creating a member beyond the plan cap is rejected server-side", async () => {
       const ctx = createTestContext();
       const guardian = await subscribedGuardian(ctx);
-      setTier(ctx, guardian.familyId, "basic"); // member cap 2
+      setTier(ctx, guardian.familyId, "basic"); // maps to Just Us — shared 3-Persona cap (ADR-0028)
 
-      // Create 2 adults (fills the cap)
+      // Create 3 adults (fills the shared Persona cap)
       await createReadyAdult(ctx, guardian, "Adult 1");
       await createReadyAdult(ctx, guardian, "Adult 2");
+      await createReadyAdult(ctx, guardian, "Adult 3");
 
       // The (cap+1)th should be rejected
-      await expect(createReadyAdult(ctx, guardian, "Adult 3")).rejects.toThrow(/cap/i);
+      await expect(createReadyAdult(ctx, guardian, "Adult 4")).rejects.toThrow(/cap/i);
     });
 
     it("Plus tier has unlimited members", async () => {
