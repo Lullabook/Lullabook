@@ -1,6 +1,6 @@
 # 0025 — Two-plan monetization: "Just Us" and "Our Whole Family"
 
-- Status: Accepted (2026-06-22)
+- Status: Accepted (2026-06-22); the R1 Just Us price, Story cap, and Persona assumptions are superseded by [ADR-0028](0028-r1-family-persona-provider-economics.md). The later collaboration-axis decision remains accepted.
 - Supersedes: [ADR-0023](0023-three-tier-monetization-and-credits.md) (Basic/Normal/Plus
   three-tier model) — collapses the capability-ladder into a **collaboration axis**.
   Retains 0023's credit-metering, breakage logic, and "entitlement is server-side source
