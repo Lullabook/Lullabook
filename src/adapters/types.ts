@@ -225,7 +225,14 @@ export interface WorkflowStep {
  */
 export type WorkflowJobPayload =
   | { type: "storybook-generate"; storybookId: string; memberId: string }
-  | { type: "page-recover"; pageId: string; memberId: string; attempt: number };
+  | { type: "page-recover"; pageId: string; memberId: string; attempt: number }
+  | {
+      type: "persona-creation-finalized";
+      eventId: string;
+      familyId: string;
+      personaId: string;
+      reservationId: string;
+    };
 
 export interface PersonaCreatePayload {
   mode: "adult" | "baby" | "promote-character";

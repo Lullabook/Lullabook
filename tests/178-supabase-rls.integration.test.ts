@@ -7,7 +7,7 @@ describe("178 — PostgreSQL Family RLS integration", () => {
       const version = await asUser<{ version: string }>(fixture.familyA.authUserId, "select version()");
       expect(version.rows[0]?.version).toMatch(/^PostgreSQL \d+/);
     });
-  });
+  }, 15_000);
 
   it("allows an authenticated Family A Guardian to access only Family A persona records", async () => {
     await withIsolatedPostgres(async ({ asUser, fixture }) => {

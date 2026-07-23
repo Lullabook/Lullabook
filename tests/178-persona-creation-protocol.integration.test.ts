@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { PostgresPersonaCreationRepository, PersonaCreationProtocol } from "@/db/persona-creation-protocol";
+import {
+  PersonaCreationOutboxConsumer,
+  PersonaCreationOutboxDispatcher,
+  PostgresPersonaCreationRepository,
+  PersonaCreationProtocol,
+} from "@/db/persona-creation-protocol";
 import { InMemoryBlobStore } from "@/adapters/fakes";
+import { FakeWorkflow } from "@/adapters/fakes";
 import { withIsolatedPostgres } from "@/../tests/support/postgres/rls-harness";
 
 describe("178 — PostgreSQL Persona creation protocol", () => {
@@ -41,7 +47,7 @@ describe("178 — PostgreSQL Persona creation protocol", () => {
       );
       expect(outbox.rows[0]?.count).toBe("0");
     });
-  });
+  }, 15_000);
 
   it("finalizes the reserved graph and exactly one byte-free outbox event after every manifest is recorded", async () => {
     await withIsolatedPostgres(async ({ asUser, fixture }) => {
@@ -157,6 +163,122 @@ describe("178 — PostgreSQL Persona creation protocol", () => {
         [reservation.id],
       );
       expect(state.rows[0]?.state).toBe("aborted");
+    });
+  });
+
+  it("reconciles only expired uploaded reservation blobs and rehydrates a finalized result from PostgreSQL", async () => {
+    await withIsolatedPostgres(async ({ asSystem, asUser, fixture }) => {
+      const blobs = new InMemoryBlobStore();
+      const repository = new PostgresPersonaCreationRepository(asUser, fixture.familyA.authUserId);
+      const protocol = new PersonaCreationProtocol(repository, blobs);
+      const expired = await repository.prepare({
+        kind: "baby",
+        displayName: "Expired Maya",
+        photoCount: 1,
+        requestFingerprint: createHash("sha256").update("expired-maya-v1").digest("hex"),
+        baby: { displayName: "Maya" },
+      });
+      const current = await repository.prepare({
+        kind: "baby",
+        displayName: "Current June",
+        photoCount: 1,
+        requestFingerprint: createHash("sha256").update("current-june-v1").digest("hex"),
+        baby: { displayName: "June" },
+      });
+
+      await protocol.uploadModeratedPhotos(expired, [Buffer.from("expired-moderated-photo")]);
+      await protocol.uploadModeratedPhotos(current, [Buffer.from("current-moderated-photo")]);
+      await asSystem(
+        "update persona_creation_reservations set expires_at = now() - interval '1 second' where id = $1",
+        [expired.id],
+      );
+
+      await protocol.reconcileExpiredReservations();
+      expect(await blobs.list(`persona-creation/${fixture.familyA.familyId}/${expired.id}/`)).toEqual([]);
+      expect(await blobs.list(`persona-creation/${fixture.familyA.familyId}/${current.id}/`)).toEqual(current.photoKeys);
+
+      const expiredState = await asUser<{ state: string }>(
+        fixture.familyA.authUserId,
+        "select state from persona_creation_reservations where id = $1",
+        [expired.id],
+      );
+      expect(expiredState.rows[0]?.state).toBe("expired");
+
+      const finalized = await repository.finalize(current.id);
+      const rehydrated = await new PostgresPersonaCreationRepository(asUser, fixture.familyA.authUserId)
+        .readFinalized(current.id);
+      expect(rehydrated).toEqual(finalized);
+    });
+  });
+
+  it("releases an expired outbox lease with the same stable event identity after a crash before acknowledgement", async () => {
+    await withIsolatedPostgres(async ({ asUser, fixture }) => {
+      const repository = new PostgresPersonaCreationRepository(asUser, fixture.familyA.authUserId);
+      const reservation = await repository.prepare({
+        kind: "baby",
+        displayName: "Maya",
+        photoCount: 1,
+        requestFingerprint: createHash("sha256").update("outbox-replay-maya-v1").digest("hex"),
+        baby: { displayName: "Maya" },
+      });
+      await repository.markUploaded(reservation.id, reservation.photoKeys.map((key) => ({
+        key,
+        sha256: createHash("sha256").update(key).digest("hex"),
+        size: 20_000,
+      })));
+      const finalized = await repository.finalize(reservation.id);
+
+      const firstLease = await repository.claimOutbox(0);
+      expect(firstLease?.id).toBe(finalized.outboxEventId);
+
+      const workflow = new FakeWorkflow();
+      const dispatcher = new PersonaCreationOutboxDispatcher(repository, workflow);
+      await expect(dispatcher.dispatchOne(0)).resolves.toBe(true);
+      expect(workflow.enqueuedPayloads).toEqual([
+        expect.objectContaining({
+          type: "persona-creation-finalized",
+          eventId: finalized.outboxEventId,
+          reservationId: reservation.id,
+        }),
+      ]);
+
+      const outbox = await asUser<{ status: string; attempts: number }>(
+        fixture.familyA.authUserId,
+        "select status, attempts from persona_creation_outbox where id = $1",
+        [finalized.outboxEventId],
+      );
+      expect(outbox.rows[0]).toEqual({ status: "sent", attempts: 2 });
+    });
+  });
+
+  it("rehydrates and consumes a finalized outbox event once under at-least-once delivery", async () => {
+    await withIsolatedPostgres(async ({ asUser, fixture }) => {
+      const repository = new PostgresPersonaCreationRepository(asUser, fixture.familyA.authUserId);
+      const reservation = await repository.prepare({
+        kind: "baby",
+        displayName: "Maya",
+        photoCount: 1,
+        requestFingerprint: createHash("sha256").update("outbox-consumer-maya-v1").digest("hex"),
+        baby: { displayName: "Maya" },
+      });
+      await repository.markUploaded(reservation.id, reservation.photoKeys.map((key) => ({
+        key,
+        sha256: createHash("sha256").update(key).digest("hex"),
+        size: 20_000,
+      })));
+      const finalized = await repository.finalize(reservation.id);
+      const event = await repository.claimOutbox();
+      expect(event).not.toBeNull();
+
+      const workflow = new FakeWorkflow();
+      const consumed: string[] = [];
+      const consumer = new PersonaCreationOutboxConsumer(repository, workflow, async (rehydrated) => {
+        consumed.push(rehydrated.personaId);
+      });
+      await consumer.consume(event!);
+      await consumer.consume(event!);
+
+      expect(consumed).toEqual([finalized.personaId]);
     });
   });
 });

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { BlobStore } from "@/adapters/types";
+import type { BlobStore, WorkflowAdapter } from "@/adapters/types";
 
 export interface SqlResult<Row extends Record<string, unknown> = Record<string, unknown>> {
   rows: Row[];
@@ -38,8 +38,16 @@ export interface PersonaCreationPhotoManifest {
 
 export interface FinalizedPersonaCreation {
   id: string;
+  personaId: string;
   state: "finalized";
   outboxEventId: string;
+}
+
+export interface PersonaCreationOutboxEvent {
+  id: string;
+  familyId: string;
+  personaId: string;
+  reservationId: string;
 }
 
 /**
@@ -122,11 +130,82 @@ export class PostgresPersonaCreationRepository {
     if (!finalized?.outbox_event_id) {
       throw new Error("Persona creation finalization did not produce an outbox event");
     }
+    return this.readFinalized(reservationId);
+  }
+
+  async readFinalized(reservationId: string): Promise<FinalizedPersonaCreation> {
+    const result = await this.queryAsUser<{
+      id: string;
+      persona_id: string;
+      state: FinalizedPersonaCreation["state"];
+      outbox_event_id: string;
+    }>(
+      this.authUserId,
+      `select reservation.id, reservation.persona_id, reservation.state, outbox.id as outbox_event_id
+       from persona_creation_reservations reservation
+       join persona_creation_outbox outbox on outbox.reservation_id = reservation.id
+       where reservation.id = $1::uuid and reservation.state = 'finalized'`,
+      [reservationId],
+    );
+    const finalized = result.rows[0];
+    if (!finalized) throw new Error("Finalized Persona creation was not found");
     return {
       id: finalized.id,
+      personaId: finalized.persona_id,
       state: finalized.state,
       outboxEventId: finalized.outbox_event_id,
     };
+  }
+
+  async claimExpiredReservations(): Promise<Array<Pick<PersonaCreationReservation, "id" | "familyId" | "photoKeys">>> {
+    const result = await this.queryAsUser<{ id: string; family_id: string; photo_keys: unknown }>(
+      this.authUserId,
+      "select * from app_claim_expired_persona_creation_reservations()",
+    );
+    return result.rows.map((reservation) => {
+      if (!Array.isArray(reservation.photo_keys) || !reservation.photo_keys.every(isString)) {
+        throw new Error("Expired Persona creation reservation returned an invalid manifest");
+      }
+      return { id: reservation.id, familyId: reservation.family_id, photoKeys: reservation.photo_keys };
+    });
+  }
+
+  async markExpiredCleanupComplete(reservationId: string): Promise<void> {
+    await this.queryAsUser(
+      this.authUserId,
+      "select app_complete_persona_creation_expired_cleanup($1::uuid)",
+      [reservationId],
+    );
+  }
+
+  async claimOutbox(leaseSeconds = 60): Promise<PersonaCreationOutboxEvent | null> {
+    const result = await this.queryAsUser<{
+      id: string;
+      family_id: string;
+      reservation_id: string;
+      persona_id: string;
+    }>(
+      this.authUserId,
+      "select * from app_claim_persona_creation_outbox($1::integer)",
+      [leaseSeconds],
+    );
+    const event = result.rows[0];
+    return event
+      ? {
+          id: event.id,
+          familyId: event.family_id,
+          personaId: event.persona_id,
+          reservationId: event.reservation_id,
+        }
+      : null;
+  }
+
+  async markOutboxSent(outboxEventId: string): Promise<void> {
+    await this.queryAsUser(
+      this.authUserId,
+      "select app_mark_persona_creation_outbox_sent($1::uuid)",
+      [outboxEventId],
+    );
   }
 }
 
@@ -161,6 +240,75 @@ export class PersonaCreationProtocol {
       await this.repository.abort(reservation.id);
       throw error;
     }
+  }
+
+  async reconcileExpiredReservations(): Promise<void> {
+    const expiredReservations = await this.repository.claimExpiredReservations();
+    for (const reservation of expiredReservations) {
+      await Promise.all(reservation.photoKeys.map((key) => this.blobs.delete(key)));
+      await this.repository.markExpiredCleanupComplete(reservation.id);
+    }
+  }
+}
+
+/**
+ * Acknowledges an outbox event only after the serializable workflow event has
+ * been submitted. A crash after submit and before acknowledgement replays the
+ * identical event ID after its lease expires, so the eventual consumer can
+ * deduplicate without losing the committed Persona creation.
+ */
+export class PersonaCreationOutboxDispatcher {
+  constructor(
+    private readonly repository: PostgresPersonaCreationRepository,
+    private readonly workflow: WorkflowAdapter,
+  ) {}
+
+  async dispatchOne(leaseSeconds = 60): Promise<boolean> {
+    const event = await this.repository.claimOutbox(leaseSeconds);
+    if (!event) return false;
+
+    this.workflow.enqueue(
+      "persona-creation-finalized",
+      async () => undefined,
+      {
+        type: "persona-creation-finalized",
+        eventId: event.id,
+        familyId: event.familyId,
+        personaId: event.personaId,
+        reservationId: event.reservationId,
+      },
+    );
+    await this.workflow.flush();
+    await this.repository.markOutboxSent(event.id);
+    return true;
+  }
+}
+
+/**
+ * Rehydrates the committed result at delivery time and delegates its side
+ * effect through a stable workflow step. LUL-103 supplies the production
+ * training callback; repeated provider delivery cannot run that callback
+ * twice for one immutable outbox event.
+ */
+export class PersonaCreationOutboxConsumer {
+  constructor(
+    private readonly repository: PostgresPersonaCreationRepository,
+    private readonly workflow: WorkflowAdapter,
+    private readonly onFinalized: (creation: FinalizedPersonaCreation) => Promise<void>,
+  ) {}
+
+  async consume(event: PersonaCreationOutboxEvent): Promise<void> {
+    const finalized = await this.repository.readFinalized(event.reservationId);
+    if (finalized.outboxEventId !== event.id) {
+      throw new Error("Persona creation outbox event does not match its finalized reservation");
+    }
+    await this.workflow.run([
+      {
+        name: "consume-persona-creation-finalized",
+        idempotencyKey: `persona-creation-finalized:${event.id}`,
+        run: () => this.onFinalized(finalized),
+      },
+    ]);
   }
 }
 

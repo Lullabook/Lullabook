@@ -17,6 +17,10 @@ export interface RlsFixture {
 }
 
 interface IsolatedPostgres {
+  asSystem<Row extends QueryResultRow = QueryResultRow>(
+    text: string,
+    values?: unknown[],
+  ): Promise<QueryResult<Row>>;
   asUser<Row extends QueryResultRow = QueryResultRow>(
     authUserId: string,
     text: string,
@@ -68,7 +72,12 @@ export async function withIsolatedPostgres(
       return run;
     };
 
-    await assertion({ asUser, fixture });
+    const asSystem = <Row extends QueryResultRow = QueryResultRow>(
+      text: string,
+      values: unknown[] = [],
+    ): Promise<QueryResult<Row>> => client!.query<Row>(text, values);
+
+    await assertion({ asSystem, asUser, fixture });
   } finally {
     try {
       await client?.end();
