@@ -1,15 +1,90 @@
 # LUL-100 ticket map
 
-All tickets below are existing Linear issues and must be updated in place. The Linear description for each issue should mirror its section. `Verification-command` is the owning coder/debugger lock and is deterministic/non-paid. `Blocked live-evidence gate` is not part of that command and cannot be run without a new user authorization.
+LUL-101 through LUL-110 remain existing issues updated in place. The verified LUL-103 blocker required exactly two new prerequisite children, LUL-129 and LUL-130. The Linear description for each issue should mirror its section. `Verification-command` is the owning coder/debugger lock and is deterministic/non-paid. `Blocked live-evidence gate` is not part of that command and cannot be run without a new user authorization.
 
-## 1. LUL-103 / local 178 — Wire atomic consent-safe Persona creation into production
+## 1. LUL-129 — Establish deterministic PostgreSQL RLS integration harness
 
 - Priority: 1 — Urgent
-- State after planner handoff: Coding
+- State after corrective planner handoff: Coding
 - Blocked by: None
 - Next handoff: coder (`part2`), then debugger (`part3`)
 
-Goal: Make the native Persona creation action and workflow execute one database-authoritative use case in which authenticated role, jurisdictional consent, self-consent, moderation, Family rows, bonds, Persona state, storage ownership, and workflow submission succeed or fail as one externally observable operation.
+Goal: Add a repo-owned deterministic integration harness that executes the real Lullabook migrations and RLS policies on an actual PostgreSQL engine with Supabase-compatible authenticated claims, so Family A/B isolation is proven by PostgreSQL rather than DataStore guards or a recording stub.
+
+Production/test entry points:
+
+- `package.json` and `package-lock.json`
+- `supabase/migrations/001_families_rls.sql` through `013_provider_artifacts_rls_and_delete.sql`
+- repo-local support under `tests/support/postgres/` or its equivalent
+- `tests/178-supabase-rls.integration.test.ts`
+
+Invariants: RLS-H1, RLS-H2, RLS-H3.
+
+Acceptance criteria:
+
+- The harness uses an actual PostgreSQL engine. An embedded local PostgreSQL distribution plus a Supabase auth/JWT compatibility bootstrap is acceptable; in-memory maps, SQL string assertions, PGlite-only approximation, and mocked Supabase clients are not.
+- A clean isolated database applies the migrations needed by LUL-103 in order, including `auth.uid()` compatibility.
+- Family A and Family B authenticated principals are deterministic fixtures, and the service role is not the assertion principal.
+- Family A can perform its permitted operations and cannot select, insert, update, or delete Family B Members, Personas, Babies, Baby–Person bonds, or Consent receipts.
+- Missing PostgreSQL runtime, migration, or locked test file is a hard failure rather than a skip or Vitest no-match success.
+- Setup and teardown leave no persistent credentials, database process, or fixture data.
+
+Verification-command:
+
+```bash
+npx vitest run tests/178-supabase-rls.integration.test.ts && npm run verify
+```
+
+Blocked live-evidence gate: None. The database is local and deterministic.
+
+## 2. LUL-130 — Establish crash-safe Persona creation reservation and outbox protocol
+
+- Priority: 1 — Urgent
+- State after corrective planner handoff: Coding
+- Blocked by: LUL-129
+- Next handoff: coder, then debugger
+
+Goal: Establish the database-authoritative RPC/transaction, storage compensation, and durable outbox protocol that LUL-103 will consume, without yet rewiring the native Persona route/action.
+
+Production entry points:
+
+- a new Supabase migration after `013_provider_artifacts_rls_and_delete.sql`
+- a focused PostgreSQL repository/adapter for Persona creation
+- production `BlobStore` and `WorkflowAdapter` boundaries
+- `tests/178-persona-creation-protocol.integration.test.ts`
+- the PostgreSQL support introduced by LUL-129
+
+Invariants: ATOM-H1, ATOM-H2, ATOM-H3, ATOM-H4, ATOM-H5, SAFE-1, SAFE-2, FAM-1.
+
+Acceptance criteria:
+
+- Request photo/selfie bytes remain in memory through authenticated role, consent, liveness, preflight, and moderation checks; no blob or workflow/provider submission precedes those checks.
+- A prepare RPC executed as the authenticated principal revalidates authority, jurisdictional Baby consent or durable subject-linked Adult self-consent, capacity, and idempotency, then reserves immutable Family-owned IDs/keys without creating Persona/Baby/bond domain rows or a workflow event.
+- The application writes only moderated bytes to reserved keys and records SHA-256/size manifests. Partial upload failure deletes every successful creation-scoped key and aborts/removes the reservation.
+- A finalize RPC revalidates the reservation/consent and atomically creates the Persona, optional Baby/bond, applicable durable Adult consent receipt, and exactly one outbox event.
+- Finalize failure compensates every blob. An expiry reconciler removes blobs and pending rows left by a crash after upload but before finalize.
+- Outbox lease/retry uses a stable event ID; crash after send is safe with an idempotent consumer, and training cannot start from prepared/aborted requests.
+- Concurrent/retried requests produce at most one finalized creation, capacity claim, and logical workflow event.
+- Compensation never scans or deletes another request's rows or keys; all pending/outbox records are Family-scoped, Hard-delete discoverable, and contain no bytes or secrets.
+- The successful result rehydrates from PostgreSQL without making a process-local map authoritative.
+- No route/action/native product wiring changes in this foundation ticket; that remains LUL-103.
+
+Verification-command:
+
+```bash
+npx vitest run tests/178-persona-creation-protocol.integration.test.ts tests/178-supabase-rls.integration.test.ts && npm run verify
+```
+
+Blocked live-evidence gate: None. Storage and workflow failures use stateful deterministic fakes at the production adapter boundaries.
+
+## 3. LUL-103 / local 178 — Wire the crash-safe consent-safe Persona protocol into production
+
+- Priority: 1 — Urgent
+- State after planner handoff: Coding
+- Blocked by: LUL-129, LUL-130
+- Next handoff: coder (`part2`), then debugger (`part3`)
+
+Goal: Make the native Persona creation route/action and workflow consume the LUL-129/LUL-130 PostgreSQL, compensation, and outbox foundations as one externally observable operation. LUL-103 owns production wiring and behavior, not redesigning the protocol.
 
 Production entry points:
 
@@ -17,30 +92,33 @@ Production entry points:
 - `src/workflows/persona-create-body.ts`
 - `src/services/persona.ts`
 - `src/db/supabase-store.ts`
-- `supabase/migrations/012_atomic_consent_safe_persona.sql`
+- the Persona creation repository/RPC/outbox introduced by LUL-130
+- `supabase/migrations/012_atomic_consent_safe_persona.sql` plus the LUL-130 migration
 - native Family creation caller under `mobile/app/family/`
 
 Invariants: SAFE-1, SAFE-2, FAM-1, RLS-1.
 
 Acceptance criteria:
 
-- The production action/workflow calls the atomic consent-safe use case; `createAtomic` is no longer a test-only dead seam.
+- The bearer API, server action, promotion path where applicable, and workflow all call one production Persona creation protocol; `createAtomic` and map-wide rollback are no longer the production authority.
 - No source photo is durably written before moderation succeeds, and no provider submission occurs before both consent and moderation succeed.
 - Missing, revoked, expired, wrong-jurisdiction, and rejected-photo cases leave no Family/Person/Baby/bond/Persona/Consent rows and no blob.
 - Adult self-consent is a durable subject-linked receipt, not an unpersisted caller boolean.
 - Ordinary Members are rejected before Adult or Baby Persona persistence/training.
 - The production schema round-trips lifecycle status, consent method, and relationships.
 - Authenticated Family A/B tests execute real PostgreSQL RLS policies.
+- The route returns success only after the durable finalize/outbox commit. Workflow delivery may be asynchronous, but a queue-send crash is recoverable from the committed outbox.
+- Injected upload/finalize/dispatch crashes exercise LUL-130 compensation and recovery through the production composition path, with no duplicate training submission.
 
 Verification-command:
 
 ```bash
-npx vitest run tests/178-atomic-consent-safe-persona.test.ts tests/178-production-persona-entrypoint.integration.test.ts tests/178-supabase-rls.integration.test.ts && npm run verify
+npx vitest run tests/178-atomic-consent-safe-persona.test.ts tests/178-supabase-rls.integration.test.ts tests/178-persona-creation-protocol.integration.test.ts tests/178-production-persona-entrypoint.integration.test.ts && npm run verify
 ```
 
 Blocked live-evidence gate: None. Provider calls are faked behind the production adapter in this deterministic ticket.
 
-## 2. LUL-104 / local 179 — Enforce signed fal callbacks and owned LoRA lifecycle
+## 4. LUL-104 / local 179 — Enforce signed fal callbacks and owned LoRA lifecycle
 
 - Priority: 1 — Urgent
 - State after planner handoff: Coding
@@ -79,7 +157,7 @@ npx vitest run tests/179-fal-lora-contract.test.ts tests/179-fal-webhook.test.ts
 
 Blocked live-evidence gate: No real fal training request is permitted. Real provider execution belongs to LUL-101 and requires fresh authorization.
 
-## 3. LUL-102 / local 177 — Make R1 entitlement and capacity database-authoritative
+## 5. LUL-102 / local 177 — Make R1 entitlement and capacity database-authoritative
 
 - Priority: 2 — High
 - State after planner handoff: Coding
@@ -117,7 +195,7 @@ npx vitest run tests/177-r1-family-plan-entitlement.test.ts tests/177-production
 
 Blocked live-evidence gate: None.
 
-## 4. LUL-108 / local 183 — Put durable spend controls on every payable boundary
+## 6. LUL-108 / local 183 — Put durable spend controls on every payable boundary
 
 - Priority: 2 — High
 - State after planner handoff: Coding
@@ -155,7 +233,7 @@ npx vitest run tests/183-provider-cost-metering.test.ts tests/183-production-spe
 
 Blocked live-evidence gate: Actual provider billing reconciliation is deferred to the separately authorized LUL-101 canary.
 
-## 5. LUL-105 / local 180 — Make Likeness review, retrain, and Brief resume durable
+## 7. LUL-105 / local 180 — Make Likeness review, retrain, and Brief resume durable
 
 - Priority: 2 — High
 - State after planner handoff: Coding
@@ -191,7 +269,7 @@ npx vitest run tests/180-likeness-readiness-cold-start.test.ts tests/180-brief-r
 
 Blocked live-evidence gate: None; provider outcomes are deterministic fakes.
 
-## 6. LUL-106 / local 181 — Persist bounded Story Context and enforce the R1 12-Page contract
+## 8. LUL-106 / local 181 — Persist bounded Story Context and enforce the R1 12-Page contract
 
 - Priority: 2 — High
 - State after planner handoff: Coding
@@ -227,7 +305,7 @@ npx vitest run tests/181-story-context-sonnet-contract.test.ts tests/181-r1-prod
 
 Blocked live-evidence gate: Sonnet 4.6 versus Sonnet 5 quality/cost comparison remains part of LUL-101 and requires fresh authorization.
 
-## 7. LUL-107 / local 182 — Send real multi-LoRA Page requests with bounded repair
+## 9. LUL-107 / local 182 — Send real multi-LoRA Page requests with bounded repair
 
 - Priority: 2 — High
 - State after planner handoff: Coding
@@ -260,7 +338,7 @@ npx vitest run tests/182-multipersona-page-fanout.test.ts tests/182-fal-request-
 
 Blocked live-evidence gate: Multi-Persona visual quality and repair efficacy require the separately authorized LUL-101 canary.
 
-## 8. LUL-109 / local 184 — Make RLS and Hard-delete consume the real persisted inventory
+## 10. LUL-109 / local 184 — Make RLS and Hard-delete consume the real persisted inventory
 
 - Priority: 1 — Urgent
 - State after planner handoff: Coding
@@ -296,7 +374,7 @@ npx vitest run tests/184-provider-artifact-delete-rls.test.ts tests/184-supabase
 
 Blocked live-evidence gate: None; remote provider deletion is represented by a stateful adapter fake. Real provider limitations are evidence for the final authorized smoke only.
 
-## 9. LUL-101 / local 176 — Make the canary harness safe and evidence-eligible, then hold spend
+## 11. LUL-101 / local 176 — Make the canary harness safe and evidence-eligible, then hold spend
 
 - Priority: 3 — Medium
 - State after planner handoff: Coding
@@ -339,7 +417,7 @@ DO NOT RUN: LIVE_PROVIDER_BUDGET_USD=10 npm run smoke:provider-bakeoff
 
 The `$10` canary requires a new explicit user authorization after deterministic verification. Its real result may reopen ADR-0028 routing/economics and cannot be marked passed by coder/debugger.
 
-## 10. LUL-110 / local 185 — Build the deterministic production-like release gate, then hold live smoke
+## 12. LUL-110 / local 185 — Build the deterministic production-like release gate, then hold live smoke
 
 - Priority: 1 — Urgent
 - State after planner handoff: Coding

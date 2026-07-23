@@ -1,6 +1,6 @@
 # LUL-100 — Production-path remediation plan for R1 Family/provider spine
 
-LUL-100 must turn the already-implemented R1 Family, Persona, Story Context, provider, and unit-economics spine into a production-wired, independently verifiable system without treating the green fake/in-memory suite as release evidence. This plan reuses audited Linear issues LUL-101 through LUL-110, closes the two live production-risk boundaries first (moderation before persistence in LUL-103, then signed fal callbacks in LUL-104), and keeps every paid provider canary/smoke behind a separate fresh authorization gate.
+LUL-100 must turn the already-implemented R1 Family, Persona, Story Context, provider, and unit-economics spine into a production-wired, independently verifiable system without treating the green fake/in-memory suite as release evidence. This corrective revision preserves audited Linear issues LUL-101 through LUL-110, adds only the two foundations proven missing by the blocked LUL-103 coder run (LUL-129 and LUL-130), then closes moderation-before-persistence in LUL-103 and signed fal callbacks in LUL-104. Every paid provider canary/smoke remains behind a separate fresh authorization gate.
 
 ## Scope and planning basis
 
@@ -11,6 +11,7 @@ LUL-100 must turn the already-implemented R1 Family, Persona, Story Context, pro
 - Production vocabulary source: `CONTEXT/CONTEXT.md`.
 - Planning branch: `feat/prd-v20-pillar-a-payment`.
 - Planning-only restriction: no application code, provider canary, provider smoke, paid/live provider request, deployment, publication, or PR operation is in this planner run.
+- Corrective evidence: LUL-103 comment `3fd29bcd-811e-4b7e-b96d-5f8504222dd0`, which records the exercised/reverted prototype, missing real RLS file/harness, absent database/blob/queue atomicity protocol, and no code commit.
 
 The effort is one coherent remediation program rather than a new product design. The accepted ADR fixes product scope and economics; the audit fixes the defect frontier. No additional user interview is needed because the current request explicitly settles sequencing, tracker reuse, non-paid verification, and live-provider authorization boundaries.
 
@@ -45,18 +46,30 @@ The production composition path must enforce the accepted R1 contract from authe
 
 A passing service seam is insufficient where the service is not called. Remediation tests must enter through the route/action/workflow used by the native client and cross the real persistence adapter. Provider network calls remain faked in deterministic CI, but the fake must be injected behind the same production adapter boundary and must capture the exact request.
 
-### D2 — Safety and webhook security are the first remediation chain
+### D2 — Safety foundations, production wiring, then webhook security are the first remediation chain
 
 The first runnable production-risk sequence is:
 
-1. LUL-103 / 178: native action and workflow use moderation-before-persistence atomic creation.
-2. LUL-104 / 179: training submission and the deployed fal webhook use authenticated, idempotent, owned-artifact lifecycle handling.
+1. LUL-129: establish a deterministic actual-PostgreSQL RLS harness with Supabase-compatible authenticated claims.
+2. LUL-130: establish the database prepare/finalize RPC, creation-scoped blob compensation/reconciliation, and durable outbox protocol.
+3. LUL-103 / 178: make the native action and workflow consume those foundations so moderation precedes every source-photo write.
+4. LUL-104 / 179: make training submission and the deployed fal webhook use authenticated, idempotent, owned-artifact lifecycle handling.
 
-LUL-103 has no blocker. LUL-104 is blocked only by LUL-103. Broader entitlement consolidation follows without delaying closure of these two live boundaries.
+LUL-129 has no blocker. LUL-130 is blocked by LUL-129. LUL-103 is blocked by both foundations, and LUL-104 remains blocked by LUL-103. Broader entitlement consolidation follows without diluting these bounded slices.
 
 ### D3 — Durable claims, not read-then-write checks
 
 Persona capacity, callback receipts, Brief resume, allowance reservations, and deletion completion require database-authoritative claims/transactions with unique constraints or compare-and-set semantics. Process-local sets/maps may cache state but cannot be the authority.
+
+For Persona creation specifically, the locked protocol is a prepare/upload/finalize saga:
+
+1. Keep request bytes in memory through authenticated role/consent/liveness/preflight/moderation checks.
+2. A PostgreSQL prepare RPC revalidates authority, consent, capacity, and idempotency, then reserves immutable Family-owned IDs/keys without creating Persona/Baby/bond rows or a workflow event.
+3. Write only moderated bytes to those keys. An Nth-write failure deletes every creation-scoped successful write and aborts the reservation.
+4. A finalize RPC revalidates and atomically creates all domain rows, the durable Adult subject-consent receipt where applicable, and exactly one outbox event.
+5. Finalize failure compensates blobs. An expiry reconciler cleans crash-left prepared uploads. Committed outbox rows dispatch with a stable event ID, leases, and idempotent consumption.
+
+No rollback scans global maps or prefixes that another request can own.
 
 ### D4 — One authoritative persisted provider/cost inventory
 
@@ -83,6 +96,12 @@ Two paid gates remain outside this autonomous run:
 
 Neither command may run from CI, cron, coder, debugger, or this planner without a fresh user authorization specifying fixtures and budget. A deterministic issue verdict must say whether code is ready for the live gate; it must not report the live criterion as passed.
 
+### D9 — Duplicate Next declarations are transient workspace artifacts, not a source prerequisite
+
+The blocked coder run left ignored `* 2.*` prototype copies under `src/`, and the local Next caches contain ignored duplicate generated declarations such as `.next/types/routes.d 2.ts` and `.next/types/cache-life.d 2.ts`. The tracked `next-env.d.ts` reference also changes when the free/paid dev variants regenerate it. Current `tsc` failures cite those ignored copies, including imports that exist only in the reverted prototype; no tracked source migration or product dependency is missing for this reason.
+
+Therefore no Linear implementation prerequisite is created for the duplicate declarations. The owning coder should remove only its abandoned ignored prototype copies and regenerate its local Next caches before running a locked command, while preserving the existing tracked `next-env.d.ts` worktree change. This corrective planner pass does not delete caches or modify unrelated product code.
+
 ## Executable invariants
 
 | ID | Owner | Observable condition | Deterministic verification |
@@ -104,6 +123,14 @@ Neither command may run from CI, cron, coder, debugger, or this planner without 
 | DEL-1 | LUL-109 | Hard-delete inventories and removes all Family rows/blobs/artifacts and is idempotent across restart; provider degradation yields a durable machine-readable limitation. | Stateful provider/blob fakes plus Supabase persistence/reload test. |
 | EVID-1 | LUL-101, LUL-110 | Fake, missing, or synthetic IDs/costs can never become release-eligible; JSON credentials/media fields are redacted. | Deterministic evidence eligibility and redaction tests. |
 | LIVE-1 | Human authorization gate | No paid canary/smoke runs without a new explicit cap/fixture authorization. | Commands are absent from locked deterministic verification and remain documented as blocked. |
+| RLS-H1 | LUL-129 | Tests run real PostgreSQL policies as authenticated Family A/B principals; the service role is not the assertion principal. | `tests/178-supabase-rls.integration.test.ts` on an isolated PostgreSQL engine. |
+| RLS-H2 | LUL-129 | One deterministic command starts and tears down an isolated local database without cloud credentials or paid/live services. | Process/database teardown assertion after the locked test. |
+| RLS-H3 | LUL-129 | Missing PostgreSQL support, failed clean migration, or missing locked test is a hard failure, never a skip/no-match pass. | Clean migration and explicit harness readiness assertions. |
+| ATOM-H1 | LUL-130 | Prepare/upload/finalize failure and crash injection leaves no domain row, source blob, or workflow submission after compensation. | PostgreSQL protocol test with stateful blob/workflow fakes. |
+| ATOM-H2 | LUL-130 | Success atomically commits the complete Persona/Baby/bond/receipt set plus exactly one outbox event. | Transaction visibility assertions before and after finalize. |
+| ATOM-H3 | LUL-130 | Retry/concurrency yields at most one finalized creation, capacity claim, and logical workflow event. | Concurrent duplicate prepare/finalize/dispatch test. |
+| ATOM-H4 | LUL-130 | Adult self-consent is a durable receipt linked to the finalized Adult Persona/subject reference; a caller boolean is not authoritative. | PostgreSQL receipt linkage and revoked/absent denial tests. |
+| ATOM-H5 | LUL-130 | Pending/outbox rows are Family-scoped, RLS/service-write constrained, Hard-delete discoverable, and contain no photo bytes or secrets. | Schema/RLS/inventory assertions. |
 
 Performance/resource invariants: Page generation remains bounded concurrent work; no deterministic command performs paid network operations. Provider latency/cost targets remain evidence to collect at the blocked live gates, not values invented by CI.
 
@@ -114,8 +141,10 @@ Compatibility invariant: legacy five-Page Story behavior may remain for non-R1 c
 ## Dependency order
 
 ```text
-LUL-103 moderation-before-persistence atomic production path
-  └─> LUL-104 signed webhook + owned LoRA lifecycle
+LUL-129 actual-PostgreSQL authenticated RLS harness
+  └─> LUL-130 Persona prepare/finalize + blob compensation + outbox
+       └─> LUL-103 moderation-before-persistence production wiring
+            └─> LUL-104 signed webhook + owned LoRA lifecycle
        ├─> LUL-102 canonical entitlement/cap/allowance
        ├─> LUL-108 production metering + kill switches
        └─> LUL-105 durable Likeness review + Brief resume
@@ -137,16 +166,18 @@ The exact Linear edges and commands are in `plans/LUL-100/TICKETS.md`.
 - [x] LUL-103 then LUL-104 are the first production-risk remediation chain.
 - [x] The `$10` canary and `$2` smoke are explicit blocked live-evidence gates requiring fresh authorization.
 - [x] Planning artifacts contain no provider credentials, raw media, or paid operation.
-- [ ] Planning artifacts are committed, pushed, and verified on the configured remote.
-- [ ] Linear issue descriptions/relationships/states and the parent handoff comment are written and re-read successfully.
+- [x] The verified LUL-103 blocker is split into the smallest two prerequisite foundations: LUL-129 (real RLS harness) then LUL-130 (atomic persistence/blob/outbox protocol).
+- [x] Duplicate generated Next declarations are classified as ignored transient workspace cleanup, not a tracked source prerequisite.
+- [x] Corrective Linear issue descriptions, parent relationships, priorities, states, and blocking edges are written and re-read successfully.
+- Commit/push verification and the exact final Linear handoff comment are recorded after remote readback; they are not self-attested inside the pre-commit artifact.
 
 ## Planner locked verification
 
 ```bash
-git diff --check -- plans/LUL-100 && npm run verify
+git diff --check -- plans/LUL-100 && node -e "const fs=require('fs'); for (const f of ['PLAN.md','TICKETS.md','HANDOFF.md']) { const s=fs.readFileSync('plans/LUL-100/'+f,'utf8'); for (const id of ['LUL-129','LUL-130','LUL-103']) if (!s.includes(id)) throw new Error(f+' missing '+id); }"
 ```
 
-This command is deterministic and contains no live-provider smoke/canary invocation.
+This command validates the corrective planning artifacts without mutating the unrelated ignored Next/prototype artifacts that currently make the product-wide typecheck fail. It is deterministic and contains no live-provider smoke/canary invocation.
 
 ## Open decisions
 
