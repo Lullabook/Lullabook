@@ -1,4 +1,4 @@
-import type { GeneratedStory, StoryType, TraitQuestionnaire } from "@/domain/types";
+import type { GeneratedStory, StyleBible, StoryType, TraitQuestionnaire } from "@/domain/types";
 
 export interface ClassicSourceTale {
   id: string;
@@ -58,9 +58,51 @@ export interface AnthropicAdapter {
   ): Promise<{ description: string }>;
 }
 
+export interface FalTrainingSubmission {
+  imageDataUrl: string;
+  defaultCaption: string;
+  endpoint: string;
+  model: string;
+  steps: number;
+  idempotencyKey: string;
+  webhookUrl?: string;
+}
+
 export interface FalTrainResult {
   jobId: string;
   status: "queued";
+}
+
+export interface FalTrainingFile {
+  url: string;
+  content_type?: string;
+  file_name?: string;
+  file_size?: number;
+}
+
+export type FalTrainingLifecycle = "queued" | "running" | "ready" | "failed";
+
+export interface FalTrainingRequestRecord {
+  requestId: string;
+  familyId: string;
+  personaId: string;
+  endpoint: string;
+  model: string;
+  steps: number;
+  idempotencyKey: string;
+  status: FalTrainingLifecycle;
+  inputZipKey?: string;
+  loraWeightKey?: string;
+  configurationKey?: string;
+  error?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface FalWebhookReceipt {
+  requestId: string;
+  fingerprint: string;
+  receivedAt: Date;
 }
 
 export interface FalTrainWebhook {
@@ -68,6 +110,7 @@ export interface FalTrainWebhook {
   status: "ready" | "failed";
   loraWeightKey?: string;
   sampleImageUrls?: string[];
+  configurationUrl?: string;
 }
 
 export interface FalImageResult {
@@ -79,13 +122,46 @@ export interface FalGenerateImageOptions {
   idempotencyKey?: string;
 }
 
+/** Provider-neutral, auditable input for one Storybook Page. */
+export interface FalPageImageRequest {
+  pageIndex: number;
+  prompt: string;
+  loras: { personaId: string; path: string; scale: number }[];
+  personaIds: string[];
+  styleBible: StyleBible;
+  seed: number;
+  seedMetadata: {
+    storybookId: string;
+    pageIndex: number;
+    algorithm: "storybook-page-seed-v1";
+  };
+  provider: string;
+  model: string;
+  modelVersion: string;
+  endpoint: string;
+  safety: { enabled: boolean };
+  idempotencyKey: string;
+}
+
+export interface FalPageRepairRequest extends FalPageImageRequest {
+  tier: "nano-banana-2-edit" | "nano-banana-pro-edit";
+  referenceImageUrls: string[];
+}
+
 export interface FalAdapter {
   startTraining(photos: Buffer[]): Promise<FalTrainResult>;
+  submitTraining(input: FalTrainingSubmission): Promise<FalTrainResult>;
+  /** Development adapters are never valid release evidence. */
+  readonly isDevOnly?: boolean;
   generateImage(
     prompt: string,
     loraKey: string,
     options?: FalGenerateImageOptions
   ): Promise<FalImageResult>;
+  /** One request containing all selected Persona LoRAs for a Page. */
+  generatePageImage?(input: FalPageImageRequest): Promise<FalImageResult>;
+  /** Selective, bounded repair of one failed Page. */
+  repairPageImage?(input: FalPageRepairRequest): Promise<FalImageResult>;
   inpaintFaces(
     baseImageUrl: string,
     faces: { region: string; loraKey: string }[]

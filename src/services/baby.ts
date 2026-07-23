@@ -1,7 +1,6 @@
 import { v4 as uuid } from "uuid";
 import type { DataStore } from "@/db/store";
 import type { Baby, RosterScope } from "@/domain/types";
-import { isR1MultiFamilyEnabled } from "@/lib/r1-config";
 
 export interface AddBabyInput {
   memberId: string;
@@ -64,11 +63,6 @@ export class BabyService {
     }
 
     const existing = this.list(input.memberId);
-    // Issue 146 — R1 is solo-only: one baby per Household enforced server-side.
-    // Multi-baby returns with multi-family in R2. The gate is the cut.
-    if (!isR1MultiFamilyEnabled() && existing.length > 0) {
-      throw new Error("This release supports one baby per household");
-    }
     const rosterScope = input.rosterScope ?? "shared";
     const rosterGroupId =
       rosterScope === "shared" && existing.length > 0

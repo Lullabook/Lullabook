@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PAYWALL_TIERS, type PaywallPlan } from "@/lib/paywall-config";
+import { getR1VisiblePlans, type PaywallPlan } from "@/lib/paywall-config";
 import { SubmitButton } from "@/components/submit-button";
 import { startCheckoutFormAction } from "@/lib/actions";
 
@@ -36,8 +36,9 @@ function TierCard({
   const priceLabel = billing === "annual" ? `$${price}/yr` : `$${price}/mo`;
 
   const features: string[] = [
-    `${tier.storyCap} stories per month`,
-    tier.memberCap === Infinity ? "Unlimited family members" : `${tier.memberCap} family members`,
+    `${tier.storyCap} Storybooks per month`,
+    `${tier.memberCap} trained Personas`,
+    `Up to ${tier.starringPersonaCap} starring Personas per Storybook`,
     "Illustrated storybooks",
     tier.canNarrate ? "Narration + voice clips" : "—",
     tier.canVideo ? "Video pages (2 included)" : "—",
@@ -219,7 +220,7 @@ export function PaywallUI({ currentTier }: { currentTier?: string }) {
           gap: 16,
         }}
       >
-        {PAYWALL_TIERS.map((tier) => (
+        {getR1VisiblePlans().map((tier) => (
           <TierCard key={tier.id} tier={tier} billing={billing} currentTier={currentTier} />
         ))}
       </div>

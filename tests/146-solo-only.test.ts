@@ -54,13 +54,11 @@ describe("146 — solo Guardian create-rights + one-baby cap + solo paywall", ()
     );
   });
 
-  it("addBaby refuses a second baby per household (one-baby R1)", () => {
+  it("allows a second baby per household (ADR-0028 removes the one-baby R1 cut)", () => {
     const ctx = createTestContext();
     const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-146b", "g@example.com");
     ctx.babies.addBaby({ memberId: guardian.id, displayName: "Maya" });
-    expect(() => ctx.babies.addBaby({ memberId: guardian.id, displayName: "Sibling" })).toThrow(
-      /one baby/i
-    );
+    expect(() => ctx.babies.addBaby({ memberId: guardian.id, displayName: "Sibling" })).not.toThrow();
   });
 
   it("getR1VisiblePlans hides the collaborative plan when multi-family cut", () => {

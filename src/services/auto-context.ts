@@ -24,11 +24,16 @@ export class AutoContextService {
     const all = this.store.getMomentsForBaby(babyId, memberId);
 
     const significant = all.filter((m) => m.isSignificant);
-    const ordinary = all.filter((m) => {
-      if (m.isSignificant) return false;
-      if (!lastStoryAt) return true;
-      return m.createdAt > lastStoryAt;
-    });
+    // Newest ordinary Moments win the bounded ceiling. JavaScript's stable
+    // sort preserves store insertion order for identical timestamps, making
+    // the tie-break deterministic without exposing another ranking pass.
+    const ordinary = all
+      .filter((m) => {
+        if (m.isSignificant) return false;
+        if (!lastStoryAt) return true;
+        return m.createdAt > lastStoryAt;
+      })
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     let selected = [...significant, ...ordinary];
     if (selected.length > AUTO_CONTEXT_MAX_MOMENTS) {

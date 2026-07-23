@@ -94,7 +94,12 @@ describe("16 — idempotency & money-safety", () => {
     });
     await ctx.workflow.drain();
 
-    expect(ctx.fal.idempotencyKeys.filter((k) => !k.startsWith("roster-avatar/")).length).toBe(12);
+    // Persona-derivative keys (roster avatar + likeness review samples, ticket
+    // 180) are not Page spend — only the 12 Page generations count here.
+    const pageKeys = ctx.fal.idempotencyKeys.filter(
+      (k) => !k.startsWith("roster-avatar/") && !k.startsWith("likeness-sample/")
+    );
+    expect(pageKeys.length).toBe(12);
     for (let i = 0; i < 12; i++) {
       expect(ctx.fal.idempotencyKeys).toContain(`${book.id}/${i}/0/fal-generate`);
     }

@@ -6,8 +6,11 @@ import type {
   BlobStore,
   FalAdapter,
   FalImageResult,
+  FalPageImageRequest,
+  FalPageRepairRequest,
   FalTrainResult,
   FalTrainWebhook,
+  FalTrainingSubmission,
   LivenessAdapter,
   ModerationAdapter,
   ModerationResult,
@@ -129,8 +132,11 @@ export class FakeAnthropic implements AnthropicAdapter {
 }
 
 export class FakeFal implements FalAdapter {
+  public readonly isDevOnly = true;
   public trainCalls = 0;
+  public trainingSubmissions: FalTrainingSubmission[] = [];
   public imageCalls = 0;
+  public likenessSampleImageCalls = 0;
   public avatarImageCalls = 0;
   public imagePrompts: string[] = [];
   public idempotencyKeys: string[] = [];
@@ -142,6 +148,12 @@ export class FakeFal implements FalAdapter {
   public failImageMessage: string | undefined = undefined;
   private jobs = new Map<string, FalTrainWebhook>();
   private imageResultsByKey = new Map<string, FalImageResult>();
+
+  async submitTraining(input: FalTrainingSubmission): Promise<FalTrainResult> {
+    this.trainingSubmissions.push(input);
+    this.trainCalls++;
+    return { jobId: `job-${this.trainCalls}`, status: "queued" };
+  }
 
   async startTraining(_photos: Buffer[]): Promise<FalTrainResult> {
     this.trainCalls++;
@@ -170,8 +182,11 @@ export class FakeFal implements FalAdapter {
     }
 
     const isRosterAvatar = idempotencyKey?.startsWith("roster-avatar/");
+    const isLikenessSample = idempotencyKey?.startsWith("likeness-sample/");
     if (isRosterAvatar) {
       this.avatarImageCalls++;
+    } else if (isLikenessSample) {
+      this.likenessSampleImageCalls++;
     } else {
       this.imageCalls++;
     }
@@ -179,12 +194,17 @@ export class FakeFal implements FalAdapter {
     if (idempotencyKey) {
       this.idempotencyKeys.push(idempotencyKey);
     }
-    if (!isRosterAvatar) {
+    if (!isRosterAvatar && !isLikenessSample) {
       this.currentPage++;
     }
-    const pageNum = isRosterAvatar ? this.avatarImageCalls : this.currentPage;
+    const pageNum = isRosterAvatar
+      ? this.avatarImageCalls
+      : isLikenessSample
+        ? this.likenessSampleImageCalls
+        : this.currentPage;
     if (
       !isRosterAvatar &&
+      !isLikenessSample &&
       (this.failImageOnPage === this.currentPage ||
         this.failPages.has(this.currentPage))
     ) {
@@ -196,6 +216,36 @@ export class FakeFal implements FalAdapter {
       this.imageResultsByKey.set(idempotencyKey, result);
     }
     return result;
+  }
+
+  async generatePageImage(input: FalPageImageRequest): Promise<FalImageResult> {
+    const { idempotencyKey } = input;
+    if (this.imageResultsByKey.has(idempotencyKey)) {
+      return this.imageResultsByKey.get(idempotencyKey)!;
+    }
+    this.imageCalls++;
+    this.imagePrompts.push(input.prompt);
+    this.idempotencyKeys.push(idempotencyKey);
+    if (
+      this.failImageOnPage === input.pageIndex + 1 ||
+      this.failPages.has(input.pageIndex + 1)
+    ) {
+      throw new Error(this.failImageMessage ?? "Image generation failed");
+    }
+    const loraKey = input.loras[0]?.path ?? "lora/default";
+    const result = {
+      imageUrl: `https://example.com/${loraKey}/${input.pageIndex + 1}.png`,
+      bytes: Buffer.from(`image-${input.pageIndex + 1}-${idempotencyKey}`),
+    };
+    this.imageResultsByKey.set(idempotencyKey, result);
+    return result;
+  }
+
+  async repairPageImage(input: FalPageRepairRequest): Promise<FalImageResult> {
+    return {
+      imageUrl: `https://example.com/repair/${input.pageIndex}-${input.tier}.png`,
+      bytes: Buffer.from(`repair-${input.pageIndex}-${input.tier}`),
+    };
   }
 
   async inpaintFaces(
@@ -452,6 +502,10 @@ export class StubAnthropic implements AnthropicAdapter {
 }
 
 export class StubFal implements FalAdapter {
+  readonly isDevOnly = true;
+  async submitTraining(_input: FalTrainingSubmission): Promise<FalTrainResult> {
+    throw new Error("fal.ai adapter not configured");
+  }
   async startTraining(_photos: Buffer[]): Promise<FalTrainResult> {
     throw new Error("fal.ai adapter not configured");
   }

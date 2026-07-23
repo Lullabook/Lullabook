@@ -2,7 +2,10 @@ import type {
   FalAdapter,
   FalGenerateImageOptions,
   FalImageResult,
+  FalPageImageRequest,
+  FalPageRepairRequest,
   FalTrainResult,
+  FalTrainingSubmission,
 } from "@/adapters/types";
 import { optionalEnv, requireEnv } from "@/adapters/env";
 
@@ -54,6 +57,27 @@ async function falFetch(url: string, init?: RequestInit): Promise<Response> {
  * waitForEvent and is enqueued with a webhook URL here).
  */
 export class RealFalAdapter implements FalAdapter {
+  readonly isDevOnly = false;
+
+  async submitTraining(input: FalTrainingSubmission): Promise<FalTrainResult> {
+    const submitUrl = new URL(`${FAL_QUEUE_BASE}/${input.endpoint}`);
+    const webhookUrl = input.webhookUrl ?? optionalEnv("FAL_WEBHOOK_URL");
+    if (webhookUrl) submitUrl.searchParams.set("fal_webhook", webhookUrl);
+    const headers = authHeaders();
+    headers["X-Fal-Idempotency-Key"] = input.idempotencyKey;
+    const res = await falFetch(submitUrl.toString(), {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        image_data_url: input.imageDataUrl,
+        default_caption: input.defaultCaption,
+        steps: input.steps,
+      }),
+    });
+    const queued = (await res.json()) as FalQueueSubmitResponse;
+    return { jobId: queued.request_id, status: "queued" };
+  }
+
   async startTraining(photos: Buffer[]): Promise<FalTrainResult> {
     // Training photos travel as data URIs; fal zips them server-side.
     const webhookUrl = optionalEnv("FAL_WEBHOOK_URL");
@@ -86,6 +110,38 @@ export class RealFalAdapter implements FalAdapter {
       num_images: 1,
       enable_safety_checker: true, // ADR-0010: provider filters stay ON
     }, options?.idempotencyKey);
+  }
+
+  async generatePageImage(input: FalPageImageRequest): Promise<FalImageResult> {
+    return this.runInference(
+      input.endpoint,
+      {
+        prompt: input.prompt,
+        loras: input.loras.map(({ path, scale }) => ({ path, scale })),
+        seed: input.seed,
+        model: input.model,
+        enable_safety_checker: input.safety.enabled,
+        num_images: 1,
+        image_size: "square_hd",
+      },
+      input.idempotencyKey
+    );
+  }
+
+  async repairPageImage(input: FalPageRepairRequest): Promise<FalImageResult> {
+    return this.runInference(
+      input.endpoint,
+      {
+        prompt: input.prompt,
+        image_urls: input.referenceImageUrls,
+        seed: input.seed,
+        model: input.model,
+        enable_safety_checker: input.safety.enabled,
+        num_images: 1,
+        image_size: "square_hd",
+      },
+      input.idempotencyKey
+    );
   }
 
   async inpaintFaces(

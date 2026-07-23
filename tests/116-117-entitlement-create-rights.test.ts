@@ -11,9 +11,9 @@ afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
  * Issues 116 + 117 — Two-plan entitlement model + per-member create-rights gate.
  */
 describe("116/117 — two-plan entitlement + create-rights", () => {
-  it("PLAN_ENTITLEMENTS has the correct caps per ADR-0025", () => {
-    expect(PLAN_ENTITLEMENTS.just_us.storyCap).toBe(8);
-    expect(PLAN_ENTITLEMENTS.just_us.memberLoginCap).toBe(2);
+  it("PLAN_ENTITLEMENTS has the correct caps per ADR-0028 (supersedes ADR-0025 numbers)", () => {
+    expect(PLAN_ENTITLEMENTS.just_us.storyCap).toBe(4);
+    expect(PLAN_ENTITLEMENTS.just_us.memberLoginCap).toBe(1);
     expect(PLAN_ENTITLEMENTS.just_us.canNarrate).toBe(false);
     expect(PLAN_ENTITLEMENTS.just_us.canVideo).toBe(false);
 
@@ -45,7 +45,7 @@ describe("116/117 — two-plan entitlement + create-rights", () => {
 
     const ent = ctx.entitlements.getPlanEntitlement(member.familyId);
     expect(ent.plan).toBe("just_us");
-    expect(ent.storyCap).toBe(8);
+    expect(ent.storyCap).toBe(4);
   });
 
   it("getPlanEntitlement returns Our Whole Family for a Plus subscription", () => {

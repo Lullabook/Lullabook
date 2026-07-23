@@ -184,6 +184,8 @@ export interface Persona {
   loraWeightKey: string | null;
   /** Generated roster portrait blob key; null ⇒ placeholder (ADR-0020). */
   avatarKey: string | null;
+  /** Family-owned generated likeness review samples; never source-photo keys. */
+  reviewSampleKeys?: string[];
   /**
    * Issue 125 — whether the Guardian reviewed the likeness samples and accepted
    * the trained Persona before any book-generation spend. The gate uses
@@ -195,6 +197,8 @@ export interface Persona {
   questionnaire?: TraitQuestionnaire;
   createdAt: Date;
 }
+
+export type ConsentReceiptStatus = "verified" | "revoked" | "expired";
 
 export interface ConsentReceipt {
   id: string;
@@ -208,6 +212,10 @@ export interface ConsentReceipt {
    * so they fail closed in markets that require a stronger method (ADR-0018).
    */
   method?: string;
+  /** Immutable receipt lifecycle; legacy rows without a status are verified. */
+  status?: ConsentReceiptStatus;
+  /** Optional expiry for jurisdiction/provider-specific consent windows. */
+  expiresAt?: Date | null;
   consentedAt: Date;
 }
 
@@ -369,6 +377,10 @@ export interface PendingBrief {
   personaId: string;
   brief: Brief;
   submittedAt: Date;
+  /** All selected Personas required before this Brief can resume. */
+  selectedPersonaIds?: string[];
+  /** Durable exactly-once/recovery state for the waiting Brief. */
+  status?: "pending" | "running" | "failed";
 }
 
 export interface PushSubscription {

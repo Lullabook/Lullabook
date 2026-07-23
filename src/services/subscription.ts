@@ -141,6 +141,7 @@ export class SubscriptionService {
       // paths must pin "payment_vpc" explicitly — the default is only correct
       // for flows that actually completed the jurisdiction's required method.
       method: method ?? config.consentMethod,
+      status: "verified",
       consentedAt: new Date(),
     };
     this.store.saveConsentReceipt(receipt);
@@ -159,7 +160,11 @@ export class SubscriptionService {
     if (!config) return false;
     // Red-team fix: select the receipt whose method MATCHES the required one
     // (families can hold payment_vpc + email_plus receipts side-by-side).
-    return !!this.store.getConsentReceiptForFamily(familyId, config.consentMethod);
+    return !!this.store.getConsentReceiptForFamily(
+      familyId,
+      config.consentMethod,
+      config.code
+    );
   }
 
   /** Issue 172 (SEC-4): throws a structured 403; consent-store read errors deny. */

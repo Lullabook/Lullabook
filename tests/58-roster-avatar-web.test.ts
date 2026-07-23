@@ -15,7 +15,12 @@ describe("58 — roster avatar web (ADR-0020)", () => {
     });
 
     expect(persona.status).toBe("ready");
-    expect(persona.avatarKey).toBe(rosterAvatarBlobKey(member.familyId, persona.id));
+    // Ticket 180: avatar keys are generation-scoped (retraining must mint a
+    // distinct owned key), so assert the Family-owned prefix rather than one
+    // exact deterministic key.
+    expect(persona.avatarKey).toMatch(
+      new RegExp(`^avatars/${member.familyId}/${persona.id}/.+\\.png$`)
+    );
     expect(await ctx.blobs.get(persona.avatarKey!)).not.toBeNull();
     expect(ctx.fal.avatarImageCalls).toBeGreaterThan(0);
   });
@@ -47,8 +52,13 @@ describe("58 — roster avatar web (ADR-0020)", () => {
     ctx.store.savePersona(persona);
 
     const samples = ctx.personas.getLikenessSamples(persona.id, guardian.id);
-    expect(samples).toHaveLength(1);
-    expect(samples[0]).toContain(encodeURIComponent(key));
+    // Ticket 180: ready Personas expose their generated review samples
+    // (dedicated likeness-sample derivatives; the roster avatar is separate).
+    expect(samples.length).toBeGreaterThan(0);
+    for (const sample of samples) {
+      expect(sample).toMatch(/likeness-samples\?key=/);
+      expect(sample).not.toContain("photos%2F");
+    }
   });
 
   it("purges avatar blob on hard-delete", async () => {

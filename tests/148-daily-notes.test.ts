@@ -53,9 +53,9 @@ describe("148 — Story Context Engine deferred (inert, generation unaffected)",
     expect(isR1JournalMachineryEnabled()).toBe(false);
   });
 
-  it("generation does NOT inject momentContext when journal machinery is cut", async () => {
+  it("generation injects the bounded Story Context set (PRD v21 restores the engine for R1)", async () => {
     const { ctx, guardian, babyPersona, baby } = await setupBaby();
-    // Log a daily note (present) — generation must NOT depend on it.
+    // Log a daily note — the restored bounded engine selects it.
     ctx.moments.create({
       memberId: guardian.id,
       babyId: baby.id,
@@ -69,11 +69,13 @@ describe("148 — Story Context Engine deferred (inert, generation unaffected)",
       storyType: "bedtime",
       theme: "A cozy bedtime under the stars",
     });
-    // Terminal state — no spinner waiting on the auto-context layer.
+    // Terminal state — generation never strands on the context layer.
     expect(book.status).toBe("draft");
-    // The anthropic call received NO momentContext (the engine was cut).
+    // PRD v21 / ticket 181: the bounded deterministic Story Context set IS
+    // disclosed to the provider (previously cut by issue 148; ADR-0028
+    // restores only the bounded engine, never an unbounded transcript).
     const call = ctx.anthropic.calls[0] as { momentContext?: string };
-    expect(call?.momentContext).toBeUndefined();
+    expect(call?.momentContext).toContain("First steps in the garden");
   });
 
   it("weekly suggestion never surfaces when journal machinery is cut", async () => {

@@ -3,6 +3,7 @@ import type {
   FalGenerateImageOptions,
   FalImageResult,
   FalTrainResult,
+  FalTrainingSubmission,
 } from "@/adapters/types";
 
 /**
@@ -16,7 +17,13 @@ import type {
  * check in context.ts.
  */
 export class DevFalFallbackAdapter implements FalAdapter {
+  readonly isDevOnly = true;
   private trainCount = 0;
+
+  async submitTraining(_input: FalTrainingSubmission): Promise<FalTrainResult> {
+    this.trainCount++;
+    return { jobId: `dev-fal-job-${this.trainCount}`, status: "queued" };
+  }
 
   async startTraining(_photos: Buffer[]): Promise<FalTrainResult> {
     this.trainCount++;

@@ -50,14 +50,16 @@ describe("165 — Restore the Journal (solo, one Baby)", () => {
       expect(pages.length).toBeGreaterThan(0);
     });
 
-    it("auto-context injection is independently gated (journal flag off → no momentContext, gen still works)", async () => {
-      // Disable journal machinery — auto-context injection is off.
+    it("bounded context injection no longer depends on the journal flag (PRD v21 restores the engine)", async () => {
+      // Journal machinery stays off — the bounded Story Context Engine is
+      // independent of it since ticket 181 (ADR-0028 restores only the
+      // bounded engine; Journal nudges/suggestions remain gated).
       vi.stubEnv("R1_JOURNAL_MACHINERY_ENABLED", "");
 
       const ctx = createTestContext();
       const { guardian, babyPersona, baby } = await householdWithBaby(ctx, "Maya");
 
-      // Add a Moment so we can verify it's NOT injected when the flag is off.
+      // Add a Moment — the bounded engine selects it even with the flag off.
       ctx.moments.create({
         memberId: guardian.id,
         babyId: baby.id,
@@ -78,8 +80,9 @@ describe("165 — Restore the Journal (solo, one Baby)", () => {
 
       expect(anthropicSpy).toHaveBeenCalledTimes(1);
       const call = anthropicSpy.mock.calls[0][0] as { momentContext?: string };
-      // When the flag is off, momentContext is undefined — no hard dependency.
-      expect(call.momentContext).toBeUndefined();
+      // Bounded engine runs regardless of the journal flag — and generation
+      // still completes (no hard dependency on the context layer).
+      expect(call.momentContext).toContain("First steps today!");
     });
 
     it("auto-context injection is on when the flag is set (Moment reaches the prompt)", async () => {

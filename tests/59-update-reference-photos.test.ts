@@ -27,7 +27,13 @@ describe("59 — update reference photos → retrain → regenerate avatar", () 
 
     expect(updated.status).toBe("ready");
     expect(updated.avatarKey).toBeTruthy();
-    expect(updated.avatarKey).toBe(rosterAvatarBlobKey(member.familyId, persona.id));
+    // Ticket 180: retraining mints a generation-scoped owned key (never
+    // reuses the pre-retrain avatar key, which caches could still serve).
+    // Compare against firstKey — `persona` is mutated in place by the service.
+    expect(updated.avatarKey).toMatch(
+      new RegExp(`^avatars/${member.familyId}/${persona.id}/.+\\.png$`)
+    );
+    expect(updated.avatarKey).not.toBe(firstKey);
     expect(ctx.fal.avatarImageCalls).toBeGreaterThanOrEqual(1);
     expect(await ctx.blobs.get(updated.avatarKey!)).not.toBeNull();
   });

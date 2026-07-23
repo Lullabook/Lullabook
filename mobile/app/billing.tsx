@@ -25,15 +25,16 @@ interface PlanInfo {
 // Issue 129: the visible plans come from the server (/api/paywall-config), so
 // the R1 one-plan collapse (R1_ONE_PLAN) is server-authoritative — mobile never
 // hardcodes the premium tier. A static fallback keeps the screen renderable if
-// the fetch fails before auth.
+// the fetch fails before auth. Values mirror the server-authoritative
+// R1_PLAN_DEFINITION in src/domain/plan.ts (ADR-0028) — update both together.
 const FALLBACK_PLANS: PlanInfo[] = [
   {
     id: "just_us",
     label: "Just Us",
-    monthlyPrice: 9.99,
-    annualPrice: 79.99,
-    storyCap: 8,
-    memberLoginCap: 2,
+    monthlyPrice: 14.99,
+    annualPrice: 119.99,
+    storyCap: 4,
+    memberLoginCap: 1,
     canNarrate: false,
     canVideo: false,
     canCustomStyle: false,
@@ -56,11 +57,15 @@ function PlanCard({
 }) {
   const price = billing === "annual" ? plan.annualPrice : plan.monthlyPrice;
   const priceLabel = billing === "annual" ? `$${price}/yr` : `$${price}/mo`;
-  // R1 doesn't surface Story caps, and member logins are multi-family (cut) —
-  // both feature rows stay flag-gated so the paywall never markets a cut.
+  // ADR-0028: the accepted R1 plan markets its real caps — Storybooks per
+  // monthly reset, trained Personas, and starring Personas per Storybook —
+  // sourced from the same server plan (fallback mirrors src/domain/plan.ts).
   const features = [
     "Illustrated storybooks starring your baby",
     "Your family, drawn as themselves",
+    `${plan.storyCap} Storybooks per month`,
+    "3 trained Personas — any mix of babies and adults",
+    "Up to 3 starring Personas per Storybook",
     "PDF keepsake export",
     ...(isR1MultiFamilyEnabled()
       ? [plan.memberLoginCap === Infinity ? "Whole family" : `${plan.memberLoginCap} logins`]

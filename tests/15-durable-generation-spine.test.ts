@@ -67,7 +67,9 @@ describe("15 — durable generation spine", () => {
     });
     await ctx.workflow.drain();
 
-    const pagePrompts = ctx.fal.imagePrompts.filter((p) => !p.includes("Neutral portrait"));
+    const pagePrompts = ctx.fal.imagePrompts.filter(
+      (p) => !p.includes("Neutral portrait") && !p.includes("Likeness review")
+    );
     expect(pagePrompts.length).toBeGreaterThan(0);
     expect(pagePrompts.every((p) => p.includes("storybook gouache"))).toBe(true);
     expect(pagePrompts.every((p) => p.includes("midnight blues"))).toBe(true);

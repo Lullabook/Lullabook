@@ -466,7 +466,7 @@ export async function seedMayaWorld(
   const finalizedAndDrafts: { theme: string; storyType: import("@/domain/types").StoryType; personas: string[]; characters?: string[]; finalize: boolean }[] = [
     { theme: "A Morning in Nani's Garden", storyType: "everyday", personas: [p("Grandma Rose")], finalize: true },
     { theme: "Maya's Very First Snow", storyType: "milestone", personas: [p("Sam")], finalize: true },
-    { theme: "Maya's Big Beach Day", storyType: "adventure", personas: [p("Priya"), p("Sam"), p("Grandma Rose"), p("Ava")], finalize: false },
+    { theme: "Maya's Big Beach Day", storyType: "adventure", personas: [p("Priya"), p("Sam")], finalize: false },
     { theme: "The Day Dada Was a Dragon", storyType: "silly", personas: [p("Sam")], characters: [c("Pip the Dragon")], finalize: true },
     { theme: "Maya & the Brave Bunnies", storyType: "lesson", personas: [p("Ava")], finalize: true },
   ];

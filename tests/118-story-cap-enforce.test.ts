@@ -17,11 +17,11 @@ describe("118 — enforce monthly story cap", () => {
     return { member, persona };
   }
 
-  it("blocks generation beyond the plan's monthly cap (Just Us = 8)", async () => {
+  it("blocks generation beyond the plan's monthly cap (Just Us = 4, ADR-0028)", async () => {
     const ctx = createTestContext();
     const { member, persona } = await readyMember(ctx);
-    // Just Us default → cap = 8. Generate 8 books, then the 9th should fail.
-    for (let i = 0; i < 8; i++) {
+    // Just Us default → cap = 4. Generate 4 books, then the 5th should fail.
+    for (let i = 0; i < 4; i++) {
       const book = await ctx.storybooks.generate(member.id, {
         starringPersonaIds: [persona.id],
         storyType: "bedtime",

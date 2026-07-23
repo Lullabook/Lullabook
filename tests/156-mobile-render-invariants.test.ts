@@ -121,7 +121,7 @@ describe("156 — D2: no mobile <Image> renders a raw uploaded photo", () => {
   const files = [...tsxFiles(mobile("app")), ...tsxFiles(mobile("components"))];
 
   // Sanctioned likeness-render helpers (generated assets, never the raw upload).
-  const SANCTIONED = ["avatarUrl(", "illustrationSource("];
+  const SANCTIONED = ["avatarUrl(", "illustrationSource(", "likenessSampleUrl("];
   const derivesFromSanctioned = (text: string) => SANCTIONED.some((s) => text.includes(s));
 
   /** Extract the balanced `{...}` source expression of each <Image> in a file. */
