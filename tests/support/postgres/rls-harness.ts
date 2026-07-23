@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Client, type QueryResult, type QueryResultRow } from "pg";
@@ -50,14 +50,35 @@ export async function withIsolatedPostgres(
     await applyMigrations(client);
     const fixture = await seedFixtures(client);
 
-    await assertion({
-      asUser: (authUserId, text, values = []) => asAuthenticatedUser(client!, authUserId, text, values),
-      fixture,
-    });
+    // A single pg.Client serializes its query queue but interleaves statements
+    // from concurrent transactions, which lets one principal's JWT claim bleed
+    // into another's transaction. Chain asUser calls so each transaction
+    // (BEGIN -> SET LOCAL ROLE -> claim -> query -> COMMIT) completes whole.
+    let queue: Promise<unknown> = Promise.resolve();
+    const asUser = <Row extends QueryResultRow = QueryResultRow>(
+      authUserId: string,
+      text: string,
+      values: unknown[] = [],
+    ): Promise<QueryResult<Row>> => {
+      const run = queue.then(() => asAuthenticatedUser<Row>(client!, authUserId, text, values));
+      queue = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    };
+
+    await assertion({ asUser, fixture });
   } finally {
-    await client?.end();
-    await instance.cleanup();
-    await rm(dataDir, { force: true, recursive: true });
+    try {
+      await client?.end();
+    } finally {
+      try {
+        await instance.cleanup();
+      } finally {
+        await rm(dataDir, { force: true, recursive: true });
+      }
+    }
   }
 }
 
@@ -79,31 +100,26 @@ async function bootstrapSupabaseCompatibility(client: Client): Promise<void> {
 }
 
 async function applyMigrations(client: Client): Promise<void> {
-  for (let number = 1; number <= 13; number += 1) {
-    const filename = `${String(number).padStart(3, "0")}_${migrationStem(number)}.sql`;
+  const filenames = (await readdir(MIGRATIONS_DIRECTORY))
+    .filter((filename) => /^\d{3}_.+\.sql$/.test(filename))
+    .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+
+  if (filenames.length === 0) {
+    throw new Error(`No migrations found in ${MIGRATIONS_DIRECTORY}`);
+  }
+
+  filenames.forEach((filename, index) => {
+    const expected = String(index + 1).padStart(3, "0");
+    if (!filename.startsWith(`${expected}_`)) {
+      throw new Error(`Migration sequence gap: expected ${expected}_*.sql, found ${filename}`);
+    }
+  });
+
+  for (const filename of filenames) {
     const sql = await readFile(join(MIGRATIONS_DIRECTORY, filename), "utf8");
     await client.query(sql);
   }
   await client.query("grant select, insert, update, delete on all tables in schema public to authenticated");
-}
-
-function migrationStem(number: number): string {
-  const stems = [
-    "families_rls",
-    "full_domain",
-    "push_and_email_plus_vpc",
-    "maya_world",
-    "character_description",
-    "moments",
-    "journal_moments_extras",
-    "avatar_key",
-    "baby_birthdate",
-    "baby_daily_routine",
-    "likeness_confirmed",
-    "atomic_consent_safe_persona",
-    "provider_artifacts_rls_and_delete",
-  ];
-  return stems[number - 1]!;
 }
 
 async function seedFixtures(client: Client): Promise<{ familyA: RlsFixture; familyB: RlsFixture }> {

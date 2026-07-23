@@ -44,6 +44,25 @@ describe("178 — PostgreSQL Family RLS integration", () => {
         expect(read.rows).toHaveLength(1);
       }
 
+      const ownMemberUpdate = await asUser(userId, "update members set email = email where id = $1", [
+        fixture.familyA.memberId,
+      ]);
+      expect(ownMemberUpdate.rowCount).toBe(1);
+
+      const ownBabyInsert = await asUser(
+        userId,
+        "insert into babies (id, family_id, display_name, roster_group_id) values ('00000000-0000-0000-0000-000000000410', $1, 'Permitted Baby', '00000000-0000-0000-0000-000000000410')",
+        [fixture.familyA.familyId],
+      );
+      expect(ownBabyInsert.rowCount).toBe(1);
+
+      const ownBondInsert = await asUser(
+        userId,
+        "insert into baby_person_bonds (id, baby_id, persona_id) values ('00000000-0000-0000-0000-000000000510', '00000000-0000-0000-0000-000000000410', $1)",
+        [fixture.familyA.personaId],
+      );
+      expect(ownBondInsert.rowCount).toBe(1);
+
       await expect(
         asUser(
           userId,
@@ -74,6 +93,74 @@ describe("178 — PostgreSQL Family RLS integration", () => {
         expect(updated.rowCount).toBe(0);
         expect(deleted.rowCount).toBe(0);
       }
+    });
+  });
+
+  it("keeps each authenticated principal's JWT claim isolated across concurrent queries", async () => {
+    await withIsolatedPostgres(async ({ asUser, fixture }) => {
+      const claims = await Promise.all([
+        asUser<{ uid: string }>(fixture.familyA.authUserId, "select auth.uid() as uid"),
+        asUser<{ uid: string }>(fixture.familyB.authUserId, "select auth.uid() as uid"),
+        asUser<{ uid: string }>(fixture.familyA.authUserId, "select auth.uid() as uid"),
+      ]);
+
+      expect(claims.map((claim) => claim.rows[0]?.uid)).toEqual([
+        fixture.familyA.authUserId,
+        fixture.familyB.authUserId,
+        fixture.familyA.authUserId,
+      ]);
+    });
+  });
+
+  it("runs Family B as an authenticated principal with its own permitted and forbidden operations", async () => {
+    await withIsolatedPostgres(async ({ asUser, fixture }) => {
+      const userId = fixture.familyB.authUserId;
+
+      const role = await asUser<{ current_user: string }>(userId, "select current_user");
+      expect(role.rows).toEqual([{ current_user: "authenticated" }]);
+
+      const ownReads = await Promise.all([
+        asUser(userId, "select id from members where id = $1", [fixture.familyB.memberId]),
+        asUser(userId, "select id from personas where id = $1", [fixture.familyB.personaId]),
+        asUser(userId, "select id from babies where id = $1", [fixture.familyB.babyId]),
+        asUser(userId, "select id from baby_person_bonds where id = $1", [fixture.familyB.bondId]),
+        asUser(userId, "select id from consent_receipts where id = $1", [fixture.familyB.consentReceiptId]),
+      ]);
+      for (const read of ownReads) {
+        expect(read.rows).toHaveLength(1);
+      }
+
+      await expect(
+        asUser(
+          userId,
+          "insert into consent_receipts (id, family_id, member_id, jurisdiction, notice_version) values ('00000000-0000-0000-0000-000000000999', $1, $2, 'US', 'test-v2')",
+          [fixture.familyB.familyId, fixture.familyB.memberId],
+        ),
+      ).resolves.toMatchObject({ rowCount: 1 });
+
+      for (const target of [
+        { id: fixture.familyA.memberId, table: "members" },
+        { id: fixture.familyA.personaId, table: "personas" },
+        { id: fixture.familyA.babyId, table: "babies" },
+        { id: fixture.familyA.bondId, table: "baby_person_bonds" },
+        { id: fixture.familyA.consentReceiptId, table: "consent_receipts" },
+      ]) {
+        const selected = await asUser(userId, `select id from ${target.table} where id = $1`, [target.id]);
+        const updated = await asUser(userId, `update ${target.table} set id = id where id = $1`, [target.id]);
+        const deleted = await asUser(userId, `delete from ${target.table} where id = $1`, [target.id]);
+
+        expect(selected.rows).toEqual([]);
+        expect(updated.rowCount).toBe(0);
+        expect(deleted.rowCount).toBe(0);
+      }
+
+      await expect(
+        asUser(
+          userId,
+          "insert into consent_receipts (id, family_id, member_id, jurisdiction, notice_version) values ('00000000-0000-0000-0000-000000000996', $1, $2, 'US', 'test-v1')",
+          [fixture.familyA.familyId, fixture.familyA.memberId],
+        ),
+      ).rejects.toThrow(/row-level security/i);
     });
   });
 
