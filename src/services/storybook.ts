@@ -390,6 +390,7 @@ export class StorybookService {
     for (const storybook of this.store.storybooks.values()) {
       if (storybook.status !== "generating") continue;
       if (now.getTime() - storybook.createdAt.getTime() > budgetMs) {
+        this.storyCap.release(storybook.id);
         storybook.status = "failed";
         this.store.saveStorybook(storybook);
         reaped++;
