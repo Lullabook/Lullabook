@@ -65,6 +65,7 @@ export interface ProviderBakeoffAdapters {
 
 export interface ProviderBakeoffConfig {
   budgetUsd: number;
+  liveRunApproved: true;
   credentials: {
     fal: string;
     anthropic: string;
@@ -75,6 +76,7 @@ export interface ProviderBakeoffEnv {
   FAL_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   LIVE_PROVIDER_BUDGET_USD?: string;
+  LIVE_PROVIDER_RUN_APPROVED?: string;
 }
 
 export class ProviderBakeoffConfigError extends Error {
@@ -174,6 +176,7 @@ export function createProviderBakeoffConfig(
     FAL_API_KEY: process.env.FAL_API_KEY,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     LIVE_PROVIDER_BUDGET_USD: process.env.LIVE_PROVIDER_BUDGET_USD,
+    LIVE_PROVIDER_RUN_APPROVED: process.env.LIVE_PROVIDER_RUN_APPROVED,
   }
 ): ProviderBakeoffConfig {
   const fal = requiredCredential(env, "FAL_API_KEY");
@@ -191,8 +194,13 @@ export function createProviderBakeoffConfig(
       `LIVE_PROVIDER_BUDGET_USD exceeds the approved $${APPROVED_PROVIDER_BAKEOFF_CEILING_USD} ceiling`
     );
   }
+  if (env.LIVE_PROVIDER_RUN_APPROVED !== "true") {
+    throw new ProviderBakeoffConfigError(
+      "Provider bake-off refuses to run: LIVE_PROVIDER_RUN_APPROVED=true is required"
+    );
+  }
 
-  return { budgetUsd, credentials: { fal, anthropic } };
+  return { budgetUsd, liveRunApproved: true, credentials: { fal, anthropic } };
 }
 
 function operationPlan(): ProviderBakeoffOperation[] {
@@ -277,6 +285,9 @@ function assertEvidence(operation: ProviderBakeoffOperation, result: ProviderEvi
   if (result.endpoint !== operation.endpoint) {
     throw new Error(`Provider evidence endpoint mismatch for ${operation.operationId}`);
   }
+  if (!result.providerRequestId?.trim()) {
+    throw new Error(`Provider evidence request id is missing for ${operation.operationId}`);
+  }
   if (!Number.isFinite(result.costUsd) || result.costUsd < 0 || result.costUsd > operation.maxCostUsd) {
     throw new ProviderBakeoffBudgetError(
       `Provider evidence for ${operation.operationId} exceeded its reserved max cost`
@@ -333,7 +344,11 @@ export async function runProviderBakeoff({
   estimatedCostUsdByOperation = {},
   now = () => new Date(),
 }: RunProviderBakeoffOptions): Promise<ProviderBakeoffReport> {
-  if (config.budgetUsd <= 0 || config.budgetUsd > APPROVED_PROVIDER_BAKEOFF_CEILING_USD) {
+  if (
+    config.liveRunApproved !== true ||
+    config.budgetUsd <= 0 ||
+    config.budgetUsd > APPROVED_PROVIDER_BAKEOFF_CEILING_USD
+  ) {
     throw new ProviderBakeoffConfigError("Invalid provider bake-off budget");
   }
 

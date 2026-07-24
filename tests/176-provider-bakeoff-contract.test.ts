@@ -91,6 +91,7 @@ function config(budgetUsd = 10) {
     FAL_API_KEY: "fake-fal-credential",
     ANTHROPIC_API_KEY: "fake-anthropic-credential",
     LIVE_PROVIDER_BUDGET_USD: String(budgetUsd),
+    LIVE_PROVIDER_RUN_APPROVED: "true",
   });
 }
 
@@ -242,5 +243,51 @@ describe("176 — budget-gated provider bake-off contract", () => {
       status: "failed",
       error: expect.stringMatching(/model mismatch|endpoint mismatch/i),
     });
+  });
+
+  it("requires a separate explicit live-run approval flag before accepting paid credentials", () => {
+    expect(() =>
+      createProviderBakeoffConfig({
+        FAL_API_KEY: "present",
+        ANTHROPIC_API_KEY: "present",
+        LIVE_PROVIDER_BUDGET_USD: "10",
+      })
+    ).toThrow(/LIVE_PROVIDER_RUN_APPROVED/);
+
+    expect(
+      createProviderBakeoffConfig({
+        FAL_API_KEY: "present",
+        ANTHROPIC_API_KEY: "present",
+        LIVE_PROVIDER_BUDGET_USD: "10",
+        LIVE_PROVIDER_RUN_APPROVED: "true",
+      }).budgetUsd
+    ).toBe(10);
+  });
+
+  it("rejects succeeded evidence without a real provider request id", async () => {
+    const adapters = fakeAdapters();
+    adapters.fal.runTraining = async (operation) =>
+      evidence(operation.operationId, {
+        provider: operation.provider,
+        model: operation.model,
+        endpoint: operation.endpoint,
+        providerRequestId: "",
+      });
+
+    const report = await runProviderBakeoff({ config: config(), adapters });
+    expect(report.evidence[0]).toMatchObject({
+      status: "failed",
+      error: expect.stringMatching(/request id/i),
+    });
+  });
+
+  it("rejects a hand-constructed config that bypasses the approved config factory", async () => {
+    const approved = config();
+    await expect(
+      runProviderBakeoff({
+        config: { ...approved, liveRunApproved: false as true },
+        adapters: fakeAdapters(),
+      })
+    ).rejects.toThrow(ProviderBakeoffConfigError);
   });
 });
