@@ -23,6 +23,7 @@ import type {
   VideoAdapter,
   VideoClipResult,
   WorkflowAdapter,
+  WorkflowJobPayload,
   WorkflowStep,
 } from "@/adapters/types";
 import type { GeneratedStory } from "@/domain/types";
@@ -386,6 +387,7 @@ export class FakeStripe implements StripeAdapter {
 
 export class FakeWorkflow implements WorkflowAdapter {
   public steps: string[] = [];
+  public enqueuedPayloads: WorkflowJobPayload[] = [];
   public personaCreatePayloads: PersonaCreatePayload[] = [];
   /** When true, drain runs each enqueued job twice to simulate at-least-once delivery. */
   public simulateAtLeastOnceDelivery = false;
@@ -400,7 +402,8 @@ export class FakeWorkflow implements WorkflowAdapter {
     await this.drain();
   }
 
-  enqueue(_name: string, work: () => Promise<void>): void {
+  enqueue(_name: string, work: () => Promise<void>, payload?: WorkflowJobPayload): void {
+    if (payload) this.enqueuedPayloads.push(payload);
     this.queue.push(work);
   }
 

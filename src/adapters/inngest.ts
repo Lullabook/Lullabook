@@ -20,6 +20,7 @@ export const inngest = new Inngest({
 export const EVENTS = {
   storybookGenerateRequested: "lullabook/storybook.generate.requested",
   pageRecoverRequested: "lullabook/page.recover.requested",
+  personaCreationFinalized: "lullabook/persona-creation.finalized",
   personaCreateRequested: "lullabook/persona.create.requested",
   falTrainingComplete: "lullabook/fal.training.complete",
 } as const;
@@ -72,10 +73,11 @@ export class InngestWorkflowAdapter implements WorkflowAdapter {
         `Cannot enqueue "${name}" durably without a serializable payload`
       );
     }
-    const eventName =
-      payload.type === "storybook-generate"
-        ? EVENTS.storybookGenerateRequested
-        : EVENTS.pageRecoverRequested;
+    const eventName = payload.type === "storybook-generate"
+      ? EVENTS.storybookGenerateRequested
+      : payload.type === "page-recover"
+        ? EVENTS.pageRecoverRequested
+        : EVENTS.personaCreationFinalized;
     // enqueue() is synchronous at the port; the send promise is collected and
     // awaited by the request handler via flush() before it responds.
     this.pendingSends.push(inngest.send({ name: eventName, data: payload }));

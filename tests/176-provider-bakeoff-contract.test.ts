@@ -223,4 +223,24 @@ describe("176 — budget-gated provider bake-off contract", () => {
     expect(process.env.PRODUCTION_ILLUSTRATION_MODEL).toBe(before.image);
     expect(process.env.PRODUCTION_STORY_MODEL).toBe(before.story);
   });
+
+  it("records a failed operation when provider evidence names a different model or endpoint", async () => {
+    const adapters = fakeAdapters();
+    adapters.fal.runTraining = async (operation) =>
+      evidence(operation.operationId, {
+        provider: operation.provider,
+        model: "flux-2-lora-v2",
+        endpoint: "fal-ai/flux-2-trainer-v2",
+      });
+
+    const report = await runProviderBakeoff({ config: config(), adapters });
+
+    expect(report.evidence[0]).toMatchObject({
+      operationId: "flux-1-train-persona-a",
+      model: "flux-1-lora",
+      endpoint: "fal-ai/flux-lora-fast-training",
+      status: "failed",
+      error: expect.stringMatching(/model mismatch|endpoint mismatch/i),
+    });
+  });
 });
