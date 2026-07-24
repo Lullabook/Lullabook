@@ -2,6 +2,13 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — ROUTE FIXED.** The production route now uses the
+> signed `FalTrainingWebhookService` end-to-end: timestamp + body-hash + ED25519
+> signature verification before JSON parsing, idempotent duplicate/stale
+> handling, artifact validation + Family-owned copy, durable failed state with
+> redacted error. Commit `e743cc4`. `PersonaService.startTraining()` and fal
+> JWKS wiring remain debugger scope (needs live fal.ai JWKS endpoint).
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.

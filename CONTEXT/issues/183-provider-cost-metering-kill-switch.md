@@ -2,6 +2,15 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — TESTS 7/7 PASS; METERING + KILL-SWITCH SERVICE
+> IMPLEMENTED.** Every provider attempt recorded with ownership + redaction.
+> Storybook cost queryable (attempted vs successful, retries, training
+> amortization). Shared 4-Story allowance atomic + reset without rollover.
+> Green/amber/red thresholds with 70% P95 margin floor. Red threshold blocks new
+> spend while drafts + Hard-delete remain available. **Debugger scope:** metering
+> service not yet wired into production Storybook/provider paths; Supabase store
+> doesn't persist ledger/kill-switch/allowance state.
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.

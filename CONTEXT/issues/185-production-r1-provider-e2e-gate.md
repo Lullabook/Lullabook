@@ -2,6 +2,17 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — TESTS 8/8 PASS; GATE + MANIFEST + REPORT
+> IMPLEMENTED.** Gate refuses missing credentials, non-positive budget, and
+> budgets over $2 ceiling. Manifest declares synthetic-subjects/consenting-adults
+> fixture policy. Report publishes evidence without credentials/prompts/photo
+> content. Gate fails below 70% margin floor, red Story cost, or canary route
+> mismatch without approval. **Debugger scope:** `runR1ProviderE2E()` runs only 3
+> abstract ops (no native flow/Supabase/consent/roster/review/12 real
+> jobs/recovery/RLS/Hard-delete); fake evidence can become release-eligible;
+> `redactLog()` leaks JSON-formatted secrets. Live $2 smoke blocked on missing
+> FAL_API_KEY / ANTHROPIC_API_KEY — no spend authorized.
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.

@@ -2,6 +2,12 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — ENTITLEMENT GATES + ADULT SELF-PERSONA PUSHED.**
+> Adult Members can create their own Adult Persona (self-consent + liveness).
+> Baby creation and Story generation remain Guardian-only in R1. Persona cap of
+> 3 enforced atomically via SQL reservation. `/api/entitlement` returns canonical
+> `plan.limits` only. Commits `7176e01`, `2d6c826`. Full suite 844/844 passes.
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.

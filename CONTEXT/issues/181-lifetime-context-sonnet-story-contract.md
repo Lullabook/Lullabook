@@ -2,6 +2,15 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — TESTS 7/7 PASS; VALIDATOR + SELECTOR + ROUTING
+> IMPLEMENTED.** Bounded lifetime context selector (2000 token budget),
+> deterministic trimming, source manifest/provenance. 12-Page semantic validator
+> (exact count, sequential indexes, selected Persona IDs, complete Style Bible).
+> Sonnet 4.6 production routing with Sonnet 5 golden-set gate. Invalid Story text
+> fails before illustration spend and releases allowance. **Debugger scope:**
+> short-story path still permits non-12-page Storybooks; provenance not yet
+> written to `DataStore.storyContextProvenance`/Supabase; token usage not metered.
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.

@@ -2,6 +2,15 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — TESTS 7/7 PASS; SERVICES IMPLEMENTED.** Training
+> completion creates review samples + Roster avatar without Story readiness.
+> Authenticated accept boundary with Adult self-consent enforcement. Retraining
+> replaces derivatives without exposing source photos. Brief resume exactly-once
+> after all Personas ready. No illustration spend before likeness confirmation.
+> **Debugger scope:** exactly-once Brief resume is in-memory (not crash-safe);
+> native "Retry / retrain" button doesn't call `retrainLikeness()`; derivative
+> generation can orphan partial artifacts.
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.
