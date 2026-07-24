@@ -25,10 +25,6 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Authenticated Member not found';
   END IF;
-  IF v_member.role <> 'guardian' THEN
-    RAISE EXCEPTION 'Only Guardians may reserve an Adult Persona';
-  END IF;
-
   SELECT * INTO v_existing
   FROM persona_creation_reservations reservation
   WHERE reservation.family_id = v_member.family_id

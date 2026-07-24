@@ -77,13 +77,8 @@ export class PersonaService {
   ) {}
 
   async createAdult(input: CreatePersonaInput): Promise<Persona> {
-    if (this.entitlements) {
-      const member = this.store.members.get(input.memberId);
-      if (member) {
-        this.entitlements.requireCanCreate(member.familyId, input.memberId);
-        this.entitlements.requirePersonaSlot(member.familyId, input.memberId);
-      }
-    }
+    const member = this.store.members.get(input.memberId);
+    if (member) this.entitlements?.requirePersonaSlot(member.familyId, input.memberId);
     return this.create(input, "adult", true);
   }
 
@@ -129,7 +124,11 @@ export class PersonaService {
     } else if (input.selfConsent !== true) {
       throw new Error("Adult Persona requires subject self-consent");
     }
-    this.entitlements?.requireCanCreate(member.familyId, input.memberId);
+    this.entitlements?.requireCanCreate(
+      member.familyId,
+      input.memberId,
+      input.kind === "adult" ? "adult-persona" : "baby-persona",
+    );
     this.entitlements?.requirePersonaSlot(member.familyId, input.memberId);
 
     const personaIds = new Set(this.store.personas.keys());
