@@ -23,6 +23,7 @@ import type {
   VideoAdapter,
   VideoClipResult,
   WorkflowAdapter,
+  WorkflowJobPayload,
   WorkflowStep,
 } from "@/adapters/types";
 import type { GeneratedStory } from "@/domain/types";
