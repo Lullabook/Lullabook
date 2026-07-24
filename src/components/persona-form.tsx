@@ -125,6 +125,7 @@ export function PersonaForm({
     formData.set("relationship", relationship);
     formData.set("babyCalls", babyCalls);
     formData.set("theyCallBaby", theyCallBaby);
+    if (mode === "adult") formData.set("selfConsent", "true");
     if (characterId) formData.set("characterId", characterId);
     formData.delete("photos");
     photos.forEach((f) => formData.append("photos", f));

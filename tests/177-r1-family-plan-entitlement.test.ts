@@ -102,6 +102,51 @@ describe("177 — accepted R1 Family and Just Us plan invariants", () => {
     expect((await acceptRoute.POST(new Request("https://x/api/family/accept", { method: "POST" }))).status).toBe(404);
   });
 
+  it("rejects a non-Guardian Adult Persona before liveness, persistence, or training", async () => {
+    const ctx = createTestContext();
+    const guardian = await subscribedGuardian(ctx);
+    const sub = ctx.store.getSubscription(guardian.familyId)!;
+    ctx.store.saveSubscription({ ...sub, tier: "plus", updatedAt: new Date() });
+    const { token } = ctx.family.inviteMember(guardian.id, "member@example.com");
+    const member = ctx.family.acceptInvite(token, "auth-member");
+    const livenessCalls = ctx.liveness.verifyCalls;
+    const trainCalls = ctx.fal.trainCalls;
+
+    await expect(
+      ctx.personas.createAdult({
+        memberId: member.id,
+        displayName: "Not authorized",
+        photos: [goodPhoto(70), goodPhoto(71), goodPhoto(72)],
+        selfie: Buffer.from("selfie"),
+      })
+    ).rejects.toThrow(/guardian/i);
+
+    expect(ctx.liveness.verifyCalls).toBe(livenessCalls);
+    expect(ctx.fal.trainCalls).toBe(trainCalls);
+    expect(ctx.store.personas.size).toBe(0);
+  });
+
+  it("releases a reserved Story allowance when the generation watchdog expires", async () => {
+    const ctx = createTestContext();
+    const guardian = await subscribedGuardian(ctx);
+    const persona = await ctx.personas.createAdult({
+      memberId: guardian.id,
+      displayName: "Star",
+      photos: [goodPhoto(73), goodPhoto(74), goodPhoto(75)],
+      selfie: Buffer.from("selfie"),
+    });
+    const book = await ctx.storybooks.generate(guardian.id, {
+      starringPersonaIds: [persona.id],
+      storyType: "bedtime",
+      theme: "watchdog",
+    });
+
+    expect(ctx.storyCap.getReservation(book.id)?.status).toBe("reserved");
+    expect(ctx.storybooks.reapStrandedGenerations(new Date(book.createdAt.getTime() + 1), 0)).toBe(1);
+    expect(ctx.storyCap.getReservation(book.id)).toBeUndefined();
+    expect(ctx.storyCap.getReservationAudit(book.id)?.status).toBe("released");
+  });
+
   it("has one server-authoritative R1 definition across entitlement, paywall, API, and native usage copy", () => {
     expect(R1_PLAN_DEFINITION).toMatchObject({
       plan: "just_us",

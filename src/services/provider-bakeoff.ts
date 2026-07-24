@@ -65,6 +65,7 @@ export interface ProviderBakeoffAdapters {
 
 export interface ProviderBakeoffConfig {
   budgetUsd: number;
+  liveRunApproved: true;
   credentials: {
     fal: string;
     anthropic: string;
@@ -75,6 +76,7 @@ export interface ProviderBakeoffEnv {
   FAL_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   LIVE_PROVIDER_BUDGET_USD?: string;
+  LIVE_PROVIDER_RUN_APPROVED?: string;
 }
 
 export class ProviderBakeoffConfigError extends Error {
@@ -88,6 +90,14 @@ export class ProviderBakeoffBudgetError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ProviderBakeoffBudgetError";
+  }
+}
+
+/** The provider may have accepted spend, but no auditable receipt was returned. */
+export class ProviderBakeoffUnreconciledError extends Error {
+  constructor(operationId: string, cause: unknown) {
+    super(`Provider bake-off stopped after ${operationId}: ${redactProviderError(cause)}`);
+    this.name = "ProviderBakeoffUnreconciledError";
   }
 }
 
@@ -169,11 +179,19 @@ function requiredCredential(env: ProviderBakeoffEnv, name: keyof ProviderBakeoff
   return value;
 }
 
+function redactProviderError(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error))
+    .replace(/(authorization\s*:\s*bearer\s+)[^\s]+/gi, "$1[REDACTED]")
+    .replace(/(secret|token|api[_-]?key)\s*[=:]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .slice(0, 500);
+}
+
 export function createProviderBakeoffConfig(
   env: ProviderBakeoffEnv = {
     FAL_API_KEY: process.env.FAL_API_KEY,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     LIVE_PROVIDER_BUDGET_USD: process.env.LIVE_PROVIDER_BUDGET_USD,
+    LIVE_PROVIDER_RUN_APPROVED: process.env.LIVE_PROVIDER_RUN_APPROVED,
   }
 ): ProviderBakeoffConfig {
   const fal = requiredCredential(env, "FAL_API_KEY");
@@ -191,8 +209,13 @@ export function createProviderBakeoffConfig(
       `LIVE_PROVIDER_BUDGET_USD exceeds the approved $${APPROVED_PROVIDER_BAKEOFF_CEILING_USD} ceiling`
     );
   }
+  if (env.LIVE_PROVIDER_RUN_APPROVED !== "true") {
+    throw new ProviderBakeoffConfigError(
+      "Provider bake-off refuses to run: LIVE_PROVIDER_RUN_APPROVED=true is required"
+    );
+  }
 
-  return { budgetUsd, credentials: { fal, anthropic } };
+  return { budgetUsd, liveRunApproved: true, credentials: { fal, anthropic } };
 }
 
 function operationPlan(): ProviderBakeoffOperation[] {
@@ -277,6 +300,9 @@ function assertEvidence(operation: ProviderBakeoffOperation, result: ProviderEvi
   if (result.endpoint !== operation.endpoint) {
     throw new Error(`Provider evidence endpoint mismatch for ${operation.operationId}`);
   }
+  if (!result.providerRequestId?.trim()) {
+    throw new Error(`Provider evidence request id is missing for ${operation.operationId}`);
+  }
   if (!Number.isFinite(result.costUsd) || result.costUsd < 0 || result.costUsd > operation.maxCostUsd) {
     throw new ProviderBakeoffBudgetError(
       `Provider evidence for ${operation.operationId} exceeded its reserved max cost`
@@ -292,7 +318,6 @@ async function executeOperation(
   operation: ProviderBakeoffOperation,
   adapters: ProviderBakeoffAdapters
 ): Promise<ProviderEvidence> {
-  const started = Date.now();
   try {
     let result: ProviderEvidence;
     if (operation.provider === "anthropic") {
@@ -313,17 +338,7 @@ async function executeOperation(
     };
   } catch (error) {
     if (error instanceof ProviderBakeoffBudgetError) throw error;
-    return {
-      operationId: operation.operationId,
-      provider: operation.provider,
-      model: operation.model,
-      endpoint: operation.endpoint,
-      status: "failed",
-      costUsd: 0,
-      latencyMs: Math.max(0, Date.now() - started),
-      providerRequestId: `${operation.operationId}:error`,
-      error: error instanceof Error ? error.message : String(error),
-    };
+    throw new ProviderBakeoffUnreconciledError(operation.operationId, error);
   }
 }
 
@@ -333,7 +348,11 @@ export async function runProviderBakeoff({
   estimatedCostUsdByOperation = {},
   now = () => new Date(),
 }: RunProviderBakeoffOptions): Promise<ProviderBakeoffReport> {
-  if (config.budgetUsd <= 0 || config.budgetUsd > APPROVED_PROVIDER_BAKEOFF_CEILING_USD) {
+  if (
+    config.liveRunApproved !== true ||
+    config.budgetUsd <= 0 ||
+    config.budgetUsd > APPROVED_PROVIDER_BAKEOFF_CEILING_USD
+  ) {
     throw new ProviderBakeoffConfigError("Invalid provider bake-off budget");
   }
 
@@ -344,9 +363,9 @@ export async function runProviderBakeoff({
 
   for (const operation of operationPlan()) {
     const estimate = estimatedCostUsdByOperation[operation.operationId] ?? operation.maxCostUsd;
-    if (!Number.isFinite(estimate) || estimate < 0 || estimate > operation.maxCostUsd) {
+    if (!Number.isFinite(estimate) || estimate <= 0 || estimate > operation.maxCostUsd) {
       throw new ProviderBakeoffConfigError(
-        `Invalid reserved cost for ${operation.operationId}; it must be between $0 and $${operation.maxCostUsd}`
+        `Invalid reserved cost for ${operation.operationId}; it must be greater than $0 and at most $${operation.maxCostUsd}`
       );
     }
     if (reservedUsd + estimate > config.budgetUsd + Number.EPSILON) {

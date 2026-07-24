@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BlobStore, WorkflowAdapter } from "@/adapters/types";
 
 export interface SqlResult<Row extends Record<string, unknown> = Record<string, unknown>> {
@@ -36,6 +37,27 @@ export interface PersonaCreationPhotoManifest {
   size: number;
 }
 
+export interface PersonaCreationRepository {
+  prepare(input: PersonaCreationReservationInput): Promise<PersonaCreationReservation>;
+  markUploaded(
+    reservationId: string,
+    photoManifest: PersonaCreationPhotoManifest[],
+  ): Promise<Pick<PersonaCreationReservation, "id" | "state">>;
+  abort(reservationId: string): Promise<void>;
+  finalize(reservationId: string): Promise<FinalizedPersonaCreation>;
+  claimExpiredReservations(): Promise<
+    Array<Pick<PersonaCreationReservation, "id" | "familyId" | "photoKeys">>
+  >;
+  markExpiredCleanupComplete(reservationId: string): Promise<void>;
+  readFinalized(reservationId: string): Promise<FinalizedPersonaCreation>;
+  claimOutbox(leaseSeconds?: number): Promise<PersonaCreationOutboxEvent | null>;
+  claimOutboxForReservation(
+    reservationId: string,
+    leaseSeconds?: number,
+  ): Promise<PersonaCreationOutboxEvent | null>;
+  markOutboxSent(outboxEventId: string): Promise<void>;
+}
+
 export interface FinalizedPersonaCreation {
   id: string;
   personaId: string;
@@ -55,7 +77,7 @@ export interface PersonaCreationOutboxEvent {
  * not write blobs or submit workflow work; LUL-103 owns the route/action that
  * performs those steps after moderation and then invokes the remaining RPCs.
  */
-export class PostgresPersonaCreationRepository {
+export class PostgresPersonaCreationRepository implements PersonaCreationRepository {
   constructor(
     private readonly queryAsUser: AuthenticatedSqlRunner,
     private readonly authUserId: string,
@@ -189,15 +211,24 @@ export class PostgresPersonaCreationRepository {
       "select * from app_claim_persona_creation_outbox($1::integer)",
       [leaseSeconds],
     );
-    const event = result.rows[0];
-    return event
-      ? {
-          id: event.id,
-          familyId: event.family_id,
-          personaId: event.persona_id,
-          reservationId: event.reservation_id,
-        }
-      : null;
+    return toOutboxEvent(result.rows[0]);
+  }
+
+  async claimOutboxForReservation(
+    reservationId: string,
+    leaseSeconds = 60,
+  ): Promise<PersonaCreationOutboxEvent | null> {
+    const result = await this.queryAsUser<{
+      id: string;
+      family_id: string;
+      reservation_id: string;
+      persona_id: string;
+    }>(
+      this.authUserId,
+      "select * from app_claim_persona_creation_outbox_for_reservation($1::uuid, $2::integer)",
+      [reservationId, leaseSeconds],
+    );
+    return toOutboxEvent(result.rows[0]);
   }
 
   async markOutboxSent(outboxEventId: string): Promise<void> {
@@ -209,12 +240,163 @@ export class PostgresPersonaCreationRepository {
   }
 }
 
+/** Authenticated Supabase-RPC repository used by the production request boundary. */
+export class SupabasePersonaCreationRepository implements PersonaCreationRepository {
+  constructor(private readonly client: SupabaseClient) {}
+
+  private async rpc<Row extends Record<string, unknown>>(
+    name: string,
+    args: Record<string, unknown> = {},
+  ): Promise<Row[]> {
+    const { data, error } = await this.client.rpc(name, args);
+    if (error) throw new Error(`${name} failed: ${error.message}`);
+    return (Array.isArray(data) ? data : data ? [data] : []) as Row[];
+  }
+
+  async prepare(input: PersonaCreationReservationInput): Promise<PersonaCreationReservation> {
+    const isNewAdultConsent = input.kind === "adult" && !input.adultConsentReceiptId;
+    const rows = await this.rpc<{
+      id: string;
+      family_id: string;
+      state: PersonaCreationReservation["state"];
+      photo_keys: unknown;
+    }>(
+      isNewAdultConsent ? "app_prepare_adult_persona_creation" : "app_prepare_persona_creation",
+      isNewAdultConsent
+        ? {
+            p_display_name: input.displayName,
+            p_photo_count: input.photoCount,
+            p_request_fingerprint: input.requestFingerprint,
+          }
+        : {
+            p_kind: input.kind,
+            p_display_name: input.displayName,
+            p_photo_count: input.photoCount,
+            p_request_fingerprint: input.requestFingerprint,
+            p_baby: input.baby ?? null,
+            p_bond: input.bond ?? null,
+            p_adult_consent_receipt_id: input.adultConsentReceiptId ?? null,
+          },
+    );
+    const row = rows[0];
+    if (!row || !Array.isArray(row.photo_keys) || !row.photo_keys.every(isString)) {
+      throw new Error("Persona creation reservation returned an invalid manifest");
+    }
+    return { id: row.id, familyId: row.family_id, state: row.state, photoKeys: row.photo_keys };
+  }
+
+  async markUploaded(reservationId: string, photoManifest: PersonaCreationPhotoManifest[]) {
+    const rows = await this.rpc<{ id: string; state: PersonaCreationReservation["state"] }>(
+      "app_mark_persona_creation_uploaded",
+      { p_reservation_id: reservationId, p_photo_manifest: photoManifest },
+    );
+    if (!rows[0]) throw new Error("Persona creation upload was not recorded");
+    return rows[0];
+  }
+
+  async abort(reservationId: string): Promise<void> {
+    await this.rpc("app_abort_persona_creation", { p_reservation_id: reservationId });
+  }
+
+  async finalize(reservationId: string): Promise<FinalizedPersonaCreation> {
+    await this.rpc("app_finalize_persona_creation", { p_reservation_id: reservationId });
+    return this.readFinalized(reservationId);
+  }
+
+  async readFinalized(reservationId: string): Promise<FinalizedPersonaCreation> {
+    const { data: reservation, error: reservationError } = await this.client
+      .from("persona_creation_reservations")
+      .select("id, persona_id, state")
+      .eq("id", reservationId)
+      .eq("state", "finalized")
+      .maybeSingle();
+    if (reservationError) throw new Error(`read finalized reservation failed: ${reservationError.message}`);
+    const { data: outbox, error: outboxError } = await this.client
+      .from("persona_creation_outbox")
+      .select("id")
+      .eq("reservation_id", reservationId)
+      .maybeSingle();
+    if (outboxError) throw new Error(`read Persona creation outbox failed: ${outboxError.message}`);
+    if (!reservation || !outbox) throw new Error("Finalized Persona creation was not found");
+    return {
+      id: reservation.id as string,
+      personaId: reservation.persona_id as string,
+      state: "finalized",
+      outboxEventId: outbox.id as string,
+    };
+  }
+
+  async claimExpiredReservations() {
+    const rows = await this.rpc<{ id: string; family_id: string; photo_keys: unknown }>(
+      "app_claim_expired_persona_creation_reservations",
+    );
+    return rows.map((row) => {
+      if (!Array.isArray(row.photo_keys) || !row.photo_keys.every(isString)) {
+        throw new Error("Expired Persona creation reservation returned an invalid manifest");
+      }
+      return { id: row.id, familyId: row.family_id, photoKeys: row.photo_keys };
+    });
+  }
+
+  async markExpiredCleanupComplete(reservationId: string): Promise<void> {
+    await this.rpc("app_complete_persona_creation_expired_cleanup", { p_reservation_id: reservationId });
+  }
+
+  async claimOutbox(leaseSeconds = 60): Promise<PersonaCreationOutboxEvent | null> {
+    const rows = await this.rpc<{
+      id: string;
+      family_id: string;
+      reservation_id: string;
+      persona_id: string;
+    }>("app_claim_persona_creation_outbox", { p_lease_seconds: leaseSeconds });
+    return toOutboxEvent(rows[0]);
+  }
+
+  async claimOutboxForReservation(
+    reservationId: string,
+    leaseSeconds = 60,
+  ): Promise<PersonaCreationOutboxEvent | null> {
+    const rows = await this.rpc<{
+      id: string;
+      family_id: string;
+      reservation_id: string;
+      persona_id: string;
+    }>("app_claim_persona_creation_outbox_for_reservation", {
+      p_reservation_id: reservationId,
+      p_lease_seconds: leaseSeconds,
+    });
+    return toOutboxEvent(rows[0]);
+  }
+
+  async markOutboxSent(outboxEventId: string): Promise<void> {
+    await this.rpc("app_mark_persona_creation_outbox_sent", { p_outbox_id: outboxEventId });
+  }
+}
+
 /** Writes only already-moderated bytes, then persists their immutable manifest. */
 export class PersonaCreationProtocol {
   constructor(
-    private readonly repository: PostgresPersonaCreationRepository,
+    private readonly repository: PersonaCreationRepository,
     private readonly blobs: BlobStore,
   ) {}
+
+  async createFromModeratedPhotos(
+    input: PersonaCreationReservationInput,
+    photos: Buffer[],
+  ): Promise<FinalizedPersonaCreation> {
+    const reservation = await this.repository.prepare(input);
+    if (reservation.state === "finalized") {
+      return this.repository.finalize(reservation.id);
+    }
+    await this.uploadModeratedPhotos(reservation, photos);
+    try {
+      return await this.repository.finalize(reservation.id);
+    } catch (error) {
+      await Promise.allSettled(reservation.photoKeys.map((key) => this.blobs.delete(key)));
+      await this.repository.abort(reservation.id).catch(() => undefined);
+      throw error;
+    }
+  }
 
   async uploadModeratedPhotos(
     reservation: PersonaCreationReservation,
@@ -259,12 +441,19 @@ export class PersonaCreationProtocol {
  */
 export class PersonaCreationOutboxDispatcher {
   constructor(
-    private readonly repository: PostgresPersonaCreationRepository,
+    private readonly repository: PersonaCreationRepository,
     private readonly workflow: WorkflowAdapter,
   ) {}
 
   async dispatchOne(leaseSeconds = 60): Promise<boolean> {
-    const event = await this.repository.claimOutbox(leaseSeconds);
+    return this.dispatch(await this.repository.claimOutbox(leaseSeconds));
+  }
+
+  async dispatchReservation(reservationId: string, leaseSeconds = 60): Promise<boolean> {
+    return this.dispatch(await this.repository.claimOutboxForReservation(reservationId, leaseSeconds));
+  }
+
+  private async dispatch(event: PersonaCreationOutboxEvent | null): Promise<boolean> {
     if (!event) return false;
 
     this.workflow.enqueue(
@@ -292,7 +481,7 @@ export class PersonaCreationOutboxDispatcher {
  */
 export class PersonaCreationOutboxConsumer {
   constructor(
-    private readonly repository: PostgresPersonaCreationRepository,
+    private readonly repository: PersonaCreationRepository,
     private readonly workflow: WorkflowAdapter,
     private readonly onFinalized: (creation: FinalizedPersonaCreation) => Promise<void>,
   ) {}
@@ -310,6 +499,21 @@ export class PersonaCreationOutboxConsumer {
       },
     ]);
   }
+}
+
+function toOutboxEvent(
+  event:
+    | { id: string; family_id: string; reservation_id: string; persona_id: string }
+    | undefined,
+): PersonaCreationOutboxEvent | null {
+  return event
+    ? {
+        id: event.id,
+        familyId: event.family_id,
+        reservationId: event.reservation_id,
+        personaId: event.persona_id,
+      }
+    : null;
 }
 
 function isString(value: unknown): value is string {

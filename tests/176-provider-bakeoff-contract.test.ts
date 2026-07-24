@@ -4,6 +4,7 @@ import {
   DEFAULT_PROVIDER_BAKEOFF_MANIFEST,
   ProviderBakeoffBudgetError,
   ProviderBakeoffConfigError,
+  ProviderBakeoffUnreconciledError,
   createProviderBakeoffConfig,
   runProviderBakeoff,
   type ProviderBakeoffAdapters,
@@ -91,6 +92,7 @@ function config(budgetUsd = 10) {
     FAL_API_KEY: "fake-fal-credential",
     ANTHROPIC_API_KEY: "fake-anthropic-credential",
     LIVE_PROVIDER_BUDGET_USD: String(budgetUsd),
+    LIVE_PROVIDER_RUN_APPROVED: "true",
   });
 }
 
@@ -129,6 +131,31 @@ describe("176 — budget-gated provider bake-off contract", () => {
     expect(() => config(APPROVED_PROVIDER_BAKEOFF_CEILING_USD + 0.01)).toThrow(
       /approved.*ceiling|10/i
     );
+  });
+
+  it("refuses a zero-cost operation before calling a paid adapter", async () => {
+    const calls: string[] = [];
+    await expect(
+      runProviderBakeoff({
+        config: config(),
+        adapters: fakeAdapters({ calls }),
+        estimatedCostUsdByOperation: { "flux-1-train-persona-a": 0 },
+      }),
+    ).rejects.toThrow(/greater than \$0/i);
+    expect(calls).toEqual([]);
+  });
+
+  it("stops on an unreconciled adapter exception and redacts provider secrets", async () => {
+    const calls: string[] = [];
+    const adapters = fakeAdapters({ calls });
+    adapters.fal.runTraining = async () => {
+      throw new Error("authorization: Bearer secret-token api_key=also-secret");
+    };
+
+    await expect(runProviderBakeoff({ config: config(), adapters })).rejects.toThrow(
+      /authorization: Bearer \[REDACTED\].*api_key=\[REDACTED\]/i,
+    );
+    expect(calls).toEqual([]);
   });
 
   it("hard-stops before an operation whose reserved cost would exceed the budget", async () => {
@@ -224,7 +251,7 @@ describe("176 — budget-gated provider bake-off contract", () => {
     expect(process.env.PRODUCTION_STORY_MODEL).toBe(before.story);
   });
 
-  it("records a failed operation when provider evidence names a different model or endpoint", async () => {
+  it("hard-stops an unreconciled run when provider evidence names a different model or endpoint", async () => {
     const adapters = fakeAdapters();
     adapters.fal.runTraining = async (operation) =>
       evidence(operation.operationId, {
@@ -233,14 +260,52 @@ describe("176 — budget-gated provider bake-off contract", () => {
         endpoint: "fal-ai/flux-2-trainer-v2",
       });
 
-    const report = await runProviderBakeoff({ config: config(), adapters });
+    await expect(runProviderBakeoff({ config: config(), adapters })).rejects.toThrow(
+      ProviderBakeoffUnreconciledError,
+    );
+  });
 
-    expect(report.evidence[0]).toMatchObject({
-      operationId: "flux-1-train-persona-a",
-      model: "flux-1-lora",
-      endpoint: "fal-ai/flux-lora-fast-training",
-      status: "failed",
-      error: expect.stringMatching(/model mismatch|endpoint mismatch/i),
-    });
+  it("requires a separate explicit live-run approval flag before accepting paid credentials", () => {
+    expect(() =>
+      createProviderBakeoffConfig({
+        FAL_API_KEY: "present",
+        ANTHROPIC_API_KEY: "present",
+        LIVE_PROVIDER_BUDGET_USD: "10",
+      })
+    ).toThrow(/LIVE_PROVIDER_RUN_APPROVED/);
+
+    expect(
+      createProviderBakeoffConfig({
+        FAL_API_KEY: "present",
+        ANTHROPIC_API_KEY: "present",
+        LIVE_PROVIDER_BUDGET_USD: "10",
+        LIVE_PROVIDER_RUN_APPROVED: "true",
+      }).budgetUsd
+    ).toBe(10);
+  });
+
+  it("stops an unreconciled run when succeeded evidence has no provider request id", async () => {
+    const adapters = fakeAdapters();
+    adapters.fal.runTraining = async (operation) =>
+      evidence(operation.operationId, {
+        provider: operation.provider,
+        model: operation.model,
+        endpoint: operation.endpoint,
+        providerRequestId: "",
+      });
+
+    await expect(runProviderBakeoff({ config: config(), adapters })).rejects.toThrow(
+      /request id is missing/i,
+    );
+  });
+
+  it("rejects a hand-constructed config that bypasses the approved config factory", async () => {
+    const approved = config();
+    await expect(
+      runProviderBakeoff({
+        config: { ...approved, liveRunApproved: false as true },
+        adapters: fakeAdapters(),
+      })
+    ).rejects.toThrow(ProviderBakeoffConfigError);
   });
 });

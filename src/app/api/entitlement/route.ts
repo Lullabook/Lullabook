@@ -36,11 +36,11 @@ export async function GET(request: Request): Promise<NextResponse> {
         remaining: capUsage.remaining,
         resetDate: capUsage.resetDate,
       },
-      memberCap: entitlement.memberCap,
+      memberCap: R1_PLAN_DEFINITION.limits.personas,
       capabilities: {
-        canNarrate: entitlement.canNarrate,
-        canVideo: entitlement.canVideo,
-        canCustomStyle: entitlement.canCustomStyle,
+        canNarrate: false,
+        canVideo: false,
+        canCustomStyle: false,
       },
       credits: {
         videoIncluded: creditBalance.videoIncluded,
