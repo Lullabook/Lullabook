@@ -8,6 +8,15 @@ import type { MomentType } from "@/domain/daily-types";
 import { castLimitError, castSlotInfo } from "@/lib/cast-limits";
 import { requireAuthedContext } from "@/lib/auth";
 import { createAuthClient } from "@/lib/supabase";
+import {
+  PersonaCreationOutboxDispatcher,
+  PersonaCreationProtocol,
+  SupabasePersonaCreationRepository,
+} from "@/db/persona-creation-protocol";
+import {
+  ProductionPersonaCreationService,
+  personaCreationRequestFingerprint,
+} from "@/services/production-persona-creation";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
@@ -149,9 +158,9 @@ async function stagePersonaUploads(
 }
 
 /**
- * Thin request: stage the photo bytes, emit the durable persona-create
- * event, return immediately. Training progress arrives by notification and
- * roster polling — the long fal training run never blocks a request.
+ * The authenticated request owns source bytes only in memory. PostgreSQL
+ * reserves immutable family-scoped keys after source checks, then finalizes
+ * the Persona graph and outbox before this action reports success.
  */
 export async function createPersonaAction(
   formData: FormData
@@ -171,34 +180,57 @@ export async function createPersonaAction(
     }
     const mode = String(formData.get("mode") ?? "adult") as "adult" | "baby";
     const displayName = String(formData.get("displayName") ?? "").trim();
+    const relationship = String(formData.get("relationship") ?? "").trim();
+    const babyCallsThem = String(formData.get("babyCalls") ?? "").trim();
+    const theyCallBaby = String(formData.get("theyCallBaby") ?? "").trim();
     if (!displayName) return { ok: false, error: "Name is required" };
     const photos = formData.getAll("photos").filter((f): f is File => f instanceof File);
     const selfie = formData.get("selfie");
-    if (photos.length < 3) {
-      return { ok: false, error: "At least 3 photos required" };
-    }
-    if (mode === "adult" && !(selfie instanceof File)) {
-      return { ok: false, error: "A selfie is required to verify your own likeness" };
+    if (photos.length < 3) return { ok: false, error: "At least 3 photos required" };
+    if (mode === "adult") {
+      if (formData.get("selfConsent") !== "true") {
+        return { ok: false, error: "Adult Personas require the subject's consent" };
+      }
+      if (!(selfie instanceof File)) {
+        return { ok: false, error: "A selfie is required to verify your own likeness" };
+      }
     }
     if (mode === "baby") {
       const gate = ctx.subscriptions.canCreateBabyPersona(member.id);
       if (!gate.allowed) return { ok: false, error: gate.reason ?? "Not allowed" };
     }
+    // UI checks are only UX. The server rejects an unentitled/non-Guardian
+    // request before reading source bytes; the SQL reservation owns the
+    // concurrency-safe three-Persona capacity decision.
+    ctx.entitlements.requireCanCreate(member.familyId, member.id);
+    ctx.entitlements.requirePersonaSlot(member.familyId, member.id);
 
-    const { photoKeys, selfieKey } = await stagePersonaUploads(
-      ctx,
-      member.familyId,
-      photos,
-      mode === "adult" && selfie instanceof File ? selfie : null
+    const sourcePhotos = await Promise.all(
+      photos.map(async (photo) => Buffer.from(await photo.arrayBuffer())),
     );
-    ctx.workflow.requestPersonaCreate({
-      mode,
-      memberId: member.id,
+    const selfieBytes = selfie instanceof File ? Buffer.from(await selfie.arrayBuffer()) : undefined;
+    const creationInput = {
+      kind: mode,
       displayName,
-      photoKeys,
-      selfieKey,
+      photoCount: sourcePhotos.length,
+      photos: sourcePhotos,
+      selfie: selfieBytes,
+      ...(mode === "baby"
+        ? {
+            baby: { displayName },
+            bond: { relationship, babyCallsThem, theyCallBaby },
+          }
+        : {}),
+    };
+    const authClient = await createAuthClient();
+    const repository = new SupabasePersonaCreationRepository(authClient);
+    const protocol = new PersonaCreationProtocol(repository, ctx.blobs);
+    const creation = new ProductionPersonaCreationService(ctx.childSafety, ctx.liveness, protocol);
+    const finalized = await creation.create({
+      ...creationInput,
+      requestFingerprint: personaCreationRequestFingerprint(creationInput),
     });
-    await ctx.persist();
+    await new PersonaCreationOutboxDispatcher(repository, ctx.workflow).dispatchReservation(finalized.id);
     revalidatePath("/personas");
     revalidatePath("/family");
     return { ok: true, data: undefined };

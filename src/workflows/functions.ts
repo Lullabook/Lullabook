@@ -1,6 +1,12 @@
 import { EVENTS, inngest, type DurableStepTools } from "@/adapters/inngest";
-import type { PersonaCreatePayload } from "@/adapters/types";
+import type { PersonaCreatePayload, WorkflowJobPayload } from "@/adapters/types";
+import {
+  PersonaCreationOutboxConsumer,
+  SupabasePersonaCreationRepository,
+} from "@/db/persona-creation-protocol";
+import { createServiceClient } from "@/lib/supabase";
 import { createRequestContext } from "@/lib/context";
+import { runPersonaCreationFinalizedBody } from "@/workflows/persona-creation-finalized-body";
 import { runPersonaCreateBody } from "@/workflows/persona-create-body";
 
 /**
@@ -114,6 +120,46 @@ export const personaCreate = inngest.createFunction(
   }
 );
 
+export const personaCreationFinalized = inngest.createFunction(
+  {
+    id: "persona-creation-finalized",
+    retries: 3,
+    triggers: { event: EVENTS.personaCreationFinalized },
+  },
+  async ({ event, step }) => {
+    const payload = event.data as WorkflowJobPayload;
+    if (payload.type !== "persona-creation-finalized") {
+      throw new Error("Unexpected Persona creation event payload");
+    }
+    const ctx = createRequestContext();
+    await ctx.store.hydrateFamily(payload.familyId);
+    ctx.workflow.onStepCommitted = () => ctx.store.sync();
+    const repository = new SupabasePersonaCreationRepository(createServiceClient());
+    const consumer = new PersonaCreationOutboxConsumer(repository, ctx.workflow, async (creation) => {
+      const { data, error } = await createServiceClient()
+        .from("persona_creation_reservations")
+        .select("photo_keys")
+        .eq("id", creation.id)
+        .maybeSingle();
+      if (error) throw new Error(`Read Persona creation source manifest failed: ${error.message}`);
+      const photoKeys = data?.photo_keys;
+      if (!Array.isArray(photoKeys) || !photoKeys.every((key): key is string => typeof key === "string")) {
+        throw new Error("Finalized Persona creation source manifest is invalid");
+      }
+      await runPersonaCreationFinalizedBody(ctx, payload, photoKeys);
+      await ctx.store.sync();
+    });
+    await ctx.workflow.runWithStepContext(step as DurableStepTools, () =>
+      consumer.consume({
+        id: payload.eventId,
+        familyId: payload.familyId,
+        personaId: payload.personaId,
+        reservationId: payload.reservationId,
+      }),
+    );
+  },
+);
+
 export const scheduledPurges = inngest.createFunction(
   { id: "scheduled-purges", triggers: { cron: "0 3 * * *" } },
   async () => {
@@ -136,5 +182,6 @@ export const workflowFunctions = [
   storybookGenerate,
   pageRecover,
   personaCreate,
+  personaCreationFinalized,
   scheduledPurges,
 ];

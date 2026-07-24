@@ -154,6 +154,8 @@ export function createRequestContext() {
     blobs,
     notifications,
     childSafety,
+    liveness,
+    fal,
     subscriptions,
     characters,
     babies,

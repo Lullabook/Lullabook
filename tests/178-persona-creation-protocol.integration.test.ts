@@ -128,6 +128,31 @@ describe("178 — PostgreSQL Persona creation protocol", () => {
     });
   });
 
+  it("records Adult self-consent inside the authenticated reservation transaction without retry orphaning", async () => {
+    await withIsolatedPostgres(async ({ asUser, fixture }) => {
+      const fingerprint = createHash("sha256").update("adult-self-consent-rpc-v1").digest("hex");
+      const first = await asUser<{ id: string; state: string }>(
+        fixture.familyA.authUserId,
+        "select id::text, state from app_prepare_adult_persona_creation($1, $2, $3)",
+        ["Parent", 1, fingerprint],
+      );
+      const second = await asUser<{ id: string; state: string }>(
+        fixture.familyA.authUserId,
+        "select id::text, state from app_prepare_adult_persona_creation($1, $2, $3)",
+        ["Parent", 1, fingerprint],
+      );
+      const receipts = await asUser<{ count: string }>(
+        fixture.familyA.authUserId,
+        "select count(*) from consent_receipts where family_id = $1 and method = 'signed_form'",
+        [fixture.familyA.familyId],
+      );
+
+      expect(first.rows[0]).toMatchObject({ state: "prepared" });
+      expect(second.rows[0]?.id).toBe(first.rows[0]?.id);
+      expect(receipts.rows[0]?.count).toBe("1");
+    });
+  });
+
   it("compensates every creation-scoped blob and aborts the reservation when an upload fails", async () => {
     await withIsolatedPostgres(async ({ asUser, fixture }) => {
       class FailSecondWriteBlobStore extends InMemoryBlobStore {
