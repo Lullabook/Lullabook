@@ -93,6 +93,14 @@ export class ProviderBakeoffBudgetError extends Error {
   }
 }
 
+/** The provider may have accepted spend, but no auditable receipt was returned. */
+export class ProviderBakeoffUnreconciledError extends Error {
+  constructor(operationId: string, cause: unknown) {
+    super(`Provider bake-off stopped after ${operationId}: ${redactProviderError(cause)}`);
+    this.name = "ProviderBakeoffUnreconciledError";
+  }
+}
+
 export interface ProviderBakeoffReport {
   schemaVersion: "176-provider-bakeoff/v1";
   ticket: 176;
@@ -169,6 +177,13 @@ function requiredCredential(env: ProviderBakeoffEnv, name: keyof ProviderBakeoff
     );
   }
   return value;
+}
+
+function redactProviderError(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error))
+    .replace(/(authorization\s*:\s*bearer\s+)[^\s]+/gi, "$1[REDACTED]")
+    .replace(/(secret|token|api[_-]?key)\s*[=:]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .slice(0, 500);
 }
 
 export function createProviderBakeoffConfig(
@@ -303,7 +318,6 @@ async function executeOperation(
   operation: ProviderBakeoffOperation,
   adapters: ProviderBakeoffAdapters
 ): Promise<ProviderEvidence> {
-  const started = Date.now();
   try {
     let result: ProviderEvidence;
     if (operation.provider === "anthropic") {
@@ -324,17 +338,7 @@ async function executeOperation(
     };
   } catch (error) {
     if (error instanceof ProviderBakeoffBudgetError) throw error;
-    return {
-      operationId: operation.operationId,
-      provider: operation.provider,
-      model: operation.model,
-      endpoint: operation.endpoint,
-      status: "failed",
-      costUsd: 0,
-      latencyMs: Math.max(0, Date.now() - started),
-      providerRequestId: `${operation.operationId}:error`,
-      error: error instanceof Error ? error.message : String(error),
-    };
+    throw new ProviderBakeoffUnreconciledError(operation.operationId, error);
   }
 }
 
@@ -359,9 +363,9 @@ export async function runProviderBakeoff({
 
   for (const operation of operationPlan()) {
     const estimate = estimatedCostUsdByOperation[operation.operationId] ?? operation.maxCostUsd;
-    if (!Number.isFinite(estimate) || estimate < 0 || estimate > operation.maxCostUsd) {
+    if (!Number.isFinite(estimate) || estimate <= 0 || estimate > operation.maxCostUsd) {
       throw new ProviderBakeoffConfigError(
-        `Invalid reserved cost for ${operation.operationId}; it must be between $0 and $${operation.maxCostUsd}`
+        `Invalid reserved cost for ${operation.operationId}; it must be greater than $0 and at most $${operation.maxCostUsd}`
       );
     }
     if (reservedUsd + estimate > config.budgetUsd + Number.EPSILON) {
