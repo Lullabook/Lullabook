@@ -268,6 +268,15 @@ function assertEvidence(operation: ProviderBakeoffOperation, result: ProviderEvi
   if (result.operationId !== operation.operationId) {
     throw new Error(`Provider evidence operation mismatch for ${operation.operationId}`);
   }
+  if (result.provider !== operation.provider) {
+    throw new Error(`Provider evidence provider mismatch for ${operation.operationId}`);
+  }
+  if (result.model !== operation.model) {
+    throw new Error(`Provider evidence model mismatch for ${operation.operationId}`);
+  }
+  if (result.endpoint !== operation.endpoint) {
+    throw new Error(`Provider evidence endpoint mismatch for ${operation.operationId}`);
+  }
   if (!Number.isFinite(result.costUsd) || result.costUsd < 0 || result.costUsd > operation.maxCostUsd) {
     throw new ProviderBakeoffBudgetError(
       `Provider evidence for ${operation.operationId} exceeded its reserved max cost`
