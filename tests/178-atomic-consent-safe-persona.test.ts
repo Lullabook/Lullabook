@@ -123,7 +123,7 @@ describe("178 — atomic consent-safe Family persona creation", () => {
       guardianAttestation: true,
     })).rejects.toThrow(/self-consent|selfie/i);
 
-    const created = await ctx.personas.createAtomic({
+    const { persona: adult } = await ctx.personas.createAtomic({
       memberId: member.id,
       kind: "adult",
       displayName: "Subject",
@@ -131,7 +131,9 @@ describe("178 — atomic consent-safe Family persona creation", () => {
       selfie: Buffer.from("subject-selfie"),
       selfConsent: true,
     });
-    expect(created.persona.kind).toBe("adult");
+    expect(ctx.personas.acceptLikeness(adult.id, member.id).likenessConfirmed).toBe(true);
+    expect(() => ctx.personas.acceptLikeness(adult.id, guardian.id)).toThrow(/adult|subject|self/i);
+    expect(ctx.store.personas.size).toBe(1);
   });
 
   it("moderates source photos before persistence or training and rolls back a later failure", async () => {

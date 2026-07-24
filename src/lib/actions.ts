@@ -202,7 +202,11 @@ export async function createPersonaAction(
     // UI checks are only UX. The server rejects an unentitled/non-Guardian
     // request before reading source bytes; the SQL reservation owns the
     // concurrency-safe three-Persona capacity decision.
-    ctx.entitlements.requireCanCreate(member.familyId, member.id);
+    ctx.entitlements.requireCanCreate(
+      member.familyId,
+      member.id,
+      mode === "adult" ? "adult-persona" : "baby-persona",
+    );
     ctx.entitlements.requirePersonaSlot(member.familyId, member.id);
 
     const sourcePhotos = await Promise.all(

@@ -190,12 +190,14 @@ export class EntitlementService {
   }
 
   /**
-   * ADR-0025 — Gate: per-member create-rights. Just Us → only the Guardian may
-   * generate; Our Whole Family → any Member may generate. Resolved server-side
-   * from plan + role, never from client state. The actor `memberId` comes from
-   * the verified Bearer JWT.
+   * Server-side actor authorization. An Adult Member can create only their own
+   * Adult Persona; Baby Personas and Story creation remain Guardian-only in R1.
    */
-  requireCanCreate(familyId: string, actorMemberId: string): void {
+  requireCanCreate(
+    familyId: string,
+    actorMemberId: string,
+    intent: "story" | "adult-persona" | "baby-persona" = "story",
+  ): void {
     const plan = this.getPlan(familyId);
     if (plan === "none") {
       throw new EntitlementError("An active subscription is required", "not_entitled");
@@ -203,22 +205,15 @@ export class EntitlementService {
     const member = this.store.members.get(actorMemberId);
     if (!member) throw new EntitlementError("Member not found", "member_not_found");
 
-    if (plan === "just_us") {
-      // Only the Guardian may create on Just Us.
-      if (member.role !== "guardian") {
-        throw new EntitlementError(
-          "Only the guardian can create stories on the Just Us plan",
-          "create_not_allowed"
-        );
-      }
-    }
-    // Our Whole Family → any Member may create (no further check).
-    // Issue 146 — R1 is solo-only: when multi-family is cut, create-rights
-    // resolve to Guardian-only regardless of plan (a non-Guardian / invited
-    // path cannot generate). Cutting multi-family closes authz, not opens it.
-    if (!isR1MultiFamilyEnabled() && member.role !== "guardian") {
+    if (plan === "just_us" && member.role !== "guardian" && intent !== "adult-persona") {
       throw new EntitlementError(
-        "Only the guardian can create stories in this release",
+        "Only the guardian can create stories or Baby Personas on the Just Us plan",
+        "create_not_allowed"
+      );
+    }
+    if (!isR1MultiFamilyEnabled() && member.role !== "guardian" && intent !== "adult-persona") {
+      throw new EntitlementError(
+        "Only the guardian can create stories or Baby Personas in this release",
         "create_not_allowed"
       );
     }

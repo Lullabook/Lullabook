@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createTestContext, goodPhoto, subscribedGuardian, withActiveSubscription } from "@/test/fixtures";
+import { createTestContext, goodPhoto, subscribedGuardian } from "@/test/fixtures";
 import {
   LEGACY_TIER_COMPATIBILITY,
   R1_PLAN_DEFINITION,
@@ -85,7 +85,7 @@ describe("177 — accepted R1 Family and Just Us plan invariants", () => {
     });
   });
 
-  it("keeps R1 creation Guardian-only and leaves invite/accept routes inert", async () => {
+  it("permits Adult Members to create only their own Adult Persona while Baby creation remains Guardian-only", async () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);
     const sub = ctx.store.getSubscription(guardian.familyId)!;
@@ -94,7 +94,8 @@ describe("177 — accepted R1 Family and Just Us plan invariants", () => {
     const member = ctx.family.acceptInvite(token, "auth-member");
 
     expect(() => ctx.entitlements.requireCanCreate(guardian.familyId, guardian.id)).not.toThrow();
-    expect(() => ctx.entitlements.requireCanCreate(guardian.familyId, member.id)).toThrow(/guardian/i);
+    expect(() => ctx.entitlements.requireCanCreate(guardian.familyId, member.id, "adult-persona")).not.toThrow();
+    expect(() => ctx.entitlements.requireCanCreate(guardian.familyId, member.id, "baby-persona")).toThrow(/guardian/i);
 
     const inviteRoute = await import("@/app/api/family/invite/route");
     const acceptRoute = await import("@/app/api/family/accept/route");
@@ -102,28 +103,26 @@ describe("177 — accepted R1 Family and Just Us plan invariants", () => {
     expect((await acceptRoute.POST(new Request("https://x/api/family/accept", { method: "POST" }))).status).toBe(404);
   });
 
-  it("rejects a non-Guardian Adult Persona before liveness, persistence, or training", async () => {
+  it("allows an Adult Member's self-owned Adult Persona but not Baby creation", async () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);
-    const sub = ctx.store.getSubscription(guardian.familyId)!;
-    ctx.store.saveSubscription({ ...sub, tier: "plus", updatedAt: new Date() });
     const { token } = ctx.family.inviteMember(guardian.id, "member@example.com");
     const member = ctx.family.acceptInvite(token, "auth-member");
-    const livenessCalls = ctx.liveness.verifyCalls;
-    const trainCalls = ctx.fal.trainCalls;
 
-    await expect(
-      ctx.personas.createAdult({
-        memberId: member.id,
-        displayName: "Not authorized",
-        photos: [goodPhoto(70), goodPhoto(71), goodPhoto(72)],
-        selfie: Buffer.from("selfie"),
-      })
-    ).rejects.toThrow(/guardian/i);
+    const adult = await ctx.personas.createAdult({
+      memberId: member.id,
+      displayName: "Self-owned",
+      photos: [goodPhoto(70), goodPhoto(71), goodPhoto(72)],
+      selfie: Buffer.from("selfie"),
+    });
 
-    expect(ctx.liveness.verifyCalls).toBe(livenessCalls);
-    expect(ctx.fal.trainCalls).toBe(trainCalls);
-    expect(ctx.store.personas.size).toBe(0);
+    expect(ctx.personas.acceptLikeness(adult.id, member.id).likenessConfirmed).toBe(true);
+    expect(() => ctx.personas.acceptLikeness(adult.id, guardian.id)).toThrow(/adult|subject|self/i);
+    await expect(ctx.personas.createBaby({
+      memberId: member.id,
+      displayName: "Not allowed",
+      photos: [goodPhoto(73), goodPhoto(74), goodPhoto(75)],
+    })).rejects.toThrow(/guardian/i);
   });
 
   it("releases a reserved Story allowance when the generation watchdog expires", async () => {
