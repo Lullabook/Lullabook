@@ -318,15 +318,18 @@ export class PersonaService {
     memberId: string,
     attempt = 1
   ): Promise<void> {
+    // Inngest wait tooling must run directly. Every paid or mutating effect after
+    // the durable wait is isolated in one deterministic memoized step.
+    const webhook = await this.workflow.waitForEvent<{ status: string; loraWeightKey?: string }>(
+      "fal.training.complete",
+      jobId,
+    );
+    let retryJobId: string | undefined;
     await this.workflow.run([
       {
-        name: "wait-for-training",
-        idempotencyKey: `wait-for-training:${jobId}`,
+        name: "apply-training-result",
+        idempotencyKey: `apply-training-result:${jobId}:${attempt}`,
         run: async () => {
-          const webhook = await this.workflow.waitForEvent<{ status: string; loraWeightKey?: string }>(
-            "fal.training.complete",
-            jobId
-          );
           if (webhook.status === "ready") {
             persona.status = "ready";
             persona.loraWeightKey = webhook.loraWeightKey ?? `lora/${jobId}`;
@@ -336,7 +339,7 @@ export class PersonaService {
             await this.notifications.sendWebPush(memberId, "Persona ready", "Training complete");
           } else if (attempt < 2) {
             const retry = await this.fal.startTraining([]);
-            await this.trainWithRetry(persona, retry.jobId, email, memberId, attempt + 1);
+            retryJobId = retry.jobId;
           } else {
             persona.status = "failed";
             this.store.savePersona(persona);
@@ -345,6 +348,9 @@ export class PersonaService {
         },
       },
     ]);
+    if (retryJobId) {
+      await this.trainWithRetry(persona, retryJobId, email, memberId, attempt + 1);
+    }
   }
 
   private async deleteOwnedDerivatives(persona: Persona): Promise<void> {

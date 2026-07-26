@@ -120,6 +120,7 @@ export class HardDeleteService {
       }
     };
     await listOwned(`photos/${familyId}/`);
+    await listOwned(`persona-creation/${familyId}/`);
     await listOwned(`lora/${familyId}/`);
     await listOwned(`training-inputs/${familyId}/`);
     await listOwned(`books/${familyId}/`);
@@ -171,7 +172,9 @@ export class HardDeleteService {
         babies: babies.length,
         babyPersonBonds: bonds.length,
         consentReceipts: consentReceipts.length,
-        sourcePhotos: [...ownedBlobKeys].filter((key) => key.startsWith("photos/")).length,
+        sourcePhotos: [...ownedBlobKeys].filter(
+          (key) => key.startsWith("photos/") || key.startsWith("persona-creation/"),
+        ).length,
         reviewSamples: [...ownedBlobKeys].filter((key) => key.startsWith("likeness-samples/")).length,
         avatars: [...ownedBlobKeys].filter((key) => key.startsWith("avatars/")).length,
         falTrainingRequests: falRequests.length,

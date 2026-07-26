@@ -31,25 +31,27 @@ couldn't reach as follow-ups; do not paper over them.
   - Mobile lint: `npx eslint mobile` (app source must be 0 errors; the 2 pre-existing
     `mobile/metro.config.js` `require()` errors are known and out of scope).
 - **CONTEXT / invariant docs (read first; your attack targets):**
-  - `CONTEXT/planning/r1-release-scope-and-invariants.md` — R1 scope + hard invariants
+  - `CONTEXT/docs/adr/0028-r1-family-persona-provider-economics.md` — current accepted R1 Family, four-Story allowance, provider, and margin decision
+  - `plans/LUL-100/PLAN.md` — current SAFE/PROV/OWN/FAM/ENT/FAIL/LIKE/CTX/IMG/COST/RLS/DEL/EVID/LIVE/ATOM invariants and dependency order
+  - `plans/LUL-100/TICKETS.md` — debugger gates and production-path scope for LUL-101 through LUL-110 and LUL-129/LUL-130
+  - `CONTEXT/planning/r1-release-scope-and-invariants.md` — retained release/security invariants where not superseded by ADR-0028
+  - `CONTEXT/planning/r1-simplify-test-logging-invariants.md` — inert cuts, deterministic verification, and privacy-safe observability
   - `CONTEXT/planning/prd-v15-ui-native-polish.md` — native-polish invariants
   - `.claude/skills/lullabook-design/SKILL.md` + `REFERENCE.md` — Maya's World canon
   - `.claude/skills/lullabook-design-check/SKILL.md` + `REFERENCE.md` — the drift linter
   - `mobile/constants/theme.ts` — canonical C/F/R tokens
   - Newest handoff under `CONTEXT/handoffs/`
 - **Hard invariants to verify in code (not by grep alone):**
-  1. **No raw uploaded child photo is ever rendered** — a person's likeness shows only
-     via LoRA-generated roster avatars (`RosterAvatar`, `avatarUrl(avatarKey)`,
-     `illustrationSource`). Trace every `<Image>` source in the diff.
-  2. **R1-cut features stay inert** — audio/multi-family/non-US/share-links/story-caps
-     have server gates and **no reachable UI** (the `isR1*Enabled()` flags in
-     `mobile/lib/r1-flags.ts`; guards asserted by `tests/149`).
-  3. **Reader page-turn ≤100ms** (no `.springify()` on the page transition — it ignores
-     `.duration()`), **cold start <3s**.
-  4. **Design canon** — no raw hexes outside `theme.ts`, no gray/black shadows, radii
-     ≥12 (pills 999), Baloo 2 / Nunito only, emoji icons (no SVG/SF Symbols).
-  5. **No fabricated data/prices/dates** in copy; billing truth is server entitlement
-     only. Hard-delete stays reachable and clearly worded.
+  1. **Safety and atomic Persona creation** — moderation and valid subject-linked consent precede persistence/training; prepare/upload/finalize/outbox is crash-safe, Family-scoped, capacity-safe, and retry-idempotent.
+  2. **Provider authenticity and ownership** — raw fal callbacks are signed, fresh, parseable, replay-safe, and durably claimed once; provider outputs become validated Family-owned keys.
+  3. **Current R1 Family entitlement** — one creating Guardian, no invitations, up to three Adult/Baby Personas, up to three starring Personas, and four completed exactly 12-Page Storybooks per monthly reset. Story text failure releases allowance; Page repair does not charge again.
+  4. **Durable recovery and context** — Likeness accept/retrain, waiting Brief claims, bounded Story Context provenance, Page repair, and Hard-delete survive restart without duplicate spend or orphaned artifacts.
+  5. **Paid-boundary control** — every text/image/training/moderation/storage/queue/retry/repair boundary authorizes before calling, records terminal cost, persists red kill switches, and enforces the approximately 70% P95/full-cap margin floor.
+  6. **Evidence and privacy** — fake IDs/costs never become release evidence; raw child photos are write-only and never enter Story Context or rendered UI; logs redact credentials, media, PII, consent, and auth data.
+  7. **Isolation and deletion** — authenticated Family A cannot access Family B across every added table; Hard-delete inventories and removes all Family rows, blobs, provider artifacts, and context records idempotently across restart.
+  8. **R1-cut features stay inert** — audio, invitations/collaboration, non-US markets, and share links have server gates and no reachable UI. The four-Story allowance is active R1 behavior, not a cut feature.
+  9. **Performance and design canon** — reader page-turn ≤100ms, cold start <3s; no raw hexes outside `theme.ts`, no gray/black shadows, radii ≥12 (pills 999), Baloo 2 / Nunito only, emoji icons.
+  10. **Live gates remain blocked** — never run the paid `$10` provider bake-off or `$2` real-provider smoke without fresh user authorization naming fixtures and budget; deterministic gates may only report readiness.
 - **Issue format + tracker:** this project's /part1 issue template (see
   `CONTEXT/issues/*.md` for shape). Record each framed bug in the run's scratchpad
   audit log (and the handoff) rather than opening GitHub issues — this is a review

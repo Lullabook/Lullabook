@@ -220,33 +220,75 @@ describe("InngestWorkflowAdapter", () => {
     expect(committed).toHaveLength(2);
   });
 
-  it("never wraps wait-* steps in step.run (nested step tools are forbidden)", async () => {
+  it("keeps persistence inside the memoized step so a commit crash replays the work", async () => {
     const adapter = new InngestWorkflowAdapter();
+    const completed = new Set<string>();
+    const step: DurableStepTools = {
+      async run<T>(id: string, fn: () => Promise<T>): Promise<T> {
+        if (completed.has(id)) return undefined as T;
+        const result = await fn();
+        completed.add(id);
+        return result;
+      },
+      async waitForEvent() {
+        return { data: {} };
+      },
+    };
+    let effects = 0;
+    let commits = 0;
+    adapter.onStepCommitted = async () => {
+      commits += 1;
+      if (commits === 1) throw new Error("simulated commit crash");
+    };
+    const run = () => adapter.runWithStepContext(step, () => adapter.run([{
+      name: "persona-finalized",
+      idempotencyKey: "event-1/finalized",
+      run: async () => { effects += 1; },
+    }]));
+
+    await expect(run()).rejects.toThrow(/commit crash/i);
+    expect(completed.has("event-1/finalized")).toBe(false);
+    await expect(run()).resolves.toBeUndefined();
+    expect(effects).toBe(2);
+    expect(commits).toBe(2);
+    expect(completed.has("event-1/finalized")).toBe(true);
+  });
+
+  it("waits directly and memoizes the post-wait effect once across replay", async () => {
+    const adapter = new InngestWorkflowAdapter();
+    const completed = new Set<string>();
     const wrapped: string[] = [];
     const step: DurableStepTools = {
-      async run(id, fn) {
+      async run<T>(id: string, fn: () => Promise<T>): Promise<T> {
         wrapped.push(id);
-        return fn();
+        if (completed.has(id)) return undefined as T;
+        const result = await fn();
+        completed.add(id);
+        return result;
       },
       async waitForEvent() {
         return { data: { status: "ready" } };
       },
     };
 
-    let waited = false;
-    await adapter.runWithStepContext(step, () =>
-      adapter.run([
-        {
-          name: "wait-for-training",
-          idempotencyKey: "wait-for-training:job-1",
-          run: async () => {
-            waited = true;
-          },
-        },
-      ])
-    );
+    adapter.onStepCommitted = async () => undefined;
+    let effects = 0;
+    const execute = () => adapter.runWithStepContext(step, async () => {
+      await adapter.waitForEvent<{ status: string }>("fal.training.complete", "job-1");
+      await adapter.run([{
+        name: "apply-training-result",
+        idempotencyKey: "apply-training-result:job-1:1",
+        run: async () => { effects += 1; },
+      }]);
+    });
 
-    expect(waited).toBe(true);
-    expect(wrapped).toHaveLength(0);
+    await execute();
+    await execute();
+
+    expect(effects).toBe(1);
+    expect(wrapped).toEqual([
+      "apply-training-result:job-1:1",
+      "apply-training-result:job-1:1",
+    ]);
   });
 });

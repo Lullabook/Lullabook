@@ -1,11 +1,16 @@
-import { EVENTS, inngest, type DurableStepTools } from "@/adapters/inngest";
-import type { PersonaCreatePayload, WorkflowJobPayload } from "@/adapters/types";
+import { EVENTS, InngestWorkflowAdapter, inngest, type DurableStepTools } from "@/adapters/inngest";
+import type { BlobStore, PersonaCreatePayload, WorkflowAdapter, WorkflowJobPayload } from "@/adapters/types";
 import {
   PersonaCreationOutboxConsumer,
+  PersonaCreationOutboxDispatcher,
+  PersonaCreationRecovery,
   SupabasePersonaCreationRepository,
+  SupabasePersonaCreationWorkerRepository,
+  type PersonaCreationWorkerRepository,
 } from "@/db/persona-creation-protocol";
 import { createServiceClient } from "@/lib/supabase";
 import { createRequestContext } from "@/lib/context";
+import { createBlobStore } from "@/lib/create-blob-store";
 import { runPersonaCreationFinalizedBody } from "@/workflows/persona-creation-finalized-body";
 import { runPersonaCreateBody } from "@/workflows/persona-create-body";
 
@@ -132,31 +137,54 @@ export const personaCreationFinalized = inngest.createFunction(
       throw new Error("Unexpected Persona creation event payload");
     }
     const ctx = createRequestContext();
-    await ctx.store.hydrateFamily(payload.familyId);
     ctx.workflow.onStepCommitted = () => ctx.store.sync();
-    const repository = new SupabasePersonaCreationRepository(createServiceClient());
+    const serviceClient = createServiceClient();
+    const repository = new SupabasePersonaCreationRepository(serviceClient, serviceClient);
     const consumer = new PersonaCreationOutboxConsumer(repository, ctx.workflow, async (creation) => {
-      const { data, error } = await createServiceClient()
-        .from("persona_creation_reservations")
-        .select("photo_keys")
-        .eq("id", creation.id)
-        .maybeSingle();
-      if (error) throw new Error(`Read Persona creation source manifest failed: ${error.message}`);
-      const photoKeys = data?.photo_keys;
-      if (!Array.isArray(photoKeys) || !photoKeys.every((key): key is string => typeof key === "string")) {
-        throw new Error("Finalized Persona creation source manifest is invalid");
-      }
-      await runPersonaCreationFinalizedBody(ctx, payload, photoKeys);
-      await ctx.store.sync();
+      // The event carries only a lookup key at this trust boundary. Family,
+      // Persona, reservation, and source keys all come from the committed row.
+      await ctx.store.hydrateFamily(creation.familyId);
+      await runPersonaCreationFinalizedBody(ctx, {
+        eventId: creation.outboxEventId,
+        familyId: creation.familyId,
+        personaId: creation.personaId,
+        reservationId: creation.id,
+      }, creation.photoKeys);
     });
     await ctx.workflow.runWithStepContext(step as DurableStepTools, () =>
-      consumer.consume({
-        id: payload.eventId,
-        familyId: payload.familyId,
-        personaId: payload.personaId,
-        reservationId: payload.reservationId,
-      }),
+      consumer.consume(payload.eventId),
     );
+  },
+);
+
+export async function runPersonaCreationRecoveryWorker(input: {
+  repository: PersonaCreationWorkerRepository;
+  blobs: BlobStore;
+  workflow: WorkflowAdapter;
+  limit?: number;
+}): Promise<{ cleaned: number; dispatched: number }> {
+  const limit = input.limit ?? 25;
+  const cleaned = await new PersonaCreationRecovery(input.repository, input.blobs).reconcile(limit);
+  const dispatcher = new PersonaCreationOutboxDispatcher(input.repository, input.workflow);
+  let dispatched = 0;
+  while (dispatched < limit && await dispatcher.dispatchOne(60)) dispatched += 1;
+  return { cleaned, dispatched };
+}
+
+export const personaCreationRecovery = inngest.createFunction(
+  {
+    id: "persona-creation-recovery",
+    retries: 3,
+    triggers: { cron: "*/2 * * * *" },
+  },
+  async () => {
+    const repository = new SupabasePersonaCreationWorkerRepository(createServiceClient());
+    return runPersonaCreationRecoveryWorker({
+      repository,
+      blobs: createBlobStore(),
+      workflow: new InngestWorkflowAdapter(),
+      limit: 25,
+    });
   },
 );
 
@@ -183,5 +211,6 @@ export const workflowFunctions = [
   pageRecover,
   personaCreate,
   personaCreationFinalized,
+  personaCreationRecovery,
   scheduledPurges,
 ];

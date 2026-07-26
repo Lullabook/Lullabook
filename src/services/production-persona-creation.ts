@@ -13,6 +13,14 @@ export interface ProductionPersonaCreationInput extends PersonaCreationReservati
   selfie?: Buffer;
 }
 
+export const MAX_PERSONA_PHOTOS = 20;
+
+export function assertPersonaPhotoCount(photoCount: number): void {
+  if (!Number.isInteger(photoCount) || photoCount < 1 || photoCount > MAX_PERSONA_PHOTOS) {
+    throw new Error(`Photo count must be between 1 and ${MAX_PERSONA_PHOTOS}`);
+  }
+}
+
 /** Production use-case: consent/capacity is reserved by PostgreSQL only after bytes pass moderation. */
 export class ProductionPersonaCreationService {
   constructor(
@@ -22,6 +30,8 @@ export class ProductionPersonaCreationService {
   ) {}
 
   async create(input: ProductionPersonaCreationInput): Promise<FinalizedPersonaCreation> {
+    assertPersonaPhotoCount(input.photoCount);
+    assertPersonaPhotoCount(input.photos.length);
     if (input.photos.length !== input.photoCount) {
       throw new Error("Persona photo count does not match the request manifest");
     }
