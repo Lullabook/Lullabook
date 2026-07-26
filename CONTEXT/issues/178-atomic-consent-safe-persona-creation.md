@@ -2,6 +2,13 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — PRODUCTION PROTOCOL + ADULT SELF-CONSENT PUSHED.**
+> The production native flow now uses the atomic protocol via Supabase RPC:
+> source-photo moderation before persistence, Adult liveness, durable outbox
+> dispatch, finalized-event LoRA training. RLS tested against real PostgreSQL.
+> Adult self-consent is durable (SQL `consent_receipts`). Commits `f1cfac1`,
+> `2d6c826`. Full suite 844/844 passes.
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.

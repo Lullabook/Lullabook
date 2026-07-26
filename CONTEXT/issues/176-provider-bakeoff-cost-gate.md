@@ -2,6 +2,14 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — DRY GATE HARDENED + PUSHED.** Dry-run gate, cost
+> reservation, and evidence validation are committed (`f97a2d6`, `7b02b98`):
+> unreconciled provider outcomes now hard-stop instead of forging zero-cost
+> failure evidence, positive spend is reserved before adapter submission,
+> provider error text is redacted before evidence handling. Focused contract
+> suite 13/13 passes. Live canary remains blocked on `FAL_API_KEY` /
+> `ANTHROPIC_API_KEY` / `LIVE_PROVIDER_RUN_APPROVED` — no spend authorized.
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.

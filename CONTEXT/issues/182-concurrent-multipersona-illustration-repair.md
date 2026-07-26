@@ -2,6 +2,15 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — TESTS 7/7 PASS; MULTI-PERSONA FANOUT + REPAIR
+> IMPLEMENTED.** 1-3 Persona LoRAs in one generation request per Page. 12 Page
+> jobs fan out with bounded concurrency (max 4 in flight). Same Style Bible,
+> deterministic seed, model version on every Page. Failed Page = visible
+> re-rollable hole. Bounded repair (Nano Banana 2 Edit -> Pro). Production guard
+> rejects dev placeholder fallback. **Debugger scope:** multi-Persona canary
+> (`useReferenceModelForMulti`) uses fabricated URLs; real fal adapter drops
+> `loras` in repair path.
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.

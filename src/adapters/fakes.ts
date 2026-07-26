@@ -387,6 +387,7 @@ export class FakeStripe implements StripeAdapter {
 
 export class FakeWorkflow implements WorkflowAdapter {
   public steps: string[] = [];
+  public waitForEventCalls: Array<{ eventName: string; matchId: string }> = [];
   public enqueuedPayloads: WorkflowJobPayload[] = [];
   public personaCreatePayloads: PersonaCreatePayload[] = [];
   /** When true, drain runs each enqueued job twice to simulate at-least-once delivery. */
@@ -438,6 +439,7 @@ export class FakeWorkflow implements WorkflowAdapter {
   private events = new Map<string, unknown>();
 
   async waitForEvent<T>(eventName: string, matchId: string): Promise<T> {
+    this.waitForEventCalls.push({ eventName, matchId });
     const key = `${eventName}:${matchId}`;
     if (!this.events.has(key)) {
       this.events.set(key, {

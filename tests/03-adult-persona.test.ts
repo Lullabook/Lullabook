@@ -47,7 +47,10 @@ describe("03 — adult persona creation", () => {
     });
 
     expect(persona.status).toBe("ready");
-    expect(ctx.workflow.steps).toContain("wait-for-training");
+    expect(ctx.workflow.waitForEventCalls).toEqual([
+      { eventName: "fal.training.complete", matchId: "job-1" },
+    ]);
+    expect(ctx.workflow.steps).toEqual(["apply-training-result"]);
   });
 
   it("shows likeness confirmation samples on ready", async () => {

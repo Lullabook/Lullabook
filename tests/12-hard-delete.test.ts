@@ -15,6 +15,9 @@ describe("12 — hard-delete & cancellation purge", () => {
     });
     await ctx.blobs.put(`lora/${guardian.familyId}/weights.bin`, Buffer.from("lora"));
     await ctx.blobs.put(`books/${guardian.familyId}/${baby.id}.png`, Buffer.from("book"));
+    const protocolSourceKey =
+      `persona-creation/${guardian.familyId}/reservation-1/attempts/attempt-1/photos/0.jpg`;
+    await ctx.blobs.put(protocolSourceKey, Buffer.from("raw-source-photo"));
 
     // Populate maps that were historically left behind
     ctx.store.textStories.set("ts-1", { familyId: guardian.familyId } as any);
@@ -23,10 +26,15 @@ describe("12 — hard-delete & cancellation purge", () => {
     ctx.store.pushSubscriptions.set("ps-1", { memberId: guardian.id } as any);
     ctx.store.emailPlusVpcRequests.set("ep-1", { familyId: guardian.familyId } as any);
 
-    await ctx.hardDelete.hardDelete(guardian.id);
+    const report = await ctx.hardDelete.hardDelete(guardian.id);
 
     expect(ctx.store.familyDataExists(guardian.familyId)).toBe(false);
     expect(ctx.blobs.size()).toBe(0);
+    expect(report.inventory.sourcePhotos).toBeGreaterThanOrEqual(4);
+    expect(report.deleted.blobKeys).toContain(protocolSourceKey);
+    await expect(ctx.hardDelete.hardDelete(guardian.id)).resolves.toMatchObject({
+      deleted: { blobKeys: [] },
+    });
 
     // Verify everything was cleared
     expect(ctx.store.textStories.size).toBe(0);

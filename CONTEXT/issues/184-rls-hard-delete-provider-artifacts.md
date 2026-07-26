@@ -2,6 +2,15 @@
 
 Triage: ready-for-agent
 
+> **Coder update 2026-07-24 — TESTS 4/4 PASS; MIGRATION + INVENTORY DELETE
+> IMPLEMENTED.** Migration 013 enables RLS on all Family-owned tables. Cross-Family
+> read/update/delete blocked. Inventory-based Hard-delete erases DB + blob +
+> provider artifacts idempotently. Provider deletion limitations reported
+> explicitly. Cost ledger retains redacted audit records. **Debugger scope:**
+> Supabase store doesn't hydrate provider-training/webhook maps in production;
+> Hard-delete idempotency is process-local; moderation audit rows survive
+> deletion; SQL cost-ledger `ON DELETE CASCADE` contradicts retention policy.
+
 ## Parent
 
 PRD v21 — GitHub issue #149; `CONTEXT/planning/prd-v21-r1-family-persona-story-economics.md`.

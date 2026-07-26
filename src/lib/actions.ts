@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Brief, TextStoryBrief, TraitQuestionnaire } from "@/domain/types";
+import type { BlobStore, LivenessAdapter, WorkflowAdapter } from "@/adapters/types";
+import type { ChildSafetyService } from "@/services/child-safety";
 import type { MomentType } from "@/domain/daily-types";
 import { castLimitError, castSlotInfo } from "@/lib/cast-limits";
 import { requireAuthedContext } from "@/lib/auth";
@@ -12,10 +14,15 @@ import {
   PersonaCreationOutboxDispatcher,
   PersonaCreationProtocol,
   SupabasePersonaCreationRepository,
+  type FinalizedPersonaCreation,
+  type PersonaCreationRepository,
+  type PersonaCreationWorkerRepository,
 } from "@/db/persona-creation-protocol";
 import {
   ProductionPersonaCreationService,
+  assertPersonaPhotoCount,
   personaCreationRequestFingerprint,
+  type ProductionPersonaCreationInput,
 } from "@/services/production-persona-creation";
 
 export type ActionResult<T = undefined> =
@@ -157,6 +164,23 @@ async function stagePersonaUploads(
   return { photoKeys, selfieKey };
 }
 
+export async function runPersonaCreationActionBoundary(input: {
+  creation: ProductionPersonaCreationInput;
+  repository: PersonaCreationRepository;
+  worker: PersonaCreationWorkerRepository;
+  blobs: BlobStore;
+  childSafety: ChildSafetyService;
+  liveness: LivenessAdapter;
+  workflow: WorkflowAdapter;
+}): Promise<FinalizedPersonaCreation> {
+  const protocol = new PersonaCreationProtocol(input.repository, input.blobs);
+  const creation = new ProductionPersonaCreationService(input.childSafety, input.liveness, protocol);
+  const finalized = await creation.create(input.creation);
+  await new PersonaCreationOutboxDispatcher(input.worker, input.workflow)
+    .dispatchReservation(finalized.id);
+  return finalized;
+}
+
 /**
  * The authenticated request owns source bytes only in memory. PostgreSQL
  * reserves immutable family-scoped keys after source checks, then finalizes
@@ -187,6 +211,7 @@ export async function createPersonaAction(
     const photos = formData.getAll("photos").filter((f): f is File => f instanceof File);
     const selfie = formData.get("selfie");
     if (photos.length < 3) return { ok: false, error: "At least 3 photos required" };
+    assertPersonaPhotoCount(photos.length);
     if (mode === "adult") {
       if (formData.get("selfConsent") !== "true") {
         return { ok: false, error: "Adult Personas require the subject's consent" };
@@ -228,13 +253,18 @@ export async function createPersonaAction(
     };
     const authClient = await createAuthClient();
     const repository = new SupabasePersonaCreationRepository(authClient);
-    const protocol = new PersonaCreationProtocol(repository, ctx.blobs);
-    const creation = new ProductionPersonaCreationService(ctx.childSafety, ctx.liveness, protocol);
-    const finalized = await creation.create({
-      ...creationInput,
-      requestFingerprint: personaCreationRequestFingerprint(creationInput),
+    await runPersonaCreationActionBoundary({
+      creation: {
+        ...creationInput,
+        requestFingerprint: personaCreationRequestFingerprint(creationInput),
+      },
+      repository,
+      worker: repository,
+      blobs: ctx.blobs,
+      childSafety: ctx.childSafety,
+      liveness: ctx.liveness,
+      workflow: ctx.workflow,
     });
-    await new PersonaCreationOutboxDispatcher(repository, ctx.workflow).dispatchReservation(finalized.id);
     revalidatePath("/personas");
     revalidatePath("/family");
     return { ok: true, data: undefined };

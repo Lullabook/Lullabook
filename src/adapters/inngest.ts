@@ -25,6 +25,18 @@ export const EVENTS = {
   falTrainingComplete: "lullabook/fal.training.complete",
 } as const;
 
+/** Build the durable event envelope; Persona outbox UUIDs are Inngest dedupe IDs. */
+export function workflowEventFromPayload(payload: WorkflowJobPayload) {
+  const name = payload.type === "storybook-generate"
+    ? EVENTS.storybookGenerateRequested
+    : payload.type === "page-recover"
+      ? EVENTS.pageRecoverRequested
+      : EVENTS.personaCreationFinalized;
+  return payload.type === "persona-creation-finalized"
+    ? { id: payload.eventId, name, data: payload }
+    : { name, data: payload };
+}
+
 /**
  * The subset of Inngest's step tools the adapter needs — kept structural so
  * the adapter does not chase the SDK's generics across versions.
@@ -73,14 +85,9 @@ export class InngestWorkflowAdapter implements WorkflowAdapter {
         `Cannot enqueue "${name}" durably without a serializable payload`
       );
     }
-    const eventName = payload.type === "storybook-generate"
-      ? EVENTS.storybookGenerateRequested
-      : payload.type === "page-recover"
-        ? EVENTS.pageRecoverRequested
-        : EVENTS.personaCreationFinalized;
     // enqueue() is synchronous at the port; the send promise is collected and
     // awaited by the request handler via flush() before it responds.
-    this.pendingSends.push(inngest.send({ name: eventName, data: payload }));
+    this.pendingSends.push(inngest.send(workflowEventFromPayload(payload)));
   }
 
   /** Await all event sends issued by enqueue() in this request. */
@@ -98,19 +105,12 @@ export class InngestWorkflowAdapter implements WorkflowAdapter {
         await s.run();
         continue;
       }
-      if (s.name.startsWith("wait-")) {
-        // A step whose body parks on waitForEvent cannot be wrapped in
-        // step.run (Inngest forbids nested step tooling). Its durability
-        // comes from the inner step.waitForEvent; the post-wait mutations
-        // are idempotent upserts and may re-run on replay.
-        await s.run();
-        if (this.onStepCommitted) await this.onStepCommitted();
-        continue;
-      }
       await step.run(s.idempotencyKey ?? s.name, async () => {
         await s.run();
+        // Persist inside the memoized unit. If persistence crashes, Inngest
+        // must replay the idempotent step instead of memoizing an undurable write.
+        if (this.onStepCommitted) await this.onStepCommitted();
       });
-      if (this.onStepCommitted) await this.onStepCommitted();
     }
   }
 
