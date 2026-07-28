@@ -10,6 +10,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { R1_PLAN_DEFINITION } from "@/domain/plan";
 import {
   FakePurchaseController,
   RevenueCatPurchaseController,
@@ -19,14 +20,18 @@ import {
   type StartTrialWire,
 } from "../mobile/lib/purchase-controller";
 
-const optimisticEntitlement: EntitlementSnapshot = {
-  tier: "our_whole_family", // deliberately wrong — must never be trusted
-  capabilities: { canNarrate: true, canVideo: true, canCustomStyle: true },
+const optimisticEntitlement = {
+  plan: {
+    ...R1_PLAN_DEFINITION,
+    limits: { ...R1_PLAN_DEFINITION.limits, storybooksPerMonth: 999 },
+  },
 };
 
 const serverEntitlement: EntitlementSnapshot = {
-  tier: "just_us",
-  capabilities: { canNarrate: true, canVideo: false, canCustomStyle: false },
+  plan: R1_PLAN_DEFINITION,
+  usage: {
+    storybooks: { count: 1, remaining: 3, resetDate: "2026-08-01" },
+  },
 };
 
 const wire: StartTrialWire = {
@@ -62,7 +67,9 @@ describe("FakePurchaseController (issue 170)", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     expect(result.entitlement).toEqual(serverEntitlement);
-    expect(result.entitlement.tier).not.toBe(optimisticEntitlement.tier);
+    expect(result.entitlement.plan.limits.storybooksPerMonth).not.toBe(
+      optimisticEntitlement.plan.limits.storybooksPerMonth
+    );
     expect(calls).toEqual(["post", "refetch"]); // refetch happens after the POST
     expect(result.isActive).toBe(true);
     expect(result.trialEndsAt).toBe(wire.trialEndsAt);

@@ -1,46 +1,18 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { BrandGradient, Screen, Eyebrow, Lead, AnimatedToggle, PrimaryButton } from "@/components/maya-ui";
+import { Screen, Eyebrow, Lead, AnimatedToggle, PrimaryButton } from "@/components/maya-ui";
 import { isR1AudioEnabled, isR1MultiFamilyEnabled } from "@/lib/r1-flags";
 import { C, F, R } from "@/constants/theme";
 import { fetchPaywallConfig, type PaywallPlanResponse } from "@/lib/api";
 import { getPurchaseController } from "@/lib/purchases";
+import { getR1PlanFeatureLabels, R1_FALLBACK_PLAN } from "@domain/plan";
 
-/** ADR-0025 / issue 129 — plan shape (shared with web paywall-config). */
-interface PlanInfo {
-  id: string;
-  label: string;
-  monthlyPrice: number;
-  annualPrice: number;
-  storyCap: number;
-  memberLoginCap: number;
-  canNarrate: boolean;
-  canVideo: boolean;
-  canCustomStyle: boolean;
-  isRecommended?: boolean;
-  valueProp: string;
-}
+type PlanInfo = PaywallPlanResponse;
 
-// Issue 129: the visible plans come from the server (/api/paywall-config), so
-// the R1 one-plan collapse (R1_ONE_PLAN) is server-authoritative — mobile never
-// hardcodes the premium tier. A static fallback keeps the screen renderable if
-// the fetch fails before auth. Values mirror the server-authoritative
-// R1_PLAN_DEFINITION in src/domain/plan.ts (ADR-0028) — update both together.
-const FALLBACK_PLANS: PlanInfo[] = [
-  {
-    id: "just_us",
-    label: "Just Us",
-    monthlyPrice: 14.99,
-    annualPrice: 119.99,
-    storyCap: 4,
-    memberLoginCap: 1,
-    canNarrate: false,
-    canVideo: false,
-    canCustomStyle: false,
-    valueProp: "One creating parent, illustrated stories starring your family.",
-  },
-];
+// The offline fallback imports the shared domain contract; no mobile copy of
+// prices, limits, or capabilities can drift from the server definition.
+const FALLBACK_PLANS: PlanInfo[] = [R1_FALLBACK_PLAN];
 
 function PlanCard({
   plan,
@@ -55,7 +27,7 @@ function PlanCard({
   trialBusy: boolean;
   trialError: string | null;
 }) {
-  const price = billing === "annual" ? plan.annualPrice : plan.monthlyPrice;
+  const price = billing === "annual" ? plan.pricing.annual : plan.pricing.monthly;
   const priceLabel = billing === "annual" ? `$${price}/yr` : `$${price}/mo`;
   // ADR-0028: the accepted R1 plan markets its real caps — Storybooks per
   // monthly reset, trained Personas, and starring Personas per Storybook —
@@ -63,28 +35,21 @@ function PlanCard({
   const features = [
     "Illustrated storybooks starring your baby",
     "Your family, drawn as themselves",
-    `${plan.storyCap} Storybooks per month`,
-    "3 trained Personas — any mix of babies and adults",
-    "Up to 3 starring Personas per Storybook",
+    ...getR1PlanFeatureLabels(plan),
     "PDF keepsake export",
     ...(isR1MultiFamilyEnabled()
-      ? [plan.memberLoginCap === Infinity ? "Whole family" : `${plan.memberLoginCap} logins`]
+      ? [plan.limits.memberLogins === Infinity ? "Whole family" : `${plan.limits.memberLogins} logins`]
       : []),
     // Narration is double-gated: the server plan filter withholds it in R1,
     // and the audio cut flag keeps it off even if that filter changes. Video
     // has no mobile flag — it stays server-gated (no R1 plan sets canVideo).
-    plan.canNarrate && isR1AudioEnabled() ? "Voice messages + narration" : null,
-    plan.canVideo ? "Video pages" : null,
-    plan.canCustomStyle ? "Custom art style" : null,
+    plan.capabilities.canNarrate && isR1AudioEnabled() ? "Voice messages + narration" : null,
+    plan.capabilities.canVideo ? "Video pages" : null,
+    plan.capabilities.canCustomStyle ? "Custom art style" : null,
   ].filter(Boolean);
 
   const cardBody = (
     <>
-      {plan.isRecommended ? (
-        <View style={st.badgeRec}>
-          <Text style={st.badgeRecText}>✨ Recommended</Text>
-        </View>
-      ) : null}
       <Text style={st.tierLabel}>{plan.label}</Text>
       <Text style={st.tierValue}>{plan.valueProp}</Text>
       <View style={st.priceRow}>
@@ -115,38 +80,7 @@ function PlanCard({
     </>
   );
 
-  // Issue: recommended tier gets the same soft purple-tinted gradient wash +
-  // colored glow as the web tier card (paywall-ui.tsx `recommendedStyle`),
-  // falling back to a flat tint if expo-linear-gradient is unavailable.
-  if (plan.isRecommended) {
-    return (
-      <BrandGradient
-        colors={["#FFFDF9", "#F6F0FF"]}
-        fallback={C.primaryBg}
-        style={[st.tierCard, st.tierCardRecommended]}
-      >
-        {cardBody}
-      </BrandGradient>
-    );
-  }
-
   return <View style={st.tierCard}>{cardBody}</View>;
-}
-
-function toPlanInfo(p: PaywallPlanResponse): PlanInfo {
-  return {
-    id: p.id,
-    label: p.label,
-    monthlyPrice: p.monthlyPrice,
-    annualPrice: p.annualPrice,
-    storyCap: p.storyCap,
-    memberLoginCap: p.memberLoginCap,
-    canNarrate: p.canNarrate,
-    canVideo: p.canVideo,
-    canCustomStyle: p.canCustomStyle,
-    isRecommended: p.isRecommended,
-    valueProp: p.valueProp,
-  };
 }
 
 export default function PaywallScreen() {
@@ -178,7 +112,7 @@ export default function PaywallScreen() {
     let cancelled = false;
     fetchPaywallConfig()
       .then((cfg) => {
-        if (!cancelled) setPlans(cfg.plans.map(toPlanInfo));
+        if (!cancelled) setPlans(cfg.plans);
       })
       .catch(() => {
         // Keep the fallback — never a red-screen over a config fetch.
@@ -213,7 +147,7 @@ export default function PaywallScreen() {
       <View>
         {plans.map((plan) => (
           <PlanCard
-            key={plan.id}
+            key={plan.plan}
             plan={plan}
             billing={billing}
             onStartTrial={startTrial}
@@ -237,30 +171,6 @@ const st = StyleSheet.create({
     borderRadius: R.card,
     padding: 20,
     marginBottom: 12,
-  },
-  // Matches web's `recommendedStyle` glow (paywall-ui.tsx): 2px primary
-  // border + a purple-tinted shadow instead of the plain card shadow.
-  tierCardRecommended: {
-    borderColor: C.primary,
-    borderWidth: 2,
-    shadowColor: "#6A55C9",
-    shadowOpacity: 0.18,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 10 },
-  },
-  badgeRec: {
-    alignSelf: "flex-start",
-    backgroundColor: C.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: R.pill,
-    marginBottom: 8,
-  },
-  badgeRecText: {
-    fontFamily: F.bodyBold,
-    fontSize: 11,
-    color: C.surface,
-    letterSpacing: 0.5,
   },
   tierLabel: { fontFamily: F.display, fontSize: 22, color: C.text },
   tierValue: { fontFamily: F.body, fontSize: 14, color: C.muted, marginTop: 4, lineHeight: 20 },

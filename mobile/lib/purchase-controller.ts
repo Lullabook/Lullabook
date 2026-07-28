@@ -16,22 +16,22 @@
  */
 
 export interface EntitlementSnapshot {
-  tier: string;
-  capabilities: {
-    canNarrate: boolean;
-    canVideo: boolean;
-    canCustomStyle: boolean;
+  plan: import("../../src/domain/plan").R1PlanContract;
+  usage: {
+    storybooks: {
+      count: number;
+      remaining: number;
+      resetDate: string;
+    };
   };
-  // GET /api/entitlement also carries storyCap/memberCap/credits — passed
-  // through untouched; the server is the only authority on their meaning.
-  [key: string]: unknown;
 }
 
 /** Wire shape of POST /api/billing/start-trial (see src/app/api/billing/start-trial/route.ts). */
 export interface StartTrialWire {
   isActive: boolean;
   trialEndsAt: string | null;
-  entitlement: EntitlementSnapshot;
+  /** Ignored by the client; only the post-purchase entitlement refetch is trusted. */
+  entitlement: unknown;
 }
 
 export type StartTrialResult =

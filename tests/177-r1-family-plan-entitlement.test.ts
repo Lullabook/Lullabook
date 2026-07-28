@@ -85,7 +85,7 @@ describe("177 — accepted R1 Family and Just Us plan invariants", () => {
     });
   });
 
-  it("permits Adult Members to create only their own Adult Persona while Baby creation remains Guardian-only", async () => {
+  it("requires the Guardian for both Adult and Baby Persona creation", async () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);
     const sub = ctx.store.getSubscription(guardian.familyId)!;
@@ -94,7 +94,7 @@ describe("177 — accepted R1 Family and Just Us plan invariants", () => {
     const member = ctx.family.acceptInvite(token, "auth-member");
 
     expect(() => ctx.entitlements.requireCanCreate(guardian.familyId, guardian.id)).not.toThrow();
-    expect(() => ctx.entitlements.requireCanCreate(guardian.familyId, member.id, "adult-persona")).not.toThrow();
+    expect(() => ctx.entitlements.requireCanCreate(guardian.familyId, member.id, "adult-persona")).toThrow(/guardian/i);
     expect(() => ctx.entitlements.requireCanCreate(guardian.familyId, member.id, "baby-persona")).toThrow(/guardian/i);
 
     const inviteRoute = await import("@/app/api/family/invite/route");
@@ -103,21 +103,21 @@ describe("177 — accepted R1 Family and Just Us plan invariants", () => {
     expect((await acceptRoute.POST(new Request("https://x/api/family/accept", { method: "POST" }))).status).toBe(404);
   });
 
-  it("allows an Adult Member's self-owned Adult Persona but not Baby creation", async () => {
+  it("rejects a non-Guardian Adult Persona before persistence or training", async () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);
     const { token } = ctx.family.inviteMember(guardian.id, "member@example.com");
     const member = ctx.family.acceptInvite(token, "auth-member");
 
-    const adult = await ctx.personas.createAdult({
+    const trainCalls = ctx.fal.trainCalls;
+    await expect(ctx.personas.createAdult({
       memberId: member.id,
-      displayName: "Self-owned",
+      displayName: "Not allowed",
       photos: [goodPhoto(70), goodPhoto(71), goodPhoto(72)],
       selfie: Buffer.from("selfie"),
-    });
-
-    expect(ctx.personas.acceptLikeness(adult.id, member.id).likenessConfirmed).toBe(true);
-    expect(() => ctx.personas.acceptLikeness(adult.id, guardian.id)).toThrow(/adult|subject|self/i);
+    })).rejects.toThrow(/guardian/i);
+    expect(ctx.store.personas.size).toBe(0);
+    expect(ctx.fal.trainCalls).toBe(trainCalls);
     await expect(ctx.personas.createBaby({
       memberId: member.id,
       displayName: "Not allowed",
@@ -171,21 +171,12 @@ describe("177 — accepted R1 Family and Just Us plan invariants", () => {
 
     const entitlementRoute = readFileSync(join(ROOT, "src/app/api/entitlement/route.ts"), "utf8");
     const mobileBilling = readFileSync(join(ROOT, "mobile/app/billing.tsx"), "utf8");
-    expect(entitlementRoute).toContain("R1_PLAN_DEFINITION");
-    expect(entitlementRoute).toContain("starringPersonas");
-    expect(mobileBilling).toContain("14.99");
-    expect(mobileBilling).toContain("119.99");
-    // Story cap renders from the server-provided plan; the offline fallback
-    // must mirror the accepted 4-Storybook cap.
-    expect(mobileBilling).toContain("Storybooks per month");
-    expect(mobileBilling).toContain("storyCap: 4");
-    expect(mobileBilling).toContain("3 trained Personas");
-    expect(mobileBilling).toContain("3 starring Personas");
-    // Legacy prices must be gone. ("9.99" alone would false-positive as a
-    // substring of the accepted "119.99", so match the legacy tokens exactly.)
-    expect(mobileBilling).not.toContain(" 9.99");
-    expect(mobileBilling).not.toContain(": 9.99");
-    expect(mobileBilling).not.toContain("79.99");
+    expect(entitlementRoute).toContain("plan: R1_PLAN_DEFINITION");
+    expect(mobileBilling).toContain("R1_FALLBACK_PLAN");
+    expect(mobileBilling).toContain("getR1PlanFeatureLabels(plan)");
+    expect(mobileBilling).not.toContain("14.99");
+    expect(mobileBilling).not.toContain("119.99");
+    expect(mobileBilling).not.toContain("storyCap: 4");
   });
 
   it("enforces at most three starring Personas per Storybook", async () => {

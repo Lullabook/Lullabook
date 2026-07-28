@@ -390,13 +390,37 @@ export class StorybookService {
     for (const storybook of this.store.storybooks.values()) {
       if (storybook.status !== "generating") continue;
       if (now.getTime() - storybook.createdAt.getTime() > budgetMs) {
-        this.storyCap.release(storybook.id);
-        storybook.status = "failed";
+        const persisted = this.store.persistedGenerations.get(storybook.id);
+        const hasValidText = Boolean(
+          persisted?.story.pages.length &&
+          persisted.story.pages.some((page) => page.text.trim().length > 0)
+        );
+        if (hasValidText) {
+          // Text succeeded, so Page recovery must not refund or recharge allowance.
+          storybook.status = "draft";
+        } else {
+          this.storyCap.release(storybook.id);
+          storybook.status = "failed";
+        }
         this.store.saveStorybook(storybook);
         reaped++;
       }
     }
     return reaped;
+  }
+
+  /** Production uses one PostgreSQL claim; in-memory adapters retain deterministic fallback. */
+  async reapStrandedGenerationsDurably(
+    now: Date = new Date(),
+    budgetMs: number = DEFAULT_GENERATION_WATCHDOG_BUDGET_MS
+  ): Promise<number> {
+    const durableStore = this.store as DataStore & {
+      reapStrandedStorybookGenerations?: (at: Date, budget: number) => Promise<number>;
+    };
+    if (durableStore.reapStrandedStorybookGenerations) {
+      return durableStore.reapStrandedStorybookGenerations(now, budgetMs);
+    }
+    return this.reapStrandedGenerations(now, budgetMs);
   }
 
   private async runGenerationBodyInner(memberId: string, storybookId: string): Promise<void> {

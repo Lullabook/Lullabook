@@ -42,9 +42,9 @@ describe("129 — GET /api/paywall-config returns R1-visible plans", () => {
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.plans).toHaveLength(1);
-    expect(body.plans[0].id).toBe("just_us");
+    expect(body.plans[0].plan).toBe("just_us");
     // Premium is not sellable from the config the mobile UI renders.
-    expect(body.plans.find((p: { id: string }) => p.id === "our_whole_family")).toBeUndefined();
+    expect(body.plans.find((p: { plan: string }) => p.plan === "our_whole_family")).toBeUndefined();
   });
 });
 

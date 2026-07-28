@@ -20,8 +20,30 @@ export const R1_MARGIN_THRESHOLDS = {
 
 export type R1CostThreshold = "green" | "amber" | "red";
 
+export interface R1PlanContract {
+  plan: "just_us";
+  label: string;
+  pricing: {
+    monthly: number;
+    annual: number;
+    annualDefault: boolean;
+  };
+  limits: {
+    storybooksPerMonth: number;
+    personas: number;
+    starringPersonas: number;
+    memberLogins: number;
+  };
+  capabilities: {
+    canNarrate: boolean;
+    canVideo: boolean;
+    canCustomStyle: boolean;
+  };
+  valueProp: string;
+}
+
 export const R1_PLAN_DEFINITION = {
-  plan: "just_us" as const,
+  plan: "just_us",
   label: "Just Us",
   pricing: {
     monthly: 14.99,
@@ -40,7 +62,19 @@ export const R1_PLAN_DEFINITION = {
     canCustomStyle: false,
   },
   valueProp: "One Guardian creates illustrated Storybooks starring their Family.",
-} as const;
+} as const satisfies R1PlanContract;
+
+/** Offline-safe fallback sourced from the same contract as every server route. */
+export const R1_FALLBACK_PLAN: R1PlanContract = R1_PLAN_DEFINITION;
+
+/** Limit copy stays data-driven so mobile billing cannot drift from server values. */
+export function getR1PlanFeatureLabels(plan: R1PlanContract): string[] {
+  return [
+    `${plan.limits.storybooksPerMonth} Storybooks per month`,
+    `${plan.limits.personas} trained Personas — any mix of babies and adults`,
+    `Up to ${plan.limits.starringPersonas} starring Personas per Storybook`,
+  ];
+}
 
 /**
  * Compatibility decision for rows written before ADR-0028. Legacy subscriptions

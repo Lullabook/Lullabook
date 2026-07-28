@@ -78,7 +78,12 @@ export class PersonaService {
 
   async createAdult(input: CreatePersonaInput): Promise<Persona> {
     const member = this.store.members.get(input.memberId);
-    if (member) this.entitlements?.requirePersonaSlot(member.familyId, input.memberId);
+    if (member) {
+      if (member.role !== "guardian") {
+        throw new Error("Only the Guardian may create Adult Personas in this release");
+      }
+      this.entitlements?.requirePersonaSlot(member.familyId, input.memberId);
+    }
     return this.create(input, "adult", true);
   }
 
@@ -110,6 +115,9 @@ export class PersonaService {
   ): Promise<AtomicPersonaCreationResult> {
     const member = this.store.members.get(input.memberId);
     if (!member) throw new Error("Member not found");
+    if (member.role !== "guardian") {
+      throw new Error("Only the Guardian may create Personas in this release");
+    }
     if (input.kind === "baby") {
       const gate = this.subscriptions.canCreateBabyPersona(input.memberId);
       if (!gate.allowed) {
@@ -117,9 +125,6 @@ export class PersonaService {
           throw new ConsentRequiredError(gate.reason);
         }
         throw new Error(gate.reason ?? "Baby persona creation blocked");
-      }
-      if (member.role !== "guardian") {
-        throw new Error("Only guardians may create baby personas");
       }
     } else if (input.selfConsent !== true) {
       throw new Error("Adult Persona requires subject self-consent");

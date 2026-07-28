@@ -101,7 +101,7 @@ describe("178 — atomic consent-safe Family persona creation", () => {
     expect(ctx.fal.trainCalls).toBe(0);
   });
 
-  it("requires Adult Persona self-consent; a Guardian receipt or attestation cannot substitute", async () => {
+  it("requires Guardian authority and the Guardian's Adult self-consent", async () => {
     const ctx = createTestContext();
     const guardian = ctx.onboarding.ensureFamilyForNewUser("guardian-adult", "guardian@example.com");
     ctx.subscriptions.handleCheckoutCompleted(guardian.familyId, "cus-adult", "sub-adult");
@@ -120,19 +120,27 @@ describe("178 — atomic consent-safe Family persona creation", () => {
       kind: "adult",
       displayName: "Subject",
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
+      selfie: Buffer.from("subject-selfie"),
+      selfConsent: true,
+    })).rejects.toThrow(/guardian/i);
+
+    await expect(ctx.personas.createAtomic({
+      memberId: guardian.id,
+      kind: "adult",
+      displayName: "Guardian",
+      photos: [goodPhoto(), goodPhoto(), goodPhoto()],
       guardianAttestation: true,
     })).rejects.toThrow(/self-consent|selfie/i);
 
     const { persona: adult } = await ctx.personas.createAtomic({
-      memberId: member.id,
+      memberId: guardian.id,
       kind: "adult",
-      displayName: "Subject",
+      displayName: "Guardian",
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
-      selfie: Buffer.from("subject-selfie"),
+      selfie: Buffer.from("guardian-selfie"),
       selfConsent: true,
     });
-    expect(ctx.personas.acceptLikeness(adult.id, member.id).likenessConfirmed).toBe(true);
-    expect(() => ctx.personas.acceptLikeness(adult.id, guardian.id)).toThrow(/adult|subject|self/i);
+    expect(ctx.personas.acceptLikeness(adult.id, guardian.id).likenessConfirmed).toBe(true);
     expect(ctx.store.personas.size).toBe(1);
   });
 

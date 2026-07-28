@@ -112,24 +112,11 @@ export function fetchHome(): Promise<HomeResponse> {
   return apiFetch("/api/home");
 }
 
-/** Issue 129 — server-side paywall config (R1 one-plan collapse is server-driven). */
-export interface PaywallPlanResponse {
-  id: string;
-  label: string;
-  monthlyPrice: number;
-  annualPrice: number;
-  storyCap: number;
-  memberLoginCap: number;
-  canNarrate: boolean;
-  canVideo: boolean;
-  canCustomStyle: boolean;
-  isRecommended?: boolean;
-  valueProp: string;
-}
+/** ADR-0028 — the paywall consumes the same canonical R1 plan as entitlement. */
+export type PaywallPlanResponse = import("@domain/plan").R1PlanContract;
 
 export interface PaywallConfigResponse {
   plans: PaywallPlanResponse[];
-  annualDefault: boolean;
 }
 
 export function fetchPaywallConfig(): Promise<PaywallConfigResponse> {

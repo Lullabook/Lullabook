@@ -112,6 +112,35 @@ export class SupabaseDataStore extends DataStore {
     return (data ?? []).map((r) => r.family_id as string);
   }
 
+  /** Atomically claims and terminates stranded generation rows in PostgreSQL. */
+  async reapStrandedStorybookGenerations(
+    now: Date,
+    budgetMs: number,
+    limit = 25
+  ): Promise<number> {
+    const { data, error } = await this.client.rpc("app_reap_stranded_storybook_generations", {
+      p_now: now.toISOString(),
+      p_budget_ms: budgetMs,
+      p_limit: limit,
+    });
+    if (error) throw new Error(`reapStrandedStorybookGenerations failed: ${error.message}`);
+    for (const row of (data ?? []) as Row[]) {
+      const book = this.storybooks.get(row.storybook_id);
+      if (book) {
+        book.status = row.terminal_status;
+        this.storybooks.set(book.id, book);
+      }
+      const reservation = this.storyAllowanceReservations.get(row.storybook_id);
+      if (reservation && row.allowance_status) {
+        reservation.status = row.allowance_status;
+        reservation.releasedAt = row.released_at ? new Date(row.released_at) : undefined;
+        reservation.releaseReason = row.release_reason ?? undefined;
+        this.storyAllowanceReservations.set(reservation.storybookId, reservation);
+      }
+    }
+    return (data ?? []).length;
+  }
+
   async hydrateFamily(familyId: string): Promise<void> {
     if (this.hydratedFamilyIds.has(familyId)) return;
     this.hydratedFamilyIds.add(familyId);
@@ -131,6 +160,7 @@ export class SupabaseDataStore extends DataStore {
       consentReceipts,
       lightReceipts,
       storybooks,
+      allowanceReservations,
       textStories,
       invites,
       pendingBriefsRes,
@@ -151,6 +181,7 @@ export class SupabaseDataStore extends DataStore {
       q("consent_receipts"),
       q("light_consent_receipts"),
       q("storybooks"),
+      q("story_allowance_reservations"),
       q("text_stories"),
       q("invites"),
       this.client
@@ -176,6 +207,7 @@ export class SupabaseDataStore extends DataStore {
       consentReceipts,
       lightReceipts,
       storybooks,
+      allowanceReservations,
       textStories,
       invites,
       pendingBriefsRes,
@@ -530,6 +562,17 @@ export class SupabaseDataStore extends DataStore {
       this.storybooks.set(book.id, book);
       this.snap("storybooks", book.id);
     }
+    for (const r of allowanceReservations.data ?? []) {
+      this.storyAllowanceReservations.set(r.storybook_id, {
+        storybookId: r.storybook_id,
+        familyId: r.family_id,
+        status: r.status,
+        createdAt: new Date(r.created_at),
+        releasedAt: r.released_at ? new Date(r.released_at) : undefined,
+        releaseReason: r.release_reason ?? undefined,
+      });
+      this.snap("story_allowance_reservations", r.storybook_id);
+    }
 
     if (bookIds.length > 0) {
       const [pagesRes, generationsRes, linksRes] = await Promise.all([
@@ -841,6 +884,18 @@ export class SupabaseDataStore extends DataStore {
         }))
       ),
       () => upsert(
+        "story_allowance_reservations",
+        [...this.storyAllowanceReservations.values()].map((reservation) => ({
+          storybook_id: reservation.storybookId,
+          family_id: reservation.familyId,
+          status: reservation.status,
+          created_at: reservation.createdAt.toISOString(),
+          released_at: reservation.releasedAt?.toISOString() ?? null,
+          release_reason: reservation.releaseReason ?? null,
+        })),
+        "storybook_id"
+      ),
+      () => upsert(
         "pages",
         [...this.pages.values()].map((p) => ({
           id: p.id,
@@ -991,6 +1046,11 @@ export class SupabaseDataStore extends DataStore {
         "storybook_id"
       ),
       () => deleteMissing("share_links", new Set(this.shareLinks.keys())),
+      () => deleteMissing(
+        "story_allowance_reservations",
+        new Set(this.storyAllowanceReservations.keys()),
+        "storybook_id"
+      ),
       () => deleteMissing("text_stories", new Set(this.textStories.keys())),
       () => deleteMissing("storybooks", new Set(this.storybooks.keys())),
       () => deleteMissing("baby_person_bonds", new Set(this.babyPersonBonds.keys())),

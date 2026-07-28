@@ -144,6 +144,16 @@ function fixtureTables(): Record<string, Row[]> {
         finalized_at: NOW,
       },
     ],
+    story_allowance_reservations: [
+      {
+        storybook_id: "book-1",
+        family_id: "fam-1",
+        status: "committed",
+        created_at: NOW,
+        released_at: null,
+        release_reason: null,
+      },
+    ],
     pages: [
       {
         id: "page-1",
@@ -180,6 +190,7 @@ describe("SupabaseDataStore", () => {
     expect(store.pages.get("page-1")?.illustrationBlobKey).toBe(
       "books/fam-1/book-1/page-0.png"
     );
+    expect(store.storyAllowanceReservations.get("book-1")?.status).toBe("committed");
     // RLS-equivalent read path still works against hydrated state.
     expect(store.getStorybook("book-1", "mem-1")?.status).toBe("finalized");
   });
@@ -199,6 +210,11 @@ describe("SupabaseDataStore", () => {
       createdAt: new Date(),
     });
     store.pages.delete("page-1");
+    const allowance = store.storyAllowanceReservations.get("book-1")!;
+    allowance.status = "released";
+    allowance.releasedAt = new Date("2026-07-28T12:00:00.000Z");
+    allowance.releaseReason = "story_text_generation_failed";
+    store.storyAllowanceReservations.set("book-1", allowance);
 
     await store.sync();
 
@@ -207,6 +223,14 @@ describe("SupabaseDataStore", () => {
 
     const pageDelete = recorded.deletes.find((d) => d.table === "pages");
     expect(pageDelete?.ids).toEqual(["page-1"]);
+    const allowanceUpsert = recorded.upserts.find(
+      (u) => u.table === "story_allowance_reservations"
+    );
+    expect(allowanceUpsert?.rows[0]).toMatchObject({
+      storybook_id: "book-1",
+      status: "released",
+      release_reason: "story_text_generation_failed",
+    });
 
     // Children delete before parents: pages before storybooks in call order.
     const tablesDeleted = recorded.deletes.map((d) => d.table);
