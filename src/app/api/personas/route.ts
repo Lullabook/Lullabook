@@ -1,19 +1,13 @@
-import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { SupabasePersonaCreationRepository } from "@/db/persona-creation-protocol";
 import { withBearerAuth, jsonOk, jsonError, jsonDomainError } from "@/lib/api-route";
 import { castLimitError, castSlotInfo } from "@/lib/cast-limits";
-import type { RequestContext } from "@/lib/context";
+import { createBearerClient } from "@/lib/supabase";
+import { runPersonaCreationActionBoundary } from "@/lib/actions";
+import { personaCreationRequestFingerprint } from "@/services/production-persona-creation";
 
 function filesFrom(formData: FormData, key: string): File[] {
   return formData.getAll(key).filter((value): value is File => value instanceof File);
-}
-
-async function stageFile(
-  ctx: RequestContext,
-  key: string,
-  file: File
-): Promise<void> {
-  await ctx.blobs.put(key, Buffer.from(await file.arrayBuffer()));
 }
 
 /** Bearer-authed native Persona creation. Used by the Expo paid app. */
@@ -41,6 +35,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (mode !== "adult" && mode !== "baby") return jsonError("Unknown Persona kind", 400);
       if (!displayName) return jsonError("Name is required", 400);
       if (photos.length < 3) return jsonError("At least 3 photos required", 400);
+      if (mode === "adult" && formData.get("selfConsent") !== "true") {
+        return jsonError("Adult Personas require the subject's consent", 400);
+      }
       if (mode === "adult" && !(selfie instanceof File)) {
         return jsonError("A selfie is required to verify your own likeness", 400);
       }
@@ -64,30 +61,50 @@ export async function POST(request: Request): Promise<NextResponse> {
         }
       }
 
-      const stagingId = randomUUID();
-      const photoKeys: string[] = [];
-      for (let i = 0; i < photos.length; i++) {
-        const key = `staging/${member.familyId}/${stagingId}/photo-${i}.jpg`;
-        await stageFile(ctx, key, photos[i]);
-        photoKeys.push(key);
-      }
-
-      let selfieKey: string | undefined;
-      if (mode === "adult" && selfie instanceof File) {
-        selfieKey = `staging/${member.familyId}/${stagingId}/selfie.jpg`;
-        await stageFile(ctx, selfieKey, selfie);
-      }
-
-      ctx.workflow.requestPersonaCreate({
-        mode,
-        memberId: member.id,
+      // Keep source bytes in memory until preflight, liveness, and moderation
+      // pass. The authenticated SQL reservation then owns the upload-scoped
+      // blob keys and durable finalize/outbox boundary.
+      const sourcePhotos = await Promise.all(
+        photos.map(async (photo) => Buffer.from(await photo.arrayBuffer())),
+      );
+      const selfieBytes = selfie instanceof File
+        ? Buffer.from(await selfie.arrayBuffer())
+        : undefined;
+      const creationInput = {
+        kind: mode,
         displayName,
-        photoKeys,
-        selfieKey,
+        photoCount: sourcePhotos.length,
+        photos: sourcePhotos,
+        selfie: selfieBytes,
+        ...(mode === "baby"
+          ? {
+              baby: { displayName },
+              bond: {
+                relationship: String(formData.get("relationship") ?? "").trim(),
+                babyCallsThem: String(formData.get("babyCalls") ?? "").trim(),
+                theyCallBaby: String(formData.get("theyCallBaby") ?? "").trim(),
+              },
+            }
+          : {}),
+      };
+      const authHeader = request.headers.get("authorization");
+      const token = authHeader?.slice("Bearer ".length).trim();
+      if (!token) return jsonError("Missing bearer token", 401);
+      const repository = new SupabasePersonaCreationRepository(createBearerClient(token));
+      await runPersonaCreationActionBoundary({
+        creation: {
+          ...creationInput,
+          requestFingerprint: personaCreationRequestFingerprint(creationInput),
+        },
+        repository,
+        worker: repository,
+        blobs: ctx.blobs,
+        childSafety: ctx.childSafety,
+        liveness: ctx.liveness,
+        workflow: ctx.workflow,
       });
-      await ctx.persist();
 
-      return jsonOk({ queued: true }, 202);
+      return jsonOk({ queued: true });
     } catch (err) {
       return jsonDomainError(err, 400);
     }

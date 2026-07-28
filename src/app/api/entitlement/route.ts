@@ -13,40 +13,17 @@ export async function GET(request: Request): Promise<NextResponse> {
       createRequestContext
     );
 
-    const entitlement = ctx.entitlements.getEntitlement(member.familyId);
     const capUsage = ctx.storyCap.getUsage(member.familyId, member.id);
-    const creditBalance = ctx.credits.getBalance(member.familyId);
 
     return NextResponse.json({
-      tier: entitlement.tier,
-      // ADR-0028: one server-authoritative plan definition drives every surface.
-      plan: {
-        id: R1_PLAN_DEFINITION.plan,
-        pricing: R1_PLAN_DEFINITION.pricing,
-        limits: {
-          storybooksPerMonth: R1_PLAN_DEFINITION.limits.storybooksPerMonth,
-          personas: R1_PLAN_DEFINITION.limits.personas,
-          starringPersonas: R1_PLAN_DEFINITION.limits.starringPersonas,
-          memberLogins: R1_PLAN_DEFINITION.limits.memberLogins,
+      // ADR-0028: one server-authoritative plan definition drives every R1 surface.
+      plan: R1_PLAN_DEFINITION,
+      usage: {
+        storybooks: {
+          count: capUsage.count,
+          remaining: capUsage.remaining,
+          resetDate: capUsage.resetDate,
         },
-      },
-      storyCap: {
-        count: capUsage.count,
-        cap: capUsage.cap,
-        remaining: capUsage.remaining,
-        resetDate: capUsage.resetDate,
-      },
-      memberCap: R1_PLAN_DEFINITION.limits.personas,
-      capabilities: {
-        canNarrate: false,
-        canVideo: false,
-        canCustomStyle: false,
-      },
-      credits: {
-        videoIncluded: creditBalance.videoIncluded,
-        customStyleIncluded: creditBalance.customStyleIncluded,
-        purchased: creditBalance.purchased,
-        resetDate: creditBalance.resetDate,
       },
     });
   } catch (err) {

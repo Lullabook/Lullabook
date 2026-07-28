@@ -20,7 +20,7 @@ export async function GET(
   // before reading, so the reader never polls an infinite "Illustrating"
   // spinner. If the reaper changes anything, persist so the next request sees
   // the terminal state without another reap pass.
-  if (ctx.storybooks.reapStrandedGenerations() > 0) {
+  if ((await ctx.storybooks.reapStrandedGenerationsDurably()) > 0) {
     await ctx.persist();
   }
   const book = ctx.store.getStorybook(id, member.id);

@@ -71,6 +71,7 @@ export class RealFalAdapter implements FalAdapter {
       body: JSON.stringify({
         image_data_url: input.imageDataUrl,
         default_caption: input.defaultCaption,
+        model: input.model,
         steps: input.steps,
       }),
     });

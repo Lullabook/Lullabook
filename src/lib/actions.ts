@@ -1,6 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Brief, TextStoryBrief, TraitQuestionnaire } from "@/domain/types";
@@ -140,29 +139,8 @@ export async function seedDemoWorldAction(): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// Personas (visual tier) — staged upload + durable create
+// Personas (visual tier) — durable create
 // ---------------------------------------------------------------------------
-
-async function stagePersonaUploads(
-  ctx: Awaited<ReturnType<typeof requireAuthedContext>>["ctx"],
-  familyId: string,
-  photos: File[],
-  selfie: File | null
-): Promise<{ photoKeys: string[]; selfieKey?: string }> {
-  const stagingId = randomUUID();
-  const photoKeys: string[] = [];
-  for (let i = 0; i < photos.length; i++) {
-    const key = `staging/${familyId}/${stagingId}/photo-${i}.jpg`;
-    await ctx.blobs.put(key, Buffer.from(await photos[i].arrayBuffer()));
-    photoKeys.push(key);
-  }
-  let selfieKey: string | undefined;
-  if (selfie) {
-    selfieKey = `staging/${familyId}/${stagingId}/selfie.jpg`;
-    await ctx.blobs.put(selfieKey, Buffer.from(await selfie.arrayBuffer()));
-  }
-  return { photoKeys, selfieKey };
-}
 
 export async function runPersonaCreationActionBoundary(input: {
   creation: ProductionPersonaCreationInput;
@@ -273,7 +251,7 @@ export async function createPersonaAction(
   }
 }
 
-/** Character → Persona upgrade: same staged-upload flow, full consent tier. */
+/** Character → Persona remains intentionally inert: Characters are fictional-only. */
 export async function promoteCharacterAction(
   formData: FormData
 ): Promise<ActionResult> {
@@ -282,30 +260,15 @@ export async function promoteCharacterAction(
     const characterId = String(formData.get("characterId") ?? "");
     const character = ctx.store.getCharacter(characterId, member.id);
     if (!character) return { ok: false, error: "Character not found" };
-    const photos = formData.getAll("photos").filter((f): f is File => f instanceof File);
-    const selfie = formData.get("selfie");
-    if (photos.length < 3) {
-      return { ok: false, error: "At least 3 photos required" };
-    }
 
-    const { photoKeys, selfieKey } = await stagePersonaUploads(
-      ctx,
-      member.familyId,
-      photos,
-      selfie instanceof File ? selfie : null
-    );
-    ctx.workflow.requestPersonaCreate({
-      mode: "promote-character",
-      memberId: member.id,
-      displayName: character.displayName,
+    // Reject before reading FormData files or touching BlobStore. Fictional
+    // Characters cannot enter the real-person Persona creation protocol.
+    await ctx.characters.promoteToPersona({
       characterId,
+      memberId: member.id,
       kind: String(formData.get("kind") ?? "baby") as "baby" | "adult",
-      photoKeys,
-      selfieKey,
+      photos: [],
     });
-    await ctx.persist();
-    revalidatePath("/personas");
-    revalidatePath("/family");
     return { ok: true, data: undefined };
   } catch (err) {
     return fail(err);

@@ -39,6 +39,16 @@ export interface FalProviderResult {
   error?: string;
 }
 
+export interface DownloadedArtifact {
+  bytes: Buffer;
+  contentType: string;
+  finalUrl: string;
+}
+
+export type ArtifactDownloader = (url: string) => Promise<DownloadedArtifact>;
+
+export class FalArtifactValidationError extends Error {}
+
 const DEFAULT_ROUTING: FalRoutingDecision = {
   endpoint: "fal-ai/flux-2-trainer-v2",
   model: "flux-2-lora-v2",
@@ -138,11 +148,130 @@ export function inspectTrainingZip(zip: Buffer): TrainingZipEntry[] {
   return result;
 }
 
-function basename(url: string, fallback: string): string {
-  let value: string;
-  try { value = new URL(url).pathname.split("/").pop() || fallback; } catch { throw new Error("Provider artifact URL is invalid"); }
-  if (!/^[a-zA-Z0-9._-]+$/.test(value) || value === "." || value === "..") throw new Error("Provider artifact filename is invalid");
+function trustedFalArtifactUrl(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new FalArtifactValidationError("Provider artifact URL is invalid");
+  }
+  const trustedHost = url.hostname === "fal.media" || url.hostname.endsWith(".fal.media");
+  if (url.protocol !== "https:" || !trustedHost || url.username || url.password) {
+    throw new FalArtifactValidationError("Provider artifact URL is not a trusted fal origin");
+  }
+  return url;
+}
+
+function artifactName(url: string, expectedExtension: string): string {
+  const value = trustedFalArtifactUrl(url).pathname.split("/").pop() ?? "";
+  if (!/^[a-zA-Z0-9._-]+$/.test(value) || !value.toLowerCase().endsWith(expectedExtension)) {
+    throw new FalArtifactValidationError(`Provider artifact is not a ${expectedExtension} file`);
+  }
   return value;
+}
+
+function normalizedContentType(value: string | undefined): string {
+  return value?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+}
+
+function validateSafetensors(bytes: Buffer): void {
+  if (bytes.length < 10) throw new FalArtifactValidationError("LoRA artifact is empty or truncated");
+  const headerLength = Number(bytes.readBigUInt64LE(0));
+  if (!Number.isSafeInteger(headerLength) || headerLength < 2 || headerLength > bytes.length - 8) {
+    throw new FalArtifactValidationError("LoRA artifact has an invalid safetensors header");
+  }
+  try {
+    const header = JSON.parse(bytes.subarray(8, 8 + headerLength).toString("utf8"));
+    if (!header || typeof header !== "object" || Array.isArray(header)) throw new Error("invalid");
+  } catch {
+    throw new FalArtifactValidationError("LoRA artifact has an invalid safetensors header");
+  }
+}
+
+function validateConfig(bytes: Buffer, expectedModel: string): void {
+  if (bytes.length === 0) throw new FalArtifactValidationError("LoRA configuration is empty");
+  try {
+    const config = JSON.parse(bytes.toString("utf8")) as Record<string, unknown>;
+    if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("invalid");
+    const identity = config.model ?? config.architecture;
+    if (typeof identity === "string" && identity !== expectedModel) {
+      throw new FalArtifactValidationError("LoRA configuration model does not match the selected model");
+    }
+  } catch (error) {
+    if (error instanceof FalArtifactValidationError) throw error;
+    throw new FalArtifactValidationError("LoRA configuration is not valid JSON");
+  }
+}
+
+export function createFalArtifactDownloader(fetchImpl: typeof fetch = fetch): ArtifactDownloader {
+  return async (value: string) => {
+    let current = trustedFalArtifactUrl(value);
+    for (let redirects = 0; redirects <= 3; redirects++) {
+      const response = await fetchImpl(current, { redirect: "manual" });
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location || redirects === 3) throw new FalArtifactValidationError("Provider artifact redirect is invalid");
+        current = trustedFalArtifactUrl(new URL(location, current).toString());
+        continue;
+      }
+      if (!response.ok) throw new Error(`Failed to fetch fal artifact (${response.status})`);
+      return {
+        bytes: Buffer.from(await response.arrayBuffer()),
+        contentType: normalizedContentType(response.headers.get("content-type") ?? undefined),
+        finalUrl: current.toString(),
+      };
+    }
+    throw new FalArtifactValidationError("Provider artifact redirect limit exceeded");
+  };
+}
+
+export async function copyValidatedTrainingArtifacts(
+  request: FalTrainingRequestRecord,
+  result: FalProviderResult,
+  blobs: BlobStore,
+  download: ArtifactDownloader,
+): Promise<{ loraWeightKey: string; configurationKey: string }> {
+  const weight = result.payload?.diffusers_lora_file;
+  const config = result.payload?.config_file;
+  if (!weight?.url || !config?.url) {
+    throw new FalArtifactValidationError("Training result must include LoRA and configuration artifacts");
+  }
+  artifactName(weight.url, ".safetensors");
+  artifactName(config.url, ".json");
+  const weightDeclaredType = normalizedContentType(weight.content_type);
+  const configDeclaredType = normalizedContentType(config.content_type);
+  if (!["application/octet-stream", "binary/octet-stream", "application/safetensors"].includes(weightDeclaredType)) {
+    throw new FalArtifactValidationError("LoRA artifact content type is invalid");
+  }
+  if (configDeclaredType !== "application/json") {
+    throw new FalArtifactValidationError("LoRA configuration content type is invalid");
+  }
+
+  const [downloadedWeight, downloadedConfig] = await Promise.all([
+    download(weight.url),
+    download(config.url),
+  ]);
+  artifactName(downloadedWeight.finalUrl, ".safetensors");
+  artifactName(downloadedConfig.finalUrl, ".json");
+  if (!["application/octet-stream", "binary/octet-stream", "application/safetensors"].includes(normalizedContentType(downloadedWeight.contentType))) {
+    throw new FalArtifactValidationError("Downloaded LoRA artifact content type is invalid");
+  }
+  if (normalizedContentType(downloadedConfig.contentType) !== "application/json") {
+    throw new FalArtifactValidationError("Downloaded LoRA configuration content type is invalid");
+  }
+  validateSafetensors(downloadedWeight.bytes);
+  validateConfig(downloadedConfig.bytes, request.model);
+
+  const loraWeightKey = `lora/${request.familyId}/${request.personaId}/weights.safetensors`;
+  const configurationKey = `lora/${request.familyId}/${request.personaId}/config.json`;
+  try {
+    await blobs.put(loraWeightKey, downloadedWeight.bytes);
+    await blobs.put(configurationKey, downloadedConfig.bytes);
+  } catch (error) {
+    await Promise.allSettled([blobs.delete(loraWeightKey), blobs.delete(configurationKey)]);
+    throw error;
+  }
+  return { loraWeightKey, configurationKey };
 }
 
 export function redactProviderError(error: unknown): string {
@@ -197,7 +326,10 @@ export class FalLoraTrainingService {
     return { requestId: result.jobId, status: "queued" };
   }
 
-  async handleResult(result: FalProviderResult, download?: (url: string) => Promise<Buffer>): Promise<void> {
+  async handleResult(
+    result: FalProviderResult,
+    download?: (url: string) => Promise<DownloadedArtifact | Buffer>,
+  ): Promise<void> {
     const request = this.store.falTrainingRequests.get(result.requestId);
     if (!request) throw new Error("Unknown fal training request");
     if (request.status === "ready" || request.status === "failed") return;
@@ -212,17 +344,18 @@ export class FalLoraTrainingService {
       request.updatedAt = this.now();
       return;
     }
-    const weightUrl = result.payload?.diffusers_lora_file?.url;
-    const configUrl = result.payload?.config_file?.url;
-    if (!weightUrl || !configUrl || !download) throw new Error("Training result must include diffusers_lora_file and config_file");
-    const weightName = basename(weightUrl, "weights.safetensors");
-    const configName = basename(configUrl, "config.json");
-    const weightKey = `lora/${request.familyId}/${request.personaId}/${weightName}`;
-    const configKey = `lora/${request.familyId}/${request.personaId}/${configName}`;
-    await this.blobs.put(weightKey, await download(weightUrl));
-    await this.blobs.put(configKey, await download(configUrl));
-    request.loraWeightKey = weightKey;
-    request.configurationKey = configKey;
+    if (!download) throw new Error("Training result must include an artifact downloader");
+    const normalizedDownload: ArtifactDownloader = async (url) => {
+      const artifact = await download(url);
+      if (!Buffer.isBuffer(artifact)) return artifact;
+      const declared = url === result.payload?.config_file?.url
+        ? result.payload?.config_file?.content_type
+        : result.payload?.diffusers_lora_file?.content_type;
+      return { bytes: artifact, contentType: declared ?? "", finalUrl: url };
+    };
+    const owned = await copyValidatedTrainingArtifacts(request, result, this.blobs, normalizedDownload);
+    request.loraWeightKey = owned.loraWeightKey;
+    request.configurationKey = owned.configurationKey;
     request.status = "ready";
     request.updatedAt = this.now();
   }

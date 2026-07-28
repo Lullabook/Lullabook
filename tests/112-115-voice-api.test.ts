@@ -127,7 +127,7 @@ describe("112/115 — voice API + immediate post + notify", () => {
     const { token } = ctx.family.inviteMember(guardian.id, "gma@example.com");
     const grandma = ctx.family.acceptInvite(token, "auth-gma");
     const persona = await ctx.personas.createAdult({
-      memberId: grandma.id,
+      memberId: guardian.id,
       displayName: "Grandma",
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
       selfie: Buffer.from("selfie"),

@@ -42,3 +42,15 @@ export function createServiceClient(): SupabaseClient {
     { auth: { persistSession: false, autoRefreshToken: false } }
   );
 }
+
+/** Authenticated Supabase client for bearer-authenticated RPCs. */
+export function createBearerClient(accessToken: string): SupabaseClient {
+  return createClient(
+    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    {
+      global: { headers: { Authorization: `Bearer ${accessToken}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    }
+  );
+}

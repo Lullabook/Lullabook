@@ -7,6 +7,7 @@ import {
   inspectTrainingZip,
 } from "@/services/fal-lora-training";
 import { FLUX_2_TRAINER_ENDPOINT } from "@/services/provider-bakeoff";
+import { makeTestSafetensorsArtifact } from "./support/fal-training-artifacts";
 
 function setup() {
   const store = new DataStore();
@@ -107,7 +108,9 @@ describe("179 — real FLUX LoRA ZIP submission contract", () => {
         diffusers_lora_file: { url: "https://fal.media/tmp/weights.safetensors", content_type: "application/octet-stream" },
         config_file: { url: "https://fal.media/tmp/config.json", content_type: "application/json" },
       },
-    }, async (url) => Buffer.from(url.endsWith("config.json") ? "{\"rank\":16}" : "weights"));
+    }, async (url) => url.endsWith("config.json")
+      ? Buffer.from('{"rank":16}')
+      : makeTestSafetensorsArtifact({ rank: 16 }));
 
     const request = store.falTrainingRequests.get(submitted.requestId)!;
     expect(request.status).toBe("ready");
@@ -115,8 +118,55 @@ describe("179 — real FLUX LoRA ZIP submission contract", () => {
     expect(request.configurationKey).toBe("lora/family-3/persona-3/config.json");
     expect(request.loraWeightKey).not.toContain("fal.media");
     expect(request.configurationKey).not.toContain("fal.media");
-    expect(await blobs.get(request.loraWeightKey!)).toEqual(Buffer.from("weights"));
+    expect(await blobs.get(request.loraWeightKey!)).toEqual(makeTestSafetensorsArtifact({ rank: 16 }));
     expect(await blobs.get(request.configurationKey!)).toEqual(Buffer.from('{"rank":16}'));
+  });
+
+  it("rejects untrusted, empty, wrong-content-type, and malformed configuration artifacts without owned writes", async () => {
+    const { service, store, blobs } = setup();
+    const submitted = await service.submit({
+      familyId: "family-validation",
+      personaId: "persona-validation",
+      images: [{ filename: "one.jpg", bytes: Buffer.from("one"), moderated: true }],
+      defaultCaption: "subject",
+      idempotencyKey: "idempotency-validation",
+    });
+
+    const result = {
+      requestId: submitted.requestId,
+      status: "OK" as const,
+      payload: {
+        diffusers_lora_file: { url: "https://v3.fal.media/tmp/weights.safetensors", content_type: "application/octet-stream" },
+        config_file: { url: "https://v3.fal.media/tmp/config.json", content_type: "application/json" },
+      },
+    };
+    await expect(service.handleResult(result, async (url) => url.endsWith("config.json")
+      ? Buffer.from("not-json")
+      : Buffer.alloc(0))).rejects.toThrow(/empty|truncated|configuration|json/i);
+    expect(store.falTrainingRequests.get(submitted.requestId)?.status).toBe("queued");
+    expect(await blobs.list("lora/family-validation/persona-validation/")).toEqual([]);
+
+    await expect(service.handleResult({
+      ...result,
+      payload: {
+        ...result.payload,
+        diffusers_lora_file: { url: "https://evil.example/weights.safetensors", content_type: "application/octet-stream" },
+      },
+    }, async () => makeTestSafetensorsArtifact())).rejects.toThrow(/trusted fal/i);
+    expect(await blobs.list("lora/family-validation/persona-validation/")).toEqual([]);
+
+    await expect(service.handleResult(result, async (url) => url.endsWith("config.json")
+      ? {
+          bytes: Buffer.from('{"architecture":"flux-2-lora-v2"}'),
+          contentType: "application/json",
+          finalUrl: url,
+        }
+      : {
+          bytes: makeTestSafetensorsArtifact({ model: "flux-2-lora-v2" }),
+          contentType: "application/octet-stream",
+          finalUrl: "https://v3.fal.media/tmp/config.json",
+        })).rejects.toThrow(/safetensors/i);
+    expect(await blobs.list("lora/family-validation/persona-validation/")).toEqual([]);
   });
 
   it("records a durable failed state with an observable redacted error", async () => {

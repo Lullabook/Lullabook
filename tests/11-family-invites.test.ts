@@ -18,21 +18,19 @@ describe("11 — family invites & multi-member", () => {
     expect(ctx.store.members.get(grandma.id)).toBeUndefined();
   });
 
-  it("links self persona and defaults brief starring", async () => {
+  it("does not let an invited Member create or link a self Persona in R1", async () => {
     const ctx = createTestContext();
     const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-self", "self@example.com");
     const { token } = ctx.family.inviteMember(guardian.id, "gma@example.com");
     const grandma = ctx.family.acceptInvite(token, "auth-gma");
 
-    const self = await ctx.personas.createAdult({
+    await expect(ctx.personas.createAdult({
       memberId: grandma.id,
       displayName: "Grandma",
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
       selfie: Buffer.from("selfie"),
-    });
-    ctx.family.linkSelfPersona(grandma.id, self.id);
-
-    const brief = ctx.family.defaultBriefStarring(grandma.id, [self.id]);
-    expect(brief.starringPersonaIds[0]).toBe(self.id);
+    })).rejects.toThrow(/guardian/i);
+    expect(grandma.selfPersonaId).toBeNull();
+    expect(ctx.store.personas.size).toBe(0);
   });
 });

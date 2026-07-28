@@ -7,8 +7,8 @@ import {
   type FalWebhookHeaders,
 } from "@/adapters/fal-webhook";
 import { DataStore } from "@/db/store";
-import { FalLoraTrainingService } from "@/services/fal-lora-training";
 import { FalTrainingWebhookService } from "@/services/fal-training-webhook";
+import { makeTestSafetensorsArtifact } from "./support/fal-training-artifacts";
 
 const body = JSON.stringify({
   request_id: "request-1",
@@ -21,7 +21,13 @@ const body = JSON.stringify({
 
 function signedRequest(rawBody = body, timestamp = Math.floor(Date.now() / 1000)) {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const requestId = "webhook-request-id";
+  let requestId = "request-1";
+  try {
+    const parsed = JSON.parse(rawBody) as { request_id?: string };
+    requestId = parsed.request_id ?? requestId;
+  } catch {
+    // Structural-invalid bodies still use the expected provider request header.
+  }
   const userId = "family-1";
   const bodyHash = createHash("sha256").update(rawBody).digest("hex");
   const message = `${requestId}\n${userId}\n${timestamp}\n${bodyHash}`;
@@ -59,7 +65,7 @@ describe("179 — fal webhook verification and idempotent lifecycle", () => {
     await expect(new FalTrainingWebhookService(new DataStore(), new InMemoryBlobStore(), staleVerifier).handle(stale.headers, body)).rejects.toThrow(/timestamp|stale/i);
 
     const malformedButUnsigned = { ...headers, signature: "v1,not-a-signature" };
-    await expect(service.handle(malformedButUnsigned, "{\"request_id\":")).rejects.toThrow(/signature|public key/i);
+    await expect(service.handle(malformedButUnsigned, "{\"request_id\":")).rejects.toThrow(/body hash|unparseable/i);
   });
 
   it("rejects an invalid signature without parsing or advancing a request", async () => {
@@ -88,7 +94,12 @@ describe("179 — fal webhook verification and idempotent lifecycle", () => {
     const verifier = createFalWebhookVerifier({ now: () => Number(headers.timestamp), resolvePublicKeys: async () => [publicKey] });
     const service = new FalTrainingWebhookService(store, blobs, verifier);
     const downloads: string[] = [];
-    const fetchArtifact = vi.fn(async (url: string) => { downloads.push(url); return Buffer.from(url); });
+    const fetchArtifact = vi.fn(async (url: string) => {
+      downloads.push(url);
+      return url.endsWith("config.json")
+        ? { bytes: Buffer.from('{"architecture":"m"}'), contentType: "application/json", finalUrl: url }
+        : { bytes: makeTestSafetensorsArtifact({ model: "m" }), contentType: "application/octet-stream", finalUrl: url };
+    });
 
     expect(await service.handle(headers, body, fetchArtifact)).toMatchObject({ accepted: true, duplicate: false });
     const second = await service.handle(headers, body, fetchArtifact);

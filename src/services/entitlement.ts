@@ -189,14 +189,11 @@ export class EntitlementService {
     }
   }
 
-  /**
-   * Server-side actor authorization. An Adult Member can create only their own
-   * Adult Persona; Baby Personas and Story creation remain Guardian-only in R1.
-   */
+  /** R1 server-side actor authorization: only the creating Guardian may create. */
   requireCanCreate(
     familyId: string,
     actorMemberId: string,
-    intent: "story" | "adult-persona" | "baby-persona" = "story",
+    _intent: "story" | "adult-persona" | "baby-persona" = "story",
   ): void {
     const plan = this.getPlan(familyId);
     if (plan === "none") {
@@ -205,15 +202,9 @@ export class EntitlementService {
     const member = this.store.members.get(actorMemberId);
     if (!member) throw new EntitlementError("Member not found", "member_not_found");
 
-    if (plan === "just_us" && member.role !== "guardian" && intent !== "adult-persona") {
+    if ((plan === "just_us" || !isR1MultiFamilyEnabled()) && member.role !== "guardian") {
       throw new EntitlementError(
-        "Only the guardian can create stories or Baby Personas on the Just Us plan",
-        "create_not_allowed"
-      );
-    }
-    if (!isR1MultiFamilyEnabled() && member.role !== "guardian" && intent !== "adult-persona") {
-      throw new EntitlementError(
-        "Only the guardian can create stories or Baby Personas in this release",
+        "Only the Guardian can create Stories or Personas in this release",
         "create_not_allowed"
       );
     }

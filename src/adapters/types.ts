@@ -103,6 +103,8 @@ export interface FalWebhookReceipt {
   requestId: string;
   fingerprint: string;
   receivedAt: Date;
+  status?: "processing" | "completed";
+  leaseExpiresAt?: Date;
 }
 
 export interface FalTrainWebhook {

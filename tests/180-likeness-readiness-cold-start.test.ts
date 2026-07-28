@@ -56,7 +56,7 @@ describe("180 — native Likeness readiness and cold-start Brief resume", () => 
     expect(response.status).toBe(401);
   });
 
-  it("is idempotent and preserves the Adult subject self-consent boundary", async () => {
+  it("is idempotent and preserves Guardian-only Adult authority", async () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);
     const adultSubject = ctx.store.createMember({
@@ -67,16 +67,22 @@ describe("180 — native Likeness readiness and cold-start Brief resume", () => 
       selfPersonaId: null,
       jurisdiction: "US",
     });
-    const adult = await ctx.rawPersonas.createAdult({
+    await expect(ctx.rawPersonas.createAdult({
       memberId: adultSubject.id,
       displayName: "Alex",
       photos: [goodPhoto(), goodPhoto(), goodPhoto()],
       selfie: Buffer.from("selfie"),
-    });
+    })).rejects.toThrow(/guardian/i);
 
-    expect(ctx.personas.acceptLikeness(adult.id, adultSubject.id).likenessConfirmed).toBe(true);
-    expect(ctx.personas.acceptLikeness(adult.id, adultSubject.id).likenessConfirmed).toBe(true);
-    expect(() => ctx.personas.acceptLikeness(adult.id, guardian.id)).toThrow(/adult|subject|self/i);
+    const adult = await ctx.rawPersonas.createAdult({
+      memberId: guardian.id,
+      displayName: "Guardian",
+      photos: [goodPhoto(), goodPhoto(), goodPhoto()],
+      selfie: Buffer.from("selfie"),
+    });
+    expect(ctx.personas.acceptLikeness(adult.id, guardian.id).likenessConfirmed).toBe(true);
+    expect(ctx.personas.acceptLikeness(adult.id, guardian.id).likenessConfirmed).toBe(true);
+    expect(() => ctx.personas.acceptLikeness(adult.id, adultSubject.id)).toThrow(/adult|subject|self/i);
 
     const baby = await ctx.rawPersonas.createBaby({
       memberId: guardian.id,
