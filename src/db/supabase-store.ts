@@ -19,7 +19,6 @@ import type {
   EmailPlusVpcRequest,
 } from "@/domain/types";
 import type { FalTrainingRequestRecord, FalWebhookReceipt } from "@/adapters/types";
-import type { ProviderCostLedgerEntry } from "@/services/provider-cost-metering";
 
 /**
  * DECISION: SupabaseDataStore keeps the synchronous DataStore shape the
@@ -141,6 +140,8 @@ export class SupabaseDataStore extends DataStore {
       babiesRes,
       bondsRes,
       momentsRes,
+      falTrainingRequestsRes,
+      falWebhookReceiptsRes,
     ] = await Promise.all([
       this.client.from("families").select("*").eq("id", familyId),
       q("members"),
@@ -162,6 +163,8 @@ export class SupabaseDataStore extends DataStore {
       q("babies"),
       this.client.from("baby_person_bonds").select("*, babies!inner(family_id)").eq("babies.family_id", familyId),
       q("moments"),
+      q("fal_training_requests"),
+      q("fal_webhook_receipts"),
     ]);
 
     for (const res of [
@@ -182,6 +185,8 @@ export class SupabaseDataStore extends DataStore {
       babiesRes,
       bondsRes,
       momentsRes,
+      falTrainingRequestsRes,
+      falWebhookReceiptsRes,
     ]) {
       if (res.error) {
         const msg = res.error.message;
@@ -394,6 +399,37 @@ export class SupabaseDataStore extends DataStore {
       };
       this.moments.set(moment.id, moment);
       this.snap("moments", moment.id);
+    }
+    for (const r of falTrainingRequestsRes.data ?? []) {
+      const request: FalTrainingRequestRecord = {
+        requestId: r.request_id,
+        familyId: r.family_id,
+        personaId: r.persona_id,
+        endpoint: r.endpoint,
+        model: r.model,
+        steps: r.steps,
+        idempotencyKey: r.idempotency_key,
+        status: r.status,
+        inputZipKey: r.input_zip_key ?? undefined,
+        loraWeightKey: r.lora_weight_key ?? undefined,
+        configurationKey: r.configuration_key ?? undefined,
+        error: r.error ?? undefined,
+        createdAt: new Date(r.created_at),
+        updatedAt: new Date(r.updated_at),
+      };
+      this.falTrainingRequests.set(request.requestId, request);
+      this.snap("fal_training_requests", request.requestId);
+    }
+    for (const r of falWebhookReceiptsRes.data ?? []) {
+      const receipt: FalWebhookReceipt = {
+        requestId: r.request_id,
+        fingerprint: r.fingerprint,
+        receivedAt: new Date(r.received_at),
+        status: r.status ?? "completed",
+        leaseExpiresAt: r.lease_expires_at ? new Date(r.lease_expires_at) : undefined,
+      };
+      this.falWebhookReceipts.set(receipt.fingerprint, receipt);
+      this.snap("fal_webhook_receipts", receipt.fingerprint);
     }
 
     const familyMomentIds = [...this.moments.values()]
@@ -637,6 +673,38 @@ export class SupabaseDataStore extends DataStore {
           questionnaire: p.questionnaire ?? null,
           created_at: p.createdAt.toISOString(),
         }))
+      ),
+      () => upsert(
+        "fal_training_requests",
+        [...this.falTrainingRequests.values()].map((request) => ({
+          request_id: request.requestId,
+          family_id: request.familyId,
+          persona_id: request.personaId,
+          endpoint: request.endpoint,
+          model: request.model,
+          steps: request.steps,
+          idempotency_key: request.idempotencyKey,
+          status: request.status,
+          input_zip_key: request.inputZipKey ?? null,
+          lora_weight_key: request.loraWeightKey ?? null,
+          configuration_key: request.configurationKey ?? null,
+          error: request.error ?? null,
+          created_at: request.createdAt.toISOString(),
+          updated_at: request.updatedAt.toISOString(),
+        })),
+        "request_id"
+      ),
+      () => upsert(
+        "fal_webhook_receipts",
+        [...this.falWebhookReceipts.values()].map((receipt) => ({
+          fingerprint: receipt.fingerprint,
+          request_id: receipt.requestId,
+          family_id: this.falTrainingRequests.get(receipt.requestId)?.familyId,
+          received_at: receipt.receivedAt.toISOString(),
+          status: receipt.status ?? "completed",
+          lease_expires_at: receipt.leaseExpiresAt?.toISOString() ?? null,
+        })),
+        "fingerprint"
       ),
       () => upsert(
         "characters",
@@ -934,6 +1002,8 @@ export class SupabaseDataStore extends DataStore {
       () => deleteMissing("purge_schedule", new Set(this.purgeScheduled.keys()), "family_id"),
       () => deleteMissing("subscriptions", new Set(this.subscriptions.keys()), "family_id"),
       () => deleteMissing("characters", new Set(this.characters.keys())),
+      () => deleteMissing("fal_webhook_receipts", new Set(this.falWebhookReceipts.keys()), "fingerprint"),
+      () => deleteMissing("fal_training_requests", new Set(this.falTrainingRequests.keys()), "request_id"),
       () => deleteMissing("personas", new Set(this.personas.keys())),
       () => deleteMissing("members", new Set(this.members.keys())),
       () => deleteMissing("families", new Set(this.families.keys())),
