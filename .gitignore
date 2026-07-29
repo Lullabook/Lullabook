@@ -27,6 +27,13 @@ KAIZEN-REVIEW-BRIEF.md
 *.log
 .vscode/
 .idea/
+
+# Obsidian — the vault is CONTEXT/. Per-machine UI state only; shared config
+# (appearance, plugins) stays committed.
+.obsidian/
+CONTEXT/.obsidian/workspace.json
+CONTEXT/.obsidian/workspace-mobile.json
+CONTEXT/.obsidian/graph.json
 tsconfig.tsbuildinfo
 
 # macOS Finder/iCloud duplicate cruft ("Name 2.ext" / "Name 2") — these once broke
