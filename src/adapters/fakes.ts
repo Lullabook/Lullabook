@@ -49,6 +49,7 @@ export class FakeClassicCatalog implements ClassicCatalog {
 
 export class FakeAnthropic implements AnthropicAdapter {
   public calls: unknown[] = [];
+  public lastGenerationEvidence: import("@/adapters/anthropic").AnthropicGenerationEvidence | undefined;
   public adaptCalls: unknown[] = [];
   public textStoryCalls: TextStoryGenerationInput[] = [];
   public characterDescriptionCalls: import("@/domain/types").TraitQuestionnaire[] = [];
@@ -74,6 +75,7 @@ export class FakeAnthropic implements AnthropicAdapter {
   async generateStory(input: {
     brief: string;
     personaNames: string[];
+    personaIds?: string[];
     characterNames?: string[];
     pageCount: number;
     storyType: import("@/domain/types").StoryType;
@@ -82,6 +84,13 @@ export class FakeAnthropic implements AnthropicAdapter {
     momentContext?: string;
   }): Promise<GeneratedStory> {
     this.calls.push(input);
+    this.lastGenerationEvidence = {
+      model: "fake-anthropic",
+      outcome: "success",
+      providerRequestId: `fake-story-${this.calls.length}`,
+      inputTokens: 0,
+      outputTokens: 0,
+    };
     if (this.response.pages.length === 0) {
       return this.response;
     }
@@ -99,8 +108,14 @@ export class FakeAnthropic implements AnthropicAdapter {
       scenes: Array.from({ length: input.pageCount }, (_, i) => ({
         pageIndex: i,
         description: `Scene ${i + 1}`,
-        personaIds: [],
+        personaIds: input.personaIds ?? [],
       })),
+      styleBible: {
+        ...this.response.styleBible,
+        wardrobe: Object.fromEntries(
+          (input.personaIds ?? []).map((personaId) => [personaId, "soft blue pajamas"])
+        ),
+      },
     };
   }
 
@@ -123,12 +138,27 @@ export class FakeAnthropic implements AnthropicAdapter {
   async adaptStory(input: {
     sourceTale: ClassicSourceTale;
     personaNames: string[];
+    personaIds?: string[];
     pageCount: number;
     storyType: import("@/domain/types").StoryType;
     twist?: string;
   }): Promise<GeneratedStory> {
     this.adaptCalls.push(input);
-    return this.response;
+    return {
+      ...this.response,
+      pages: Array.from({ length: input.pageCount }, (_, index) => ({ index, text: `Page ${index + 1} text` })),
+      scenes: Array.from({ length: input.pageCount }, (_, pageIndex) => ({
+        pageIndex,
+        description: `Scene ${pageIndex + 1}`,
+        personaIds: input.personaIds ?? [],
+      })),
+      styleBible: {
+        ...this.response.styleBible,
+        wardrobe: Object.fromEntries(
+          (input.personaIds ?? []).map((personaId) => [personaId, "soft blue pajamas"])
+        ),
+      },
+    };
   }
 }
 

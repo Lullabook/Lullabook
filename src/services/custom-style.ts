@@ -4,6 +4,7 @@ import type { DataStore } from "@/db/store";
 import type { CustomStyle } from "@/domain/types";
 import { EntitlementService } from "@/services/entitlement";
 import { CreditLedgerService } from "@/services/credit-ledger";
+import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
 
 /**
  * Custom art-style trained Style-LoRA pipeline (issue 95 / ADR-0023).
@@ -35,7 +36,8 @@ export class CustomStyleService {
     private readonly workflow: WorkflowAdapter,
     private readonly blobs: BlobStore,
     private readonly entitlements: EntitlementService,
-    private readonly credits: CreditLedgerService
+    private readonly credits: CreditLedgerService,
+    private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store)
   ) {}
 
   async startTraining(input: StartTrainingInput): Promise<CustomStyle> {
@@ -62,6 +64,14 @@ export class CustomStyleService {
       await this.blobs.put(`styles/${input.familyId}/${style.id}/ref-${i}.jpg`, input.referenceImages[i]);
     }
 
+    // Check the persisted control immediately before the paid submission,
+    // rather than relying on the earlier credit debit as a spend authorization.
+    this.costMeter.assertSpendAllowed({
+      familyId: input.familyId,
+      provider: "fal.ai",
+      endpoint: "fal.training.start",
+      model: "unknown-fal-model",
+    });
     // Enqueue durable training step (async — completes on workflow.drain)
     const trainingJob = await this.fal.startTraining(input.referenceImages);
 

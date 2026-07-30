@@ -30,7 +30,8 @@ import type { SubscriptionService } from "@/services/subscription";
 import { StoryCapService } from "@/services/story-cap";
 import { isR1AudioEnabled } from "@/lib/r1-config";
 import { R1_PLAN_DEFINITION } from "@/domain/plan";
-import { validateGeneratedStoryContract } from "@/adapters/anthropic";
+import { getProductionStoryModel, validateGeneratedStoryContract } from "@/adapters/anthropic";
+import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
 import { optionalEnv } from "@/adapters/env";
 
 const FREE_REROLL_BUDGET = 5;
@@ -137,7 +138,8 @@ export class StorybookService {
     contextSelector: ContextSelector | null = null,
     pastStorySummary: PastStorySummaryService | null = null,
     entitlements: EntitlementService | null = null,
-    generationConfig: StorybookGenerationConfig = {}
+    generationConfig: StorybookGenerationConfig = {},
+    private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store)
   ) {
     this.autoContext = new AutoContextService(store);
     this.pastStorySummary = pastStorySummary ?? new PastStorySummaryService(store);
@@ -183,6 +185,9 @@ export class StorybookService {
       (p) => p.familyId === member.familyId && p.kind === "baby" && p.status === "ready"
     );
     const starringPersonaIds = [...brief.starringPersonaIds];
+    if (process.env.R1_ONE_PLAN === "true" && brief.pageCount !== undefined && brief.pageCount !== 12) {
+      throw new Error("R1 Storybooks must contain exactly 12 Pages");
+    }
     if (babyPersona && !starringPersonaIds.includes(babyPersona.id)) {
       starringPersonaIds.unshift(babyPersona.id);
     }
@@ -299,6 +304,9 @@ export class StorybookService {
     const twist = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
     if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`);
 
+    if (process.env.R1_ONE_PLAN === "true" && brief.pageCount !== undefined && brief.pageCount !== 12) {
+      throw new Error("R1 Storybooks must contain exactly 12 Pages");
+    }
     if (brief.starringPersonaIds.length > R1_PLAN_DEFINITION.limits.starringPersonas) {
       throw new Error(
         `A Storybook may star at most ${R1_PLAN_DEFINITION.limits.starringPersonas} Personas`
@@ -448,7 +456,7 @@ export class StorybookService {
     const artNote = brief.artStyle ? `Art style: ${brief.artStyle}.` : "";
 
     let momentContext: string | undefined;
-    let sourceManifest: unknown;
+    let sourceManifest: Storybook["sourceManifest"];
     // R1 restores the bounded Story Context Engine. The complete authorized
     // corpus remains in Family-scoped storage; only this deterministic selected
     // set is disclosed to the provider.
@@ -469,6 +477,7 @@ export class StorybookService {
           return this.anthropic.adaptStory({
             sourceTale,
             personaNames: personas.map((p) => p.displayName),
+            personaIds: personas.map((p) => p.id),
             pageCount,
             storyType: brief.storyType,
             twist: note || undefined,
@@ -478,6 +487,7 @@ export class StorybookService {
           this.anthropic.generateStory({
             brief: `${brief.theme} ${brief.setting ?? ""} ${note} ${artNote}`,
             personaNames: personas.map((p) => p.displayName),
+            personaIds: personas.map((p) => p.id),
             characterNames,
             pageCount,
             storyType: brief.storyType,
@@ -552,21 +562,97 @@ export class StorybookService {
     await this.finalizeStorybookStatus(book.id);
   }
 
+  private recordAnthropicAttempt(
+    storybook: Storybook,
+    startedAt: number,
+    fallbackOutcome: "succeeded" | "failed"
+  ): void {
+    const evidence = (this.anthropic as AnthropicAdapter & {
+      lastGenerationEvidence?: {
+        model?: string;
+        outcome?: "success" | "refusal" | "max_tokens" | "provider_error";
+        providerRequestId?: string;
+        inputTokens?: number;
+        outputTokens?: number;
+      };
+    }).lastGenerationEvidence;
+    this.costMeter.recordAttempt({
+      provider: "anthropic",
+      endpoint: "messages.create",
+      model: evidence?.model ?? "unknown-anthropic-model",
+      pricingVersion: "r1-text-v1",
+      units: {
+        input_tokens: evidence?.inputTokens ?? 0,
+        output_tokens: evidence?.outputTokens ?? 0,
+      },
+      estimatedCostUsd: 0,
+      actualCostUsd: 0,
+      latencyMs: Math.max(0, Date.now() - startedAt),
+      requestId: evidence?.providerRequestId ?? `${storybook.id}/story`,
+      owningEntityIds: { familyId: storybook.familyId, storybookId: storybook.id },
+      attemptType: "text",
+      outcome: evidence?.outcome === "success" ? "succeeded" : fallbackOutcome,
+    });
+  }
+
+  private recordFalAttempt(
+    storybook: Storybook,
+    pageId: string,
+    attempt: number,
+    startedAt: number,
+    outcome: "succeeded" | "failed"
+  ): void {
+    const route = attempt > 0 ? this.generationConfig.repair.cheap : this.generationConfig.defaultRoute;
+    this.costMeter.recordAttempt({
+      provider: route.provider,
+      endpoint: route.endpoint,
+      model: route.model,
+      pricingVersion: "r1-image-v1",
+      units: { images: 1 },
+      estimatedCostUsd: 0,
+      latencyMs: Math.max(0, Date.now() - startedAt),
+      requestId: `${storybook.id}/${pageId}/attempt-${attempt}`,
+      owningEntityIds: {
+        familyId: storybook.familyId,
+        storybookId: storybook.id,
+        pageId,
+      },
+      attemptType: attempt > 0 ? "repair" : "image",
+      outcome,
+    });
+  }
+
   private async runGeneration(
     memberId: string,
     storybookId: string,
     brief: Brief,
     personas: PersonaRecord[],
     generateStory: () => Promise<GeneratedStory>,
-    sourceManifest?: unknown
+    sourceManifest?: Storybook["sourceManifest"]
   ): Promise<void> {
     const storybook = this.store.storybooks.get(storybookId);
     if (!storybook) return;
 
     if (sourceManifest) {
-      // Storybook's persisted domain shape predates the R1 provenance field;
-      // retain only the bounded ID manifest as an additive field.
-      (storybook as Storybook & { sourceManifest?: unknown }).sourceManifest = sourceManifest;
+      // Persist only the bounded identifier/count manifest. The context text,
+      // photo descriptions, and raw image data are transient provider input.
+      storybook.sourceManifest = sourceManifest;
+      const existing = [...this.store.storyContextProvenance.values()].find(
+        (provenance) => provenance.storybookId === storybook.id
+      );
+      const provenanceId = existing?.id ?? uuid();
+      this.store.storyContextProvenance.set(provenanceId, {
+        id: provenanceId,
+        familyId: sourceManifest.familyId,
+        storybookId: storybook.id,
+        babyId: sourceManifest.babyId,
+        personaIds: [...sourceManifest.personaIds],
+        momentIds: [...sourceManifest.momentIds],
+        firstCount: sourceManifest.firstCount,
+        pastStorySummaryIncluded: sourceManifest.pastStorySummaryIncluded,
+        photoDescriptionCount: sourceManifest.photoDescriptionCount,
+        tokenEstimate: sourceManifest.tokenEstimate,
+      });
       this.store.saveStorybook(storybook);
     }
 
@@ -575,27 +661,42 @@ export class StorybookService {
         name: "claude-pass",
         idempotencyKey: `${storybookId}/story`,
         run: async () => {
-          const generated = await generateStory();
+          const startedAt = Date.now();
           try {
-            validateGeneratedStoryContract(generated, resolvePageCount(brief), brief.starringPersonaIds);
-          } catch {
-            // Semantically invalid Story text is a terminal generation
-            // outcome, not a workflow crash: persist nothing so the
-            // post-step readback below takes the failed path — release the
-            // reserved allowance, mark the book failed, and spend zero
-            // illustration budget. (The validator's throwing contract is
-            // still exercised directly by callers/tests that need it.)
-            return;
+            // This is immediately adjacent to the payable provider invocation,
+            // rather than the earlier allowance reservation/enqueue boundary.
+            this.costMeter.assertSpendAllowed({
+              familyId: storybook.familyId,
+              provider: "anthropic",
+              model: getProductionStoryModel(),
+              endpoint: "messages.create",
+            });
+            const generated = await generateStory();
+            this.recordAnthropicAttempt(storybook, startedAt, "succeeded");
+            try {
+              validateGeneratedStoryContract(generated, resolvePageCount(brief), brief.starringPersonaIds);
+            } catch {
+              // Semantically invalid Story text is a terminal generation
+              // outcome, not a workflow crash: persist nothing so the
+              // post-step readback below takes the failed path — release the
+              // reserved allowance, mark the book failed, and spend zero
+              // illustration budget. (The validator's throwing contract is
+              // still exercised directly by callers/tests that need it.)
+              return;
+            }
+
+            this.store.savePersistedGeneration({
+              storybookId,
+              story: generated,
+              persistedAt: new Date(),
+            });
+
+            storybook.styleBible = generated.styleBible;
+            this.store.saveStorybook(storybook);
+          } catch (error) {
+            this.recordAnthropicAttempt(storybook, startedAt, "failed");
+            throw error;
           }
-
-          this.store.savePersistedGeneration({
-            storybookId,
-            story: generated,
-            persistedAt: new Date(),
-          });
-
-          storybook.styleBible = generated.styleBible;
-          this.store.saveStorybook(storybook);
         },
       },
     ]);
@@ -722,6 +823,12 @@ export class StorybookService {
           idempotencyKey: routeIndex === 0 ? baseRequest.idempotencyKey : `${baseRequest.idempotencyKey}/pro`,
         };
         try {
+          this.costMeter.assertSpendAllowed({
+            familyId: storybook.familyId,
+            provider: request.provider,
+            model: request.model,
+            endpoint: request.endpoint,
+          });
           return await this.fal.repairPageImage(request);
         } catch (error) {
           lastError = error;
@@ -730,6 +837,12 @@ export class StorybookService {
       throw lastError instanceof Error ? lastError : new Error("Page repair failed");
     }
 
+    this.costMeter.assertSpendAllowed({
+      familyId: storybook.familyId,
+      provider: baseRequest.provider,
+      model: baseRequest.model,
+      endpoint: baseRequest.endpoint,
+    });
     if (this.fal.generatePageImage) {
       return this.fal.generatePageImage(baseRequest);
     }
@@ -767,10 +880,13 @@ export class StorybookService {
         name: `fal-gen-${pageIndex}`,
         idempotencyKey: `${prefix}/generate`,
         run: async () => {
+          const startedAt = Date.now();
+          let imageGenerationStarted = false;
           try {
             const existing = await this.blobs.get(rawKey);
             if (existing) return;
 
+            imageGenerationStarted = true;
             const imageResult = await this.generatePageImageForAttempt(
               storybook,
               pageIndex,
@@ -780,11 +896,15 @@ export class StorybookService {
               attempt,
               prefix
             );
+            this.recordFalAttempt(storybook, pageId, attempt, startedAt, "succeeded");
 
             const bytes =
               imageResult.bytes ?? Buffer.from(`fetched:${imageResult.imageUrl}`);
             await this.blobs.put(rawKey, bytes);
           } catch (err) {
+            if (imageGenerationStarted) {
+              this.recordFalAttempt(storybook, pageId, attempt, startedAt, "failed");
+            }
             // Issue 122: surface the upstream fal error (status/body) for
             // diagnosis instead of collapsing it to an opaque "failed". The
             // page still lands `failed` (a re-rollable hole) and the book

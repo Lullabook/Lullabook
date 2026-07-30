@@ -34,6 +34,8 @@ export interface AnthropicAdapter {
   generateStory(input: {
     brief: string;
     personaNames: string[];
+    /** Stable IDs used in Scene and Style Bible output; names remain prose-only. */
+    personaIds?: string[];
     characterNames?: string[];
     pageCount: number;
     storyType: StoryType;
@@ -44,6 +46,7 @@ export interface AnthropicAdapter {
   adaptStory(input: {
     sourceTale: ClassicSourceTale;
     personaNames: string[];
+    personaIds?: string[];
     pageCount: number;
     storyType: StoryType;
     twist?: string;

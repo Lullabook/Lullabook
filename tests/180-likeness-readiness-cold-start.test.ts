@@ -160,7 +160,9 @@ describe("180 — native Likeness readiness and cold-start Brief resume", () => 
     await ctx.workflow.drain();
 
     expect(ctx.store.listStorybooksForFamily(guardian.familyId, guardian.id)).toHaveLength(1);
-    expect(ctx.store.pendingBriefs.size).toBe(0);
+    const acceptedBrief = [...ctx.store.pendingBriefs.values()][0];
+    expect(acceptedBrief?.status).toBe("accepted");
+    expect(acceptedBrief?.storybookId).toBeTruthy();
   });
 
   it("keeps a waiting Brief visible and recoverable when provider generation fails", async () => {

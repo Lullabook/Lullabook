@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import { PrimaryButton, Screen } from "@/components/maya-ui";
-import { acceptLikeness, fetchLikenessSamples, likenessSampleUrl } from "@/lib/api";
+import { acceptLikeness, fetchLikenessSamples, likenessSampleUrl, retrainLikeness } from "@/lib/api";
+import { appendNativeFile } from "@/lib/form-data";
 
 /**
  * Issue 180 — the native Likeness confirmation boundary. Training completion
@@ -13,7 +15,7 @@ export default function LikenessReviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const personaId = Array.isArray(id) ? id[0] : id;
   const [samples, setSamples] = useState<string[]>([]);
-  const [state, setState] = useState<"review" | "accepting" | "accepted" | "retry">("review");
+  const [state, setState] = useState<"review" | "accepting" | "accepted" | "retry" | "retraining">("review");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -46,6 +48,48 @@ export default function LikenessReviewScreen() {
     }
   };
 
+  const retrain = async () => {
+    if (!personaId || state === "retraining") return;
+    setError(null);
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setState("retry");
+        setError("Photo library access is required to retrain this likeness.");
+        return;
+      }
+      const selection = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: true,
+        selectionLimit: 10,
+        quality: 0.9,
+      });
+      if (selection.canceled) return;
+      const selectedPhotos = selection.assets;
+      if (selectedPhotos.length < 3) {
+        setState("retry");
+        setError("Choose at least 3 clear photos to retrain this likeness.");
+        return;
+      }
+      setState("retraining");
+      const formData = new FormData();
+      selectedPhotos.forEach((asset, index) => {
+        appendNativeFile(formData, "photos", {
+          uri: asset.uri,
+          name: asset.fileName ?? `replacement-${index + 1}.jpg`,
+          type: asset.mimeType ?? "image/jpeg",
+        });
+      });
+      await retrainLikeness(personaId, formData);
+      setSamples([]);
+      setState("review");
+      setError("Replacement photos uploaded. Your new likeness will be ready for review shortly.");
+    } catch (cause) {
+      setState("retry");
+      setError(cause instanceof Error ? cause.message : "We couldn't start retraining this likeness");
+    }
+  };
+
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
@@ -74,7 +118,11 @@ export default function LikenessReviewScreen() {
               disabled={state === "accepting" || samples.length === 0}
               onPress={() => void accept()}
             />
-            <PrimaryButton title="Retry / retrain" onPress={() => void load()} />
+            <PrimaryButton
+              title={state === "retraining" ? "Uploading replacement photos…" : "Retry / retrain"}
+              disabled={state === "retraining"}
+              onPress={() => void retrain()}
+            />
           </>
         )}
       </ScrollView>

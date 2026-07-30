@@ -639,6 +639,27 @@ CREATE TABLE IF NOT EXISTS provider_cost_ledger (
   cost_category text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS provider_kill_switches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id uuid REFERENCES families (id) ON DELETE CASCADE,
+  scope text NOT NULL CHECK (scope IN ('all', 'provider', 'model', 'endpoint', 'provider-model')),
+  provider text,
+  model text,
+  endpoint text,
+  threshold text NOT NULL CHECK (threshold = 'red'),
+  reason text NOT NULL,
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (
+    (scope = 'all') OR
+    (scope = 'provider' AND provider IS NOT NULL) OR
+    (scope = 'model' AND model IS NOT NULL) OR
+    (scope = 'endpoint' AND endpoint IS NOT NULL) OR
+    (scope = 'provider-model' AND provider IS NOT NULL AND model IS NOT NULL)
+  )
+);
+CREATE INDEX IF NOT EXISTS provider_kill_switches_active_route_idx
+  ON provider_kill_switches (family_id, active, provider, model, endpoint);
 CREATE TABLE IF NOT EXISTS story_context_provenance (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   family_id uuid NOT NULL REFERENCES families (id) ON DELETE CASCADE,
@@ -665,6 +686,7 @@ ALTER TABLE story_allowance_reservations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fal_training_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fal_webhook_receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE provider_cost_ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_kill_switches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE story_context_provenance ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "ticket184 family isolation" ON families FOR ALL USING (id = app_current_family_id()) WITH CHECK (id = app_current_family_id());
 CREATE POLICY "ticket184 member isolation" ON members FOR ALL USING (family_id = app_current_family_id()) WITH CHECK (family_id = app_current_family_id());
@@ -680,6 +702,7 @@ CREATE POLICY "ticket184 allowance isolation" ON story_allowance_reservations FO
 CREATE POLICY "ticket184 training isolation" ON fal_training_requests FOR ALL USING (family_id = app_current_family_id()) WITH CHECK (family_id = app_current_family_id());
 CREATE POLICY "ticket184 webhook isolation" ON fal_webhook_receipts FOR ALL USING (family_id = app_current_family_id()) WITH CHECK (family_id = app_current_family_id());
 CREATE POLICY "ticket184 cost isolation" ON provider_cost_ledger FOR ALL USING (family_id = app_current_family_id()) WITH CHECK (family_id = app_current_family_id());
+CREATE POLICY "lul108 cost-control isolation" ON provider_kill_switches FOR ALL USING (family_id = app_current_family_id() OR family_id IS NULL) WITH CHECK (family_id = app_current_family_id());
 CREATE POLICY "ticket184 provenance isolation" ON story_context_provenance FOR ALL USING (family_id = app_current_family_id()) WITH CHECK (family_id = app_current_family_id());
 
 -- ============================================================
@@ -780,6 +803,73 @@ BEGIN
     EXECUTE 'GRANT EXECUTE ON FUNCTION app_complete_provider_bakeoff_operation(text, text, text, numeric, jsonb, text) TO service_role';
     EXECUTE 'GRANT EXECUTE ON FUNCTION app_mark_provider_bakeoff_unknown(text, text, text) TO service_role';
     EXECUTE 'GRANT EXECUTE ON FUNCTION app_complete_provider_bakeoff_run(text, timestamptz) TO service_role';
+  END IF;
+END $$;
+
+
+-- ============================================================
+-- supabase/migrations/021_likeness_resume_durability.sql
+-- ============================================================
+-- LUL-105 / Issue 180: pending Brief claims and likeness-review derivatives
+-- must survive a SupabaseDataStore hydrate → sync → restart cycle.
+
+ALTER TABLE personas
+  ADD COLUMN IF NOT EXISTS review_sample_keys jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+ALTER TABLE pending_briefs
+  ADD COLUMN IF NOT EXISTS selected_persona_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'running', 'failed', 'accepted')),
+  ADD COLUMN IF NOT EXISTS claim_token uuid,
+  ADD COLUMN IF NOT EXISTS claim_expires_at timestamptz,
+  ADD COLUMN IF NOT EXISTS claimed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS storybook_id uuid REFERENCES storybooks (id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS accepted_at timestamptz,
+  ADD COLUMN IF NOT EXISTS failed_at timestamptz,
+  ADD COLUMN IF NOT EXISTS error text;
+
+ALTER TABLE pending_briefs
+  ADD CONSTRAINT pending_briefs_accepted_requires_storybook
+  CHECK (status <> 'accepted' OR storybook_id IS NOT NULL) NOT VALID;
+
+-- A worker can only take a pending/failed Brief or a lease that has expired.
+-- The function is service-composed, but its row lock makes process restart and
+-- duplicate ready callbacks unable to obtain simultaneous pre-spend claims.
+CREATE OR REPLACE FUNCTION app_claim_pending_brief(
+  p_key text,
+  p_claim_token uuid,
+  p_now timestamptz,
+  p_lease_expires_at timestamptz
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_pending pending_briefs%ROWTYPE;
+BEGIN
+  SELECT * INTO v_pending FROM pending_briefs WHERE key = p_key FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Pending Brief is missing'; END IF;
+  IF v_pending.status = 'accepted' THEN RETURN to_jsonb(v_pending) || jsonb_build_object('claimed_now', false); END IF;
+  IF v_pending.status = 'running' AND v_pending.claim_expires_at > p_now THEN
+    RETURN to_jsonb(v_pending) || jsonb_build_object('claimed_now', false);
+  END IF;
+  UPDATE pending_briefs
+  SET status = 'running', claim_token = p_claim_token,
+      claimed_at = p_now, claim_expires_at = p_lease_expires_at,
+      error = NULL, failed_at = NULL
+  WHERE key = p_key
+  RETURNING * INTO v_pending;
+  RETURN to_jsonb(v_pending) || jsonb_build_object('claimed_now', true);
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION app_claim_pending_brief(text, uuid, timestamptz, timestamptz) FROM PUBLIC;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    EXECUTE 'GRANT EXECUTE ON FUNCTION app_claim_pending_brief(text, uuid, timestamptz, timestamptz) TO service_role';
   END IF;
 END $$;
 

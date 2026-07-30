@@ -21,6 +21,7 @@ import { runPreflightChecks } from "@/services/preflight";
 import { ConsentRequiredError, SubscriptionService } from "@/services/subscription";
 import { ChildSafetyService } from "@/services/child-safety";
 import type { EntitlementService } from "@/services/entitlement";
+import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
 
 export interface CreatePersonaInput {
   memberId: string;
@@ -73,8 +74,13 @@ export class PersonaService {
     private readonly notifications: NotificationAdapter,
     private readonly subscriptions: SubscriptionService,
     private readonly childSafety: ChildSafetyService,
-    private readonly entitlements?: EntitlementService
+    private readonly entitlements?: EntitlementService,
+    private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store)
   ) {}
+
+  private assertFalSpendAllowed(familyId: string, endpoint: string, model = "unknown-fal-model"): void {
+    this.costMeter.assertSpendAllowed({ familyId, provider: "fal.ai", endpoint, model });
+  }
 
   async createAdult(input: CreatePersonaInput): Promise<Persona> {
     const member = this.store.members.get(input.memberId);
@@ -240,24 +246,57 @@ export class PersonaService {
       throw new Error(`Pre-flight failed: ${preflight.reasons.join(", ")}`);
     }
 
-    await this.deleteOwnedDerivatives(persona);
-    await this.blobs.deletePrefix(`photos/${persona.id}`);
+    // Never clear an accepted likeness before its replacement has produced every
+    // owned derivative. The candidate uses the same Persona ID but stays out of
+    // the store until its LoRA, samples, avatar, and replacement photos exist.
+    const oldPersona: Persona = {
+      ...persona,
+      reviewSampleKeys: [...(persona.reviewSampleKeys ?? [])],
+    };
+    const replacementId = uuid();
+    const stagingPrefix = `photos-staging/${persona.id}/${replacementId}`;
+    const candidate: Persona = {
+      ...oldPersona,
+      status: "training",
+      loraWeightKey: null,
+      avatarKey: null,
+      reviewSampleKeys: [],
+      likenessConfirmed: false,
+    };
 
-    persona.status = "training";
-    persona.loraWeightKey = null;
-    persona.avatarKey = null;
-    persona.reviewSampleKeys = [];
-    persona.likenessConfirmed = false;
-    this.store.savePersona(persona);
+    try {
+      for (let i = 0; i < input.photos.length; i++) {
+        await this.blobs.put(`${stagingPrefix}/${i}.jpg`, input.photos[i]);
+      }
 
-    for (let i = 0; i < input.photos.length; i++) {
-      await this.blobs.put(`photos/${persona.id}/${i}.jpg`, input.photos[i]);
+      this.assertFalSpendAllowed(candidate.familyId, "fal.training.start");
+      const job = await this.fal.startTraining(input.photos);
+      await this.trainWithRetry(candidate, job.jobId, member.email, member.id, 1, {
+        persist: false,
+        derivativeScope: `replacement/${replacementId}`,
+      });
+      if (candidate.status !== "ready" || !candidate.loraWeightKey || !candidate.avatarKey) {
+        throw new Error("Replacement likeness training did not complete");
+      }
+
+      // Commit source photos only after the new generated likeness is complete.
+      // Source images remain write-only; staged data is deleted on every exit.
+      await this.blobs.deletePrefix(`photos/${persona.id}`);
+      for (let i = 0; i < input.photos.length; i++) {
+        await this.blobs.put(`photos/${persona.id}/${i}.jpg`, input.photos[i]);
+      }
+      this.store.savePersona(candidate);
+      await this.deleteOwnedDerivatives(oldPersona);
+      await this.blobs.deletePrefix(stagingPrefix);
+      return candidate;
+    } catch (error) {
+      await this.blobs.deletePrefix(stagingPrefix);
+      await this.deletePersonaArtifacts(candidate);
+      // The stored Persona remains the prior accepted one on every failed
+      // replacement path, including partial derivative generation.
+      this.store.savePersona(oldPersona);
+      throw error;
     }
-
-    const job = await this.fal.startTraining(input.photos);
-    await this.trainWithRetry(persona, job.jobId, member.email, member.id);
-
-    return this.store.personas.get(persona.id)!;
   }
 
   private async create(
@@ -306,6 +345,7 @@ export class PersonaService {
       await this.blobs.put(`photos/${persona.id}/${i}.jpg`, input.photos[i]);
     }
 
+    this.assertFalSpendAllowed(persona.familyId, "fal.training.start");
     const job = await this.fal.startTraining(input.photos);
     await this.trainWithRetry(persona, job.jobId, member.email, member.id);
 
@@ -321,7 +361,8 @@ export class PersonaService {
     jobId: string,
     email: string,
     memberId: string,
-    attempt = 1
+    attempt = 1,
+    options: { persist?: boolean; derivativeScope?: string } = {}
   ): Promise<void> {
     // Inngest wait tooling must run directly. Every paid or mutating effect after
     // the durable wait is isolated in one deterministic memoized step.
@@ -338,24 +379,31 @@ export class PersonaService {
           if (webhook.status === "ready") {
             persona.status = "ready";
             persona.loraWeightKey = webhook.loraWeightKey ?? `lora/${jobId}`;
-            await this.generateAndStoreLikenessDerivatives(persona);
-            this.store.savePersona(persona);
+            await this.generateAndStoreLikenessDerivatives(persona, options.derivativeScope);
+            if (options.persist !== false) this.store.savePersona(persona);
             await this.notifications.sendEmail(email, "Your persona is ready", "~5 minutes");
             await this.notifications.sendWebPush(memberId, "Persona ready", "Training complete");
           } else if (attempt < 2) {
+            this.assertFalSpendAllowed(persona.familyId, "fal.training.start");
             const retry = await this.fal.startTraining([]);
             retryJobId = retry.jobId;
           } else {
             persona.status = "failed";
-            this.store.savePersona(persona);
+            if (options.persist !== false) this.store.savePersona(persona);
             await this.notifications.sendEmail(email, "Training failed — refund issued", "");
           }
         },
       },
     ]);
     if (retryJobId) {
-      await this.trainWithRetry(persona, retryJobId, email, memberId, attempt + 1);
+      await this.trainWithRetry(persona, retryJobId, email, memberId, attempt + 1, options);
     }
+  }
+
+  private async deletePersonaArtifacts(persona: Persona): Promise<void> {
+    for (const key of persona.reviewSampleKeys ?? []) await this.blobs.delete(key);
+    if (persona.avatarKey) await this.blobs.delete(persona.avatarKey);
+    if (persona.loraWeightKey) await this.blobs.delete(persona.loraWeightKey);
   }
 
   private async deleteOwnedDerivatives(persona: Persona): Promise<void> {
@@ -370,34 +418,50 @@ export class PersonaService {
     }
   }
 
-  private async generateAndStoreLikenessDerivatives(persona: Persona): Promise<void> {
+  private async generateAndStoreLikenessDerivatives(
+    persona: Persona,
+    scope?: string
+  ): Promise<void> {
     if (!persona.loraWeightKey) return;
     const generationId = uuid();
     const sampleKeys: string[] = [];
-    for (let index = 0; index < 2; index++) {
-      const sample = await this.fal.generateImage(
-        `Likeness review sample ${index + 1}: ${persona.displayName} in a gentle storybook scene, no raw photo`,
+    let avatarKey: string | undefined;
+    const idempotencyPrefix = scope ? `${scope}/` : "";
+    try {
+      for (let index = 0; index < 2; index++) {
+        this.assertFalSpendAllowed(persona.familyId, "fal.image.generate");
+        const sample = await this.fal.generateImage(
+          `Likeness review sample ${index + 1}: ${persona.displayName} in a gentle storybook scene, no raw photo`,
+          persona.loraWeightKey,
+          { idempotencyKey: `${idempotencyPrefix}likeness-sample/${persona.id}/${generationId}/${index}` }
+        );
+        const sampleKey = likenessReviewSampleBlobKey(
+          persona.familyId,
+          persona.id,
+          generationId,
+          index
+        );
+        await this.blobs.put(sampleKey, sample.bytes ?? Buffer.from("likeness-review-sample"));
+        sampleKeys.push(sampleKey);
+      }
+      avatarKey = rosterAvatarBlobKey(persona.familyId, persona.id, generationId);
+      this.assertFalSpendAllowed(persona.familyId, "fal.image.generate");
+      const portrait = await this.fal.generateImage(
+        `Neutral portrait headshot of ${persona.displayName}, soft storybook illustration, plain warm background`,
         persona.loraWeightKey,
-        { idempotencyKey: `likeness-sample/${persona.id}/${generationId}/${index}` }
+        { idempotencyKey: `${idempotencyPrefix}roster-avatar/${persona.id}/${generationId}` }
       );
-      const sampleKey = likenessReviewSampleBlobKey(
-        persona.familyId,
-        persona.id,
-        generationId,
-        index
-      );
-      await this.blobs.put(sampleKey, sample.bytes ?? Buffer.from("likeness-review-sample"));
-      sampleKeys.push(sampleKey);
+      await this.blobs.put(avatarKey, portrait.bytes ?? Buffer.from("roster-avatar"));
+      persona.avatarKey = avatarKey;
+      persona.reviewSampleKeys = sampleKeys;
+    } catch (error) {
+      // A partial review set must never become a selectable likeness surface.
+      for (const key of sampleKeys) await this.blobs.delete(key);
+      if (avatarKey) await this.blobs.delete(avatarKey);
+      persona.avatarKey = null;
+      persona.reviewSampleKeys = [];
+      throw error;
     }
-    const key = rosterAvatarBlobKey(persona.familyId, persona.id, generationId);
-    const portrait = await this.fal.generateImage(
-      `Neutral portrait headshot of ${persona.displayName}, soft storybook illustration, plain warm background`,
-      persona.loraWeightKey,
-      { idempotencyKey: `roster-avatar/${persona.id}/${generationId}` }
-    );
-    await this.blobs.put(key, portrait.bytes ?? Buffer.from("roster-avatar"));
-    persona.avatarKey = key;
-    persona.reviewSampleKeys = sampleKeys;
   }
 
   getLikenessSamples(personaId: string, actorMemberId: string): string[] {
