@@ -1235,6 +1235,10 @@ export class SupabaseDataStore extends DataStore {
       () => deleteMissing("characters", new Set(this.characters.keys())),
       () => deleteMissing("fal_webhook_receipts", new Set(this.falWebhookReceipts.keys()), "fingerprint"),
       () => deleteMissing("story_context_provenance", new Set(this.storyContextProvenance.keys())),
+      // Provider cost rows are append-only during normal execution. A missing
+      // snapshot row can therefore only be the explicit Hard-delete path.
+      () => deleteMissing("provider_cost_ledger", new Set(this.providerCostLedgerEntries.keys())),
+      () => deleteMissing("provider_kill_switches", new Set(this.providerKillSwitches.keys())),
       () => deleteMissing("fal_training_requests", new Set(this.falTrainingRequests.keys()), "request_id"),
       () => deleteMissing("personas", new Set(this.personas.keys())),
       () => deleteMissing("members", new Set(this.members.keys())),

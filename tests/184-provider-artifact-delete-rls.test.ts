@@ -33,8 +33,7 @@ const FAMILY_OWNED_TABLES = [
 type DeleteReport = {
   familyId: string;
   inventory: Record<string, number>;
-  deleted: { blobKeys: string[]; providerArtifacts: string[] };
-  retained: { costLedgerEntries: number };
+  deleted: { database: Record<string, number>; blobKeys: string[]; providerArtifacts: string[] };
   provider: {
     limitations: Array<{ code: string; requestId?: string; message: string }>;
   };
@@ -278,6 +277,7 @@ describe("184 — provider artifacts, RLS, and inventory-based Hard-delete", () 
     }));
     expect(report.provider.limitations.length).toBeGreaterThan(0);
     expect(report.provider.limitations[0]?.code).toMatch(/provider/i);
+    expect(JSON.stringify(report.provider.limitations)).not.toMatch(/fal provider degraded|https?:\/\/|token|secret/i);
     expect(ctx.store.familyDataExists(guardian.familyId)).toBe(false);
     expect(ctx.store.babies.size).toBe(0);
     expect(ctx.store.babyPersonBonds.size).toBe(0);
@@ -288,8 +288,8 @@ describe("184 — provider artifacts, RLS, and inventory-based Hard-delete", () 
     expect(ctx.store.falTrainingRequests.size).toBe(0);
     expect(ctx.store.falWebhookReceipts.size).toBe(0);
     expect(asMap<unknown>((ctx.store as unknown as { storyContextProvenance: Map<string, unknown> }).storyContextProvenance).size).toBe(0);
-    expect(ctx.store.providerCostLedgerEntries.size).toBe(1);
-    expect(JSON.stringify([...ctx.store.providerCostLedgerEntries.values()])).not.toMatch(/raw prompt|secret|photo bytes|credential/i);
+    expect(report.deleted.database.providerCostLedger).toBe(1);
+    expect(ctx.store.providerCostLedgerEntries.size).toBe(0);
     expect(await ctx.blobs.get(temporaryProviderUrl)).toEqual(Buffer.from("provider-owned"));
     for (const key of ownedKeys) expect(await ctx.blobs.get(key)).toBeNull();
 

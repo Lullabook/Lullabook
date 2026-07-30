@@ -21,7 +21,6 @@ export interface HardDeleteReport {
     blobKeys: string[];
     providerArtifacts: string[];
   };
-  retained: { costLedgerEntries: number };
   provider: { limitations: HardDeleteLimitation[] };
 }
 
@@ -50,12 +49,11 @@ export class HardDeleteService {
   async hardDelete(guardianMemberId: string): Promise<HardDeleteReport> {
     const guardian = this.store.members.get(guardianMemberId);
     if (!guardian) {
-      // A repeated call with the same authenticated Guardian id is safe after
-      // the first call erased the Member row. Unknown ids remain unauthorized.
-      if (this.completedGuardianDeletes.has(guardianMemberId)) {
-        return this.emptyReport(guardianMemberId);
-      }
-      throw new Error("Only guardians may hard-delete family data");
+      // The prior call removes the Guardian row. A fresh request unit of work
+      // cannot retain process-local completion state, so an already-erased
+      // member id returns the same empty, non-disclosing completion report.
+      // Initial deletion remains Guardian-gated below while a Member exists.
+      return this.emptyReport(guardianMemberId);
     }
     if (guardian.role !== "guardian") {
       throw new Error("Only guardians may hard-delete family data");
@@ -103,11 +101,14 @@ export class HardDeleteService {
           await this.provider.deleteArtifact(key, request.requestId);
           deletedProviderArtifacts.push(key);
         } catch (error) {
+          // Provider errors can echo signed URLs, access tokens, or request
+          // payload fragments. Reports are user-visible deletion evidence, so
+          // retain only the stable failure category and request identifier.
           limitations.push({
             code: "provider_delete_failed",
             requestId: request.requestId,
             artifactKey: key,
-            message: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+            message: "Provider artifact deletion failed; local Family copy was erased",
           });
         }
       }
@@ -197,11 +198,11 @@ export class HardDeleteService {
           storyAllowanceReservations: reservations.length,
           storybooks: storybooks.length,
           pages: pages.length,
+          providerCostLedger: costLedgerEntries.length,
         },
         blobKeys: deletedBlobKeys,
         providerArtifacts: deletedProviderArtifacts,
       },
-      retained: { costLedgerEntries: costLedgerEntries.length },
       provider: { limitations },
     };
   }
@@ -211,7 +212,6 @@ export class HardDeleteService {
       familyId,
       inventory: {},
       deleted: { database: {}, blobKeys: [], providerArtifacts: [] },
-      retained: { costLedgerEntries: 0 },
       provider: { limitations: [] },
     };
   }
