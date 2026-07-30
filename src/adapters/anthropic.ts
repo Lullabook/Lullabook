@@ -122,6 +122,7 @@ export type StoryGenerationOutcome = "success" | "refusal" | "max_tokens" | "pro
 export interface AnthropicGenerationEvidence {
   model: string;
   outcome: StoryGenerationOutcome;
+  providerRequestId?: string;
   stopReason?: string;
   inputTokens: number;
   outputTokens: number;
@@ -255,6 +256,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
     this.lastGenerationEvidence = {
       model: getProductionStoryModel(this.routingDecision),
       outcome,
+      providerRequestId: message.id,
       stopReason: message.stop_reason ?? undefined,
       inputTokens: message.usage?.input_tokens ?? 0,
       outputTokens: message.usage?.output_tokens ?? 0,

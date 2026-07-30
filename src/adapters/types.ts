@@ -118,6 +118,9 @@ export interface FalTrainWebhook {
 export interface FalImageResult {
   imageUrl: string;
   bytes?: Buffer;
+  /** Real queue request identifier used for durable cost/evidence attribution. */
+  providerRequestId?: string;
+  contentType?: string;
 }
 
 export interface FalGenerateImageOptions {
