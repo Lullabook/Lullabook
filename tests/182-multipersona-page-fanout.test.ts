@@ -25,7 +25,8 @@ interface PageRequest {
 
 interface RepairRequest extends PageRequest {
   tier: string;
-  referenceImageUrls: string[];
+  failedPageImageUrl: string;
+  identityReferenceImageUrls: string[];
 }
 
 /** A deterministic, entirely local provider spy for ticket 182. */
@@ -183,11 +184,13 @@ describe("182 — concurrent multi-Persona Page generation and bounded repair", 
     expect(ctx.store.getStorybook(book.id, member.id)?.status).toBe("draft");
   });
 
-  it("tries Nano Banana 2 Edit before Pro, bounds repair, and never regenerates the whole book", async () => {
+  it("tries Nano Banana 2 Edit before Pro with signed owned repair inputs, and never regenerates the whole book", async () => {
     const fal = new Ticket182Fal();
-    fal.failedPages.add(1);
     fal.failedRepairTiers.add("nano-banana-2-edit");
     const ctx = createTestContext({ fal });
+    // A quarantined image retains its raw owned artifact, making it a valid
+    // recovery canvas. A provider failure without an image remains a hole.
+    ctx.moderation.blockedImageContents = ["page-1"];
     const { member, personas } = await threeReadyPersonas(ctx);
 
     const book = await ctx.storybooks.generate(member.id, {
@@ -198,6 +201,10 @@ describe("182 — concurrent multi-Persona Page generation and bounded repair", 
     await ctx.workflow.drain();
     const generatedPageCount = fal.pageRequests.length;
     const failedPage = ctx.store.getPagesForStorybook(book.id).find((page) => page.index === 1)!;
+    expect(failedPage.generationStatus).toBe("quarantined");
+    // The original output was intentionally quarantined; permit the repaired
+    // bytes through the independent moderation pass.
+    ctx.moderation.blockedImageContents = [];
 
     ctx.storybooks.recoverPage(member.id, failedPage.id);
     await ctx.workflow.drain();
@@ -206,6 +213,19 @@ describe("182 — concurrent multi-Persona Page generation and bounded repair", 
     expect(fal.repairRequests.map((request) => request.tier)).toEqual([
       "nano-banana-2-edit",
       "nano-banana-pro-edit",
+    ]);
+    expect(fal.repairRequests.every((request) =>
+      request.failedPageImageUrl.includes(`${book.id}/page-1.png.attempt-0.raw`)
+    )).toBe(true);
+    expect(fal.repairRequests.every((request) => request.identityReferenceImageUrls.length === 2)).toBe(true);
+    expect(fal.repairRequests.every((request) => request.loras.length === 2)).toBe(true);
+    expect(fal.repairRequests.flatMap((request) => [request.failedPageImageUrl, ...request.identityReferenceImageUrls])
+      .every((url) => !url.includes("example.com"))).toBe(true);
+    const repairLedger = [...ctx.store.providerCostLedgerEntries.values()]
+      .filter((entry) => entry.owningEntityIds.pageId === failedPage.id && entry.attemptType === "repair");
+    expect(repairLedger.map((entry) => [entry.endpoint, entry.outcome])).toEqual([
+      ["fal-ai/nano-banana-2/edit", "failed"],
+      ["fal-ai/nano-banana-pro/edit", "succeeded"],
     ]);
     expect(ctx.store.pages.get(failedPage.id)?.generationStatus).toBe("ready");
   });

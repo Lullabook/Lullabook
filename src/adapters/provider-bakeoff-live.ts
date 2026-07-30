@@ -144,7 +144,8 @@ export function createLiveProviderBakeoffAdapters(
       ? await fal.repairPageImage!({
           ...base,
           tier: "nano-banana-2-edit",
-          referenceImageUrls: generatedOutputUrls.slice(-2),
+          failedPageImageUrl: generatedOutputUrls.at(-1) ?? "",
+          identityReferenceImageUrls: generatedOutputUrls.slice(-2, -1),
         })
       : await fal.generatePageImage!(base);
     if (!result.providerRequestId) {

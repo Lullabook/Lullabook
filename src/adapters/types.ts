@@ -153,7 +153,10 @@ export interface FalPageImageRequest {
 
 export interface FalPageRepairRequest extends FalPageImageRequest {
   tier: "nano-banana-2-edit" | "nano-banana-pro-edit";
-  referenceImageUrls: string[];
+  /** Signed URL for the preceding owned Page attempt, never a provider placeholder. */
+  failedPageImageUrl: string;
+  /** Signed Family-owned likeness samples or avatars, one for each selected Persona. */
+  identityReferenceImageUrls: string[];
 }
 
 export interface FalAdapter {

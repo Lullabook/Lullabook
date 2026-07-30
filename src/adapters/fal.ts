@@ -138,7 +138,11 @@ export class RealFalAdapter implements FalAdapter {
       input.endpoint,
       {
         prompt: input.prompt,
-        image_urls: input.referenceImageUrls,
+        // The failed page is the edit canvas. Identity inputs remain separate
+        // guidance, and selected LoRAs are retained on every repair tier.
+        image_url: input.failedPageImageUrl,
+        image_urls: input.identityReferenceImageUrls,
+        loras: input.loras.map(({ path, scale }) => ({ path, scale })),
         seed: input.seed,
         model: input.model,
         enable_safety_checker: input.safety.enabled,

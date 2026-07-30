@@ -600,9 +600,9 @@ export class StorybookService {
     pageId: string,
     attempt: number,
     startedAt: number,
-    outcome: "succeeded" | "failed"
+    outcome: "succeeded" | "failed",
+    route = attempt > 0 ? this.generationConfig.repair.cheap : this.generationConfig.defaultRoute
   ): void {
-    const route = attempt > 0 ? this.generationConfig.repair.cheap : this.generationConfig.defaultRoute;
     this.costMeter.recordAttempt({
       provider: route.provider,
       endpoint: route.endpoint,
@@ -765,14 +765,20 @@ export class StorybookService {
     prefix: string
   ): Promise<{ imageUrl: string; bytes?: Buffer }> {
     const personaIds = scene.personaIds;
-    const loras = personaIds.map((personaId) => {
-      const persona = personas.find((candidate) => candidate.id === personaId) ?? this.store.personas.get(personaId);
-      return {
-        personaId,
-        path: persona?.loraWeightKey ?? "lora/default",
-        scale: 1,
-      };
+    const selectedPersonas = personaIds.map((personaId) => {
+      const persona =
+        personas.find((candidate) => candidate.id === personaId) ??
+        this.store.personas.get(personaId);
+      if (!persona || persona.familyId !== storybook.familyId || !persona.loraWeightKey?.trim()) {
+        throw new Error(`Persona ${personaId} has no owned LoRA available for Page generation`);
+      }
+      return persona;
     });
+    const loras = selectedPersonas.map((persona) => ({
+      personaId: persona.id,
+      path: persona.loraWeightKey!,
+      scale: 1,
+    }));
     const styleBible = story.styleBible;
     const basePrompt = `${styleBible.artStyle} | ${styleBible.palette} | Style Bible: ${JSON.stringify(styleBible)} | ${scene.description}`;
     const defaultRoute = this.generationConfig.defaultRoute;
@@ -796,16 +802,21 @@ export class StorybookService {
       idempotencyKey: `${prefix}/fal-generate`,
     };
 
-    // The reference model remains an explicit canary fallback only. It is not
-    // the default and does not reinterpret Persona IDs as image coordinates.
-    if (attempt === 0 && personaIds.length > 1 && this.useReferenceModelForMulti) {
-      return this.fal.generateWithReferenceModel(
-        basePrompt,
-        personaIds.map((id) => `https://example.com/ref/${id}.png`)
+    const priorRawKey = `books/${storybook.familyId}/${storybook.id}/page-${pageIndex}.png.attempt-${attempt - 1}.raw`;
+    if (attempt > 0 && this.fal.repairPageImage && (await this.blobs.get(priorRawKey))) {
+      // Repairs are edits of a previous, Family-owned image attempt. If an
+      // upstream failure returned no image, recovery falls back to the normal
+      // canonical multi-LoRA route rather than fabricating an edit reference.
+      const identityReferenceImageUrls = await Promise.all(
+        selectedPersonas.map(async (persona) => {
+          const key = persona.reviewSampleKeys?.[0] ?? persona.avatarKey;
+          if (!key || !(await this.blobs.get(key))) {
+            throw new Error(`Persona ${persona.id} has no owned identity-preserving reference`);
+          }
+          return this.blobs.signedUrl(key);
+        })
       );
-    }
-
-    if (attempt > 0 && this.fal.repairPageImage) {
+      const failedPageImageUrl = await this.blobs.signedUrl(priorRawKey);
       let lastError: unknown;
       const routes = [
         { ...this.generationConfig.repair.cheap, tier: "nano-banana-2-edit" as const },
@@ -819,9 +830,11 @@ export class StorybookService {
           model: route.model,
           modelVersion: route.modelVersion,
           tier: route.tier,
-          referenceImageUrls: personaIds.map((id) => `https://example.com/ref/${id}.png`),
+          failedPageImageUrl,
+          identityReferenceImageUrls,
           idempotencyKey: routeIndex === 0 ? baseRequest.idempotencyKey : `${baseRequest.idempotencyKey}/pro`,
         };
+        const startedAt = Date.now();
         try {
           this.costMeter.assertSpendAllowed({
             familyId: storybook.familyId,
@@ -829,8 +842,11 @@ export class StorybookService {
             model: request.model,
             endpoint: request.endpoint,
           });
-          return await this.fal.repairPageImage(request);
+          const result = await this.fal.repairPageImage(request);
+          this.recordFalAttempt(storybook, `${storybook.id}-page-${pageIndex}`, attempt, startedAt, "succeeded", route);
+          return result;
         } catch (error) {
+          this.recordFalAttempt(storybook, `${storybook.id}-page-${pageIndex}`, attempt, startedAt, "failed", route);
           lastError = error;
         }
       }
@@ -896,13 +912,15 @@ export class StorybookService {
               attempt,
               prefix
             );
-            this.recordFalAttempt(storybook, pageId, attempt, startedAt, "succeeded");
+            if (attempt === 0) {
+              this.recordFalAttempt(storybook, pageId, attempt, startedAt, "succeeded");
+            }
 
             const bytes =
               imageResult.bytes ?? Buffer.from(`fetched:${imageResult.imageUrl}`);
             await this.blobs.put(rawKey, bytes);
           } catch (err) {
-            if (imageGenerationStarted) {
+            if (imageGenerationStarted && attempt === 0) {
               this.recordFalAttempt(storybook, pageId, attempt, startedAt, "failed");
             }
             // Issue 122: surface the upstream fal error (status/body) for
