@@ -20,7 +20,8 @@ per-persona LoRAs. Next.js + Supabase (per-Family RLS) + R2 + Inngest.
 | What a word means (Brief, Persona, Guardian, Page…) | `CONTEXT.md` |
 | Why something is built this way | `index.md` → Decisions (ADR) |
 | What we're building / scope / pricing / stack | `index.md` → Planning |
-| A unit of work, shipped or open | `index-issues.md` |
+| A unit of work still open | `index-issues.md` |
+| A unit of work already shipped or cut | `index-issues-closed.md` |
 | What happened in a past session | `index-handoffs.md` |
 | What happened in the last session | `state.md` |
 

@@ -10,7 +10,7 @@ import { RealFalAdapter } from "@/adapters/fal";
 import { DataStore } from "@/db/store";
 import { SupabaseDataStore } from "@/db/supabase-store";
 import { createFalArtifactDownloader } from "@/services/fal-lora-training";
-import { createFalWebhookPost } from "@/app/api/webhooks/fal/route";
+import { createFalWebhookPost } from "@/app/api/webhooks/fal/handler";
 import { makeTestSafetensorsArtifact } from "./support/fal-training-artifacts";
 
 type Row = Record<string, unknown>;
