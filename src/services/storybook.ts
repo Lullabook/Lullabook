@@ -236,7 +236,7 @@ export class StorybookService {
     }
 
     const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
-    if (note) await this.childSafety.checkText(note, `brief-${memberId}`);
+    if (note) await this.childSafety.checkText(note, `brief-${memberId}`, member.familyId);
 
     const normalized = this.normalizeBrief(memberId, brief);
 
@@ -302,7 +302,7 @@ export class StorybookService {
     }
 
     const twist = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
-    if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`);
+    if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`, member.familyId);
 
     if (process.env.R1_ONE_PLAN === "true" && brief.pageCount !== undefined && brief.pageCount !== 12) {
       throw new Error("R1 Storybooks must contain exactly 12 Pages");
@@ -953,7 +953,8 @@ export class StorybookService {
           try {
             const mod = await this.childSafety.checkGeneratedImageBytes(
               bytes,
-              `${storybook.id}/page-${pageIndex}`
+              `${storybook.id}/page-${pageIndex}`,
+              storybook.familyId
             );
             await this.blobs.put(
               moderationKey,
@@ -1153,7 +1154,7 @@ export class StorybookService {
       const res = await fetch(candidate.content);
       if (!res.ok) throw new Error("Failed to fetch illustration candidate");
       const bytes = Buffer.from(await res.arrayBuffer());
-      await this.childSafety.checkUpload(bytes, `candidate-${candidateId}`);
+      await this.childSafety.checkUpload(bytes, `candidate-${candidateId}`, book.familyId);
       const blobKey = `${book.id}/pages/${page.id}/selected-${candidateId}.png`;
       await this.blobs.put(blobKey, bytes);
       page.illustrationBlobKey = blobKey;

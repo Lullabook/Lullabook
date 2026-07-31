@@ -8,10 +8,11 @@ export class ChildSafetyService {
     private readonly moderation: ModerationAdapter
   ) {}
 
-  async checkUpload(image: Buffer, resourceId: string): Promise<void> {
+  async checkUpload(image: Buffer, resourceId: string, familyId?: string): Promise<void> {
     const result = await this.moderation.checkImage(image);
     this.store.saveModerationAudit({
       id: uuid(),
+      familyId,
       resourceType: "upload",
       resourceId,
       outcome: result.allowed ? "allowed" : "blocked",
@@ -22,6 +23,7 @@ export class ChildSafetyService {
       if (result.csamDetected) {
         this.store.saveModerationAudit({
           id: uuid(),
+          familyId,
           resourceType: "ncmec_report",
           resourceId,
           outcome: "blocked",
@@ -33,10 +35,11 @@ export class ChildSafetyService {
     }
   }
 
-  async checkText(text: string, resourceId: string): Promise<void> {
+  async checkText(text: string, resourceId: string, familyId?: string): Promise<void> {
     const result = await this.moderation.checkText(text);
     this.store.saveModerationAudit({
       id: uuid(),
+      familyId,
       resourceType: "text",
       resourceId,
       outcome: result.allowed ? "allowed" : "blocked",
@@ -48,10 +51,11 @@ export class ChildSafetyService {
     }
   }
 
-  async checkGeneratedImage(imageUrl: string): Promise<"allowed" | "quarantined"> {
+  async checkGeneratedImage(imageUrl: string, familyId?: string): Promise<"allowed" | "quarantined"> {
     const result = await this.moderation.checkText(imageUrl);
     this.store.saveModerationAudit({
       id: uuid(),
+      familyId,
       resourceType: "generated_image",
       resourceId: imageUrl,
       outcome: result.allowed ? "allowed" : "quarantined",
@@ -63,11 +67,13 @@ export class ChildSafetyService {
 
   async checkGeneratedImageBytes(
     image: Buffer,
-    resourceId: string
+    resourceId: string,
+    familyId?: string
   ): Promise<"allowed" | "quarantined"> {
     const result = await this.moderation.checkImage(image);
     this.store.saveModerationAudit({
       id: uuid(),
+      familyId,
       resourceType: "generated_image",
       resourceId,
       outcome: result.allowed ? "allowed" : "quarantined",
@@ -78,6 +84,7 @@ export class ChildSafetyService {
       if (result.csamDetected) {
         this.store.saveModerationAudit({
           id: uuid(),
+          familyId,
           resourceType: "ncmec_report",
           resourceId,
           outcome: "blocked",
@@ -91,9 +98,10 @@ export class ChildSafetyService {
     return "allowed";
   }
 
-  reportAbuse(reporterId: string, targetId: string, reason: string): void {
+  reportAbuse(reporterId: string, targetId: string, reason: string, familyId?: string): void {
     this.store.saveModerationAudit({
       id: uuid(),
+      familyId,
       resourceType: "abuse_report",
       resourceId: targetId,
       outcome: "blocked",

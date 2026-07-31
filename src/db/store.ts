@@ -569,6 +569,51 @@ export class DataStore {
     this.pendingBriefs.delete(key);
   }
 
+  getModerationAuditIdsByFamily(familyId: string): string[] {
+    const memberIds = [...this.members.values()]
+      .filter((member) => member.familyId === familyId)
+      .map((member) => member.id);
+    const personaIds = new Set(
+      [...this.personas.values()]
+        .filter((persona) => persona.familyId === familyId)
+        .map((persona) => persona.id)
+    );
+    const characterIds = new Set(
+      [...this.characters.values()]
+        .filter((character) => character.familyId === familyId)
+        .map((character) => character.id)
+    );
+    const bookIds = new Set(
+      [...this.storybooks.values()]
+        .filter((book) => book.familyId === familyId)
+        .map((book) => book.id)
+    );
+    const pageIds = new Set(
+      [...this.pages.values()]
+        .filter((page) => bookIds.has(page.storybookId))
+        .map((page) => page.id)
+    );
+    const candidateIds = new Set(
+      [...this.pageCandidates.values()]
+        .filter((candidate) => pageIds.has(candidate.pageId))
+        .map((candidate) => candidate.id)
+    );
+
+    return [...this.moderationAudit.entries()]
+      .filter(([, entry]) => {
+        // Explicit durable ownership is authoritative. Legacy resource-ID
+        // inference is only for historical rows that predate familyId.
+        if (entry.familyId !== undefined) return entry.familyId === familyId;
+        if (personaIds.has(entry.resourceId) || characterIds.has(entry.resourceId)) return true;
+        if ([...bookIds].some((bookId) =>
+          entry.resourceId === bookId || entry.resourceId.startsWith(`${bookId}/`)
+        )) return true;
+        if (candidateIds.has(entry.resourceId.replace(/^candidate-/, ""))) return true;
+        return memberIds.some((memberId) => entry.resourceId.includes(memberId));
+      })
+      .map(([id]) => id);
+  }
+
   hardDeleteFamily(familyId: string): void {
     const bookIds = [...this.storybooks.values()]
       .filter((b) => b.familyId === familyId)
@@ -577,9 +622,7 @@ export class DataStore {
       [...this.members.values()].filter((m) => m.familyId === familyId).map((m) => m.id)
     );
 
-    const personaIds = [...this.personas.values()]
-      .filter((p) => p.familyId === familyId)
-      .map((p) => p.id);
+    const moderationAuditIds = new Set(this.getModerationAuditIdsByFamily(familyId));
 
     const deletedPageIds = new Set(
       [...this.pages.values()]
@@ -630,15 +673,8 @@ export class DataStore {
       const pending = this.pendingBriefs.get(key);
       if (pending && memberIds.has(pending.memberId)) this.pendingBriefs.delete(key);
     }
-    for (const [id, e] of this.moderationAudit) {
-      const isMatch =
-        memberIds.has(e.resourceId) ||
-        bookIds.includes(e.resourceId) ||
-        personaIds.includes(e.resourceId) ||
-        [...memberIds].some((m) => e.resourceId.includes(m));
-      if (isMatch) {
-        this.moderationAudit.delete(id);
-      }
+    for (const id of moderationAuditIds) {
+      this.moderationAudit.delete(id);
     }
     for (const [id, p] of this.pushSubscriptions) {
       if (memberIds.has(p.memberId)) this.pushSubscriptions.delete(id);

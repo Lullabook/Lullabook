@@ -52,7 +52,7 @@ export class CharacterService {
     const { description } = await this.anthropic.generateCharacterDescription(
       input.questionnaire
     );
-    await this.childSafety.checkText(description, characterId);
+    await this.childSafety.checkText(description, characterId, member.familyId);
 
     const character: Character = {
       id: characterId,
@@ -83,7 +83,7 @@ export class CharacterService {
     const { description } = await this.anthropic.generateCharacterDescription(
       input.questionnaire
     );
-    await this.childSafety.checkText(description, existing.id);
+    await this.childSafety.checkText(description, existing.id, existing.familyId);
 
     const character: Character = {
       ...existing,

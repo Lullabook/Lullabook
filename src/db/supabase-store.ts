@@ -6,6 +6,7 @@ import type {
   Family,
   LightConsentReceipt,
   Member,
+  ModerationAuditEntry,
   Page,
   PageCandidate,
   PendingBrief,
@@ -179,6 +180,7 @@ export class SupabaseDataStore extends DataStore {
       storyContextProvenanceRes,
       providerCostLedgerRes,
       providerKillSwitchesRes,
+      moderationAuditRes,
     ] = await Promise.all([
       this.client.from("families").select("*").eq("id", familyId),
       q("members"),
@@ -208,6 +210,7 @@ export class SupabaseDataStore extends DataStore {
       // Global controls are intentionally visible to every Family; filter
       // Family-scoped rows below before they enter this unit of work.
       this.client.from("provider_kill_switches").select("*"),
+      q("moderation_audit"),
     ]);
 
     for (const res of [
@@ -234,6 +237,7 @@ export class SupabaseDataStore extends DataStore {
       storyContextProvenanceRes,
       providerCostLedgerRes,
       providerKillSwitchesRes,
+      moderationAuditRes,
     ]) {
       if (res.error) {
         const msg = res.error.message;
@@ -566,6 +570,19 @@ export class SupabaseDataStore extends DataStore {
       };
       this.providerKillSwitches.set(killSwitch.id, killSwitch);
       this.snap("provider_kill_switches", killSwitch.id);
+    }
+    for (const r of moderationAuditRes.data ?? []) {
+      const entry: ModerationAuditEntry = {
+        id: r.id as string,
+        familyId: r.family_id as string,
+        resourceType: r.resource_type as string,
+        resourceId: r.resource_id as string,
+        outcome: r.outcome as ModerationAuditEntry["outcome"],
+        reason: (r.reason as string | null) ?? null,
+        createdAt: new Date(r.created_at),
+      };
+      this.moderationAudit.set(entry.id, entry);
+      this.snap("moderation_audit", entry.id);
     }
 
     const familyMomentIds = [...this.moments.values()]
@@ -1117,6 +1134,7 @@ export class SupabaseDataStore extends DataStore {
         "moderation_audit",
         [...this.moderationAudit.values()].map((e) => ({
           id: e.id,
+          family_id: e.familyId ?? null,
           resource_type: e.resourceType,
           resource_id: e.resourceId,
           outcome: e.outcome,

@@ -238,7 +238,11 @@ export class PersonaService {
     }
 
     for (const photo of input.photos) {
-      await this.childSafety.checkUpload(photo, `persona-replace-${member.id}-${uuid()}`);
+      await this.childSafety.checkUpload(
+        photo,
+        `persona-replace-${member.id}-${uuid()}`,
+        member.familyId
+      );
     }
 
     const preflight = runPreflightChecks(input.photos);
@@ -314,7 +318,11 @@ export class PersonaService {
     }
 
     for (const photo of input.photos) {
-      await this.childSafety.checkUpload(photo, `persona-upload-${member.id}-${uuid()}`);
+      await this.childSafety.checkUpload(
+        photo,
+        `persona-upload-${member.id}-${uuid()}`,
+        member.familyId
+      );
     }
 
     const preflight = runPreflightChecks(input.photos);

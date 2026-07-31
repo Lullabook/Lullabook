@@ -382,6 +382,8 @@ export interface ShareLink {
 
 export interface ModerationAuditEntry {
   id: string;
+  /** Durable owner for RLS-safe inventory and Family Hard-delete. */
+  familyId?: string;
   resourceType: string;
   resourceId: string;
   outcome: "allowed" | "blocked" | "quarantined";

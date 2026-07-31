@@ -419,6 +419,7 @@ create policy "member manages own family share links"
 
 create table moderation_audit (
   id uuid primary key default gen_random_uuid(),
+  family_id uuid not null references families (id) on delete cascade,
   resource_type text not null,
   resource_id text not null,
   outcome text not null check (outcome in ('allowed', 'blocked', 'quarantined')),

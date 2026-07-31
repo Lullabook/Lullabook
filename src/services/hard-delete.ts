@@ -64,6 +64,12 @@ export class HardDeleteService {
   }
 
   async purgeFamily(familyId: string): Promise<HardDeleteReport> {
+    const familyCount = this.store.families.has(familyId) ? 1 : 0;
+    const members = [...this.store.members.values()].filter((member) => member.familyId === familyId);
+    const moderationAuditIds = this.store.getModerationAuditIdsByFamily(familyId);
+    const providerKillSwitches = [...this.store.providerKillSwitches.values()].filter(
+      (control) => control.familyId === familyId
+    );
     const personas = [...this.store.personas.values()].filter((p) => p.familyId === familyId);
     const storybooks = [...this.store.storybooks.values()].filter((b) => b.familyId === familyId);
     const bookIds = new Set(storybooks.map((book) => book.id));
@@ -100,7 +106,7 @@ export class HardDeleteService {
         try {
           await this.provider.deleteArtifact(key, request.requestId);
           deletedProviderArtifacts.push(key);
-        } catch (error) {
+        } catch {
           // Provider errors can echo signed URLs, access tokens, or request
           // payload fragments. Reports are user-visible deletion evidence, so
           // retain only the stable failure category and request identifier.
@@ -167,12 +173,14 @@ export class HardDeleteService {
     return {
       familyId,
       inventory: {
-        families: this.store.families.has(familyId) ? 1 : 1,
-        members: [...this.store.members.values()].filter((m) => m.familyId === familyId).length,
+        families: familyCount,
+        members: members.length,
         personas: personas.length,
         babies: babies.length,
         babyPersonBonds: bonds.length,
         consentReceipts: consentReceipts.length,
+        moderationAudit: moderationAuditIds.length,
+        providerKillSwitches: providerKillSwitches.length,
         sourcePhotos: [...ownedBlobKeys].filter(
           (key) => key.startsWith("photos/") || key.startsWith("persona-creation/"),
         ).length,
@@ -189,9 +197,14 @@ export class HardDeleteService {
       },
       deleted: {
         database: {
+          families: familyCount,
+          members: members.length,
+          personas: personas.length,
           babies: babies.length,
           babyPersonBonds: bonds.length,
           consentReceipts: consentReceipts.length,
+          moderationAudit: moderationAuditIds.length,
+          providerKillSwitches: providerKillSwitches.length,
           falTrainingRequests: falRequests.length,
           falWebhookReceipts: falReceipts.length,
           storyContextProvenance: provenance.length,

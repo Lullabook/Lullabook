@@ -234,6 +234,7 @@ export async function createPersonaAction(
     await runPersonaCreationActionBoundary({
       creation: {
         ...creationInput,
+        familyId: member.familyId,
         requestFingerprint: personaCreationRequestFingerprint(creationInput),
       },
       repository,

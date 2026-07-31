@@ -94,6 +94,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       await runPersonaCreationActionBoundary({
         creation: {
           ...creationInput,
+          familyId: member.familyId,
           requestFingerprint: personaCreationRequestFingerprint(creationInput),
         },
         repository,

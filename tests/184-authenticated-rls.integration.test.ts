@@ -7,6 +7,7 @@ describe("184 — authenticated provider artifact RLS", () => {
     await withIsolatedPostgres(async ({ asSystem, asUser, fixture }) => {
       const costId = "00000000-0000-0000-0000-000000001840";
       const switchId = "00000000-0000-0000-0000-000000001841";
+      const auditId = "00000000-0000-0000-0000-000000001842";
       await asSystem(
         `insert into provider_cost_ledger (
           id, family_id, provider, endpoint, model, pricing_version, units,
@@ -25,6 +26,12 @@ describe("184 — authenticated provider artifact RLS", () => {
         ) values ($1, $2, 'endpoint', 'fal-ai/flux-2/lora', 'red', 'test control', true)`,
         [switchId, fixture.familyB.familyId],
       );
+      await asSystem(
+        `insert into moderation_audit (
+          id, family_id, resource_type, resource_id, outcome
+        ) values ($1, $2, 'generated_image', 'book-b/page-0', 'allowed')`,
+        [auditId, fixture.familyB.familyId],
+      );
 
       expect((await asUser(
         fixture.familyA.authUserId,
@@ -34,6 +41,7 @@ describe("184 — authenticated provider artifact RLS", () => {
       for (const target of [
         { table: "provider_cost_ledger", id: costId },
         { table: "provider_kill_switches", id: switchId },
+        { table: "moderation_audit", id: auditId },
       ]) {
         const selected = await asUser(
           fixture.familyA.authUserId,
@@ -64,6 +72,16 @@ describe("184 — authenticated provider artifact RLS", () => {
         "select id from provider_kill_switches where id = $1",
         [switchId],
       )).rows).toHaveLength(1);
+      expect((await asSystem(
+        "select id from moderation_audit where id = $1",
+        [auditId],
+      )).rows).toHaveLength(1);
+
+      await asSystem("delete from families where id = $1", [fixture.familyB.familyId]);
+      expect((await asSystem(
+        "select id from moderation_audit where id = $1",
+        [auditId],
+      )).rows).toEqual([]);
     });
   }, 15_000);
 });

@@ -20,7 +20,7 @@ export class TextStoryService {
     }
 
     if (brief.note) {
-      await this.childSafety.checkText(brief.note, `text-story-brief-${memberId}`);
+      await this.childSafety.checkText(brief.note, `text-story-brief-${memberId}`, member.familyId);
     }
 
     const characters = brief.starringCharacterIds.map((id) => {
