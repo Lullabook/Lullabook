@@ -1,4 +1,5 @@
 import { v4 as uuid } from "uuid";
+import { FAL_FLUX_1_LORA_MODEL, FAL_FLUX_1_TRAIN_ENDPOINT } from "@/adapters/fal";
 import type { BlobStore, FalAdapter, WorkflowAdapter } from "@/adapters/types";
 import type { DataStore } from "@/db/store";
 import type { CustomStyle } from "@/domain/types";
@@ -29,6 +30,13 @@ export interface StartTrainingInput {
   seed: string;
 }
 
+const FAL_TRAINING_ROUTE = {
+  endpoint: FAL_FLUX_1_TRAIN_ENDPOINT,
+  model: FAL_FLUX_1_LORA_MODEL,
+} as const;
+
+const FAL_FLUX_1_PRICING_VERSION = "r1-fal-flux-1-v1";
+
 export class CustomStyleService {
   constructor(
     private readonly store: DataStore,
@@ -43,6 +51,13 @@ export class CustomStyleService {
   async startTraining(input: StartTrainingInput): Promise<CustomStyle> {
     // Gate: Plus only
     this.entitlements.requireCapability(input.familyId, "customStyle");
+    // A disabled canonical route cannot consume a Family credit or queue paid
+    // work. The same route identity reaches the fal adapter below.
+    this.costMeter.assertSpendAllowed({
+      familyId: input.familyId,
+      provider: "fal.ai",
+      ...FAL_TRAINING_ROUTE,
+    });
 
     // Meter: debit a custom-style credit (throws CreditError if exhausted)
     const trainingId = uuid();
@@ -64,16 +79,41 @@ export class CustomStyleService {
       await this.blobs.put(`styles/${input.familyId}/${style.id}/ref-${i}.jpg`, input.referenceImages[i]);
     }
 
-    // Check the persisted control immediately before the paid submission,
-    // rather than relying on the earlier credit debit as a spend authorization.
-    this.costMeter.assertSpendAllowed({
-      familyId: input.familyId,
-      provider: "fal.ai",
-      endpoint: "fal.training.start",
-      model: "unknown-fal-model",
-    });
-    // Enqueue durable training step (async — completes on workflow.drain)
-    const trainingJob = await this.fal.startTraining(input.referenceImages);
+    // Enqueue durable training step (async — completes on workflow.drain).
+    // Record a terminal receipt for both accepted and rejected submissions;
+    // reference images and seed never enter this allowlisted ledger.
+    const startedAt = Date.now();
+    let trainingJob: Awaited<ReturnType<FalAdapter["startTraining"]>>;
+    try {
+      trainingJob = await this.fal.startTraining(input.referenceImages);
+      this.costMeter.recordAttempt({
+        provider: "fal.ai",
+        ...FAL_TRAINING_ROUTE,
+        pricingVersion: FAL_FLUX_1_PRICING_VERSION,
+        units: { training_images: input.referenceImages.length },
+        estimatedCostUsd: 0,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: trainingJob.jobId,
+        owningEntityIds: { familyId: input.familyId },
+        attemptType: "training",
+        outcome: "succeeded",
+      });
+    } catch (error) {
+      this.costMeter.recordAttempt({
+        provider: "fal.ai",
+        ...FAL_TRAINING_ROUTE,
+        pricingVersion: FAL_FLUX_1_PRICING_VERSION,
+        units: { training_images: input.referenceImages.length },
+        estimatedCostUsd: 0,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: `style-train:${trainingId}`,
+        owningEntityIds: { familyId: input.familyId },
+        attemptType: "training",
+        outcome: "failed",
+      });
+      this.credits.refund(input.familyId, "customStyle", `style-train:${trainingId}`);
+      throw error;
+    }
 
     this.workflow.enqueue("train-style-lora", async () => {
       const webhook = await this.workflow.waitForEvent<{
