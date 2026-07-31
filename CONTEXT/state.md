@@ -8,6 +8,12 @@ Keep it under ~40 lines. Trim aggressively.
 
 ## Now
 
+- 2026-07-31 /part2: LUL-105 + LUL-110 built → Debugger Ready (handoff
+  `SESSION-HANDOFF-2026-07-31-part2-LUL-105-110.md`). Next: /part3 on both +
+  LUL-109, all bounce 1 of 3.
+- Gotchas: Linear MCP tools don't load in sessions on the custom endpoint
+  (board moves need human hand or API key). `.env.example` is gitignored but
+  the Sentry check requires it — fresh worktrees fail verify until copied in.
 - Retrieval graph added to `CONTEXT/` (ROUTER + generated indexes + this file).
   Measured against the raw-vault baseline on 2026-07-29 — see Recently tried.
 
