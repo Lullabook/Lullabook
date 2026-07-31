@@ -336,6 +336,21 @@ export interface PersistedGeneration {
   persistedAt: Date;
 }
 
+/**
+ * Bounded, Family-owned source identifiers retained for Story provenance.
+ * Raw photos, full prompts, and lifetime transcripts never enter this record.
+ */
+export interface StoryContextSourceManifest {
+  familyId: string;
+  babyId: string;
+  personaIds: string[];
+  momentIds: string[];
+  firstCount: number;
+  pastStorySummaryIncluded: boolean;
+  photoDescriptionCount: number;
+  tokenEstimate: number;
+}
+
 export interface Storybook {
   id: string;
   familyId: string;
@@ -346,6 +361,8 @@ export interface Storybook {
   brief: Brief;
   /** Set when this book is a Personalized Classic: the catalog source-tale id. */
   classicId?: string;
+  /** The selected, bounded source manifest; never raw source content. */
+  sourceManifest?: StoryContextSourceManifest;
   styleBible: StyleBible | null;
   rerollBudgetRemaining: number;
   rerollCredits: number;
@@ -380,7 +397,18 @@ export interface PendingBrief {
   /** All selected Personas required before this Brief can resume. */
   selectedPersonaIds?: string[];
   /** Durable exactly-once/recovery state for the waiting Brief. */
-  status?: "pending" | "running" | "failed";
+  status?: "pending" | "running" | "failed" | "accepted";
+  /** Opaque worker claim, never a provider request identifier. */
+  claimToken?: string;
+  /** A stale worker claim may be safely recovered after this lease expires. */
+  claimExpiresAt?: Date;
+  /** Durable acceptance identity returned before Story generation is enqueued. */
+  storybookId?: string;
+  /** Sanitized terminal/retryable failure reason; never provider credentials or URLs. */
+  error?: string;
+  claimedAt?: Date;
+  acceptedAt?: Date;
+  failedAt?: Date;
 }
 
 export interface PushSubscription {

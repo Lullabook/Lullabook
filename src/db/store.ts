@@ -699,29 +699,13 @@ export class DataStore {
       if (reservation.familyId === familyId) this.storyAllowanceReservations.delete(id);
     }
 
-    // Financial evidence may be retained after erasure, but only its explicit
-    // non-content allow-list survives. Never carry caller-supplied payloads.
+    // Hard-delete is the explicit exception to normal append-only financial
+    // audit retention: all Family-scoped cost evidence and controls are erased.
     for (const [id, entry] of this.providerCostLedgerEntries) {
-      if (entry.owningEntityIds.familyId !== familyId) continue;
-      const sanitized = {
-        id: entry.id,
-        provider: entry.provider,
-        endpoint: entry.endpoint,
-        model: entry.model,
-        pricingVersion: entry.pricingVersion,
-        units: { ...entry.units },
-        estimatedCostUsd: entry.estimatedCostUsd,
-        actualCostUsd: entry.actualCostUsd,
-        latencyMs: entry.latencyMs,
-        requestId: entry.requestId,
-        providerRequestId: entry.providerRequestId,
-        owningEntityIds: { ...entry.owningEntityIds },
-        attemptType: entry.attemptType,
-        outcome: entry.outcome,
-        costCategory: entry.costCategory,
-        createdAt: entry.createdAt,
-      };
-      this.providerCostLedgerEntries.set(id, sanitized);
+      if (entry.owningEntityIds.familyId === familyId) this.providerCostLedgerEntries.delete(id);
+    }
+    for (const [id, control] of this.providerKillSwitches) {
+      if (control.familyId === familyId) this.providerKillSwitches.delete(id);
     }
 
     this.subscriptions.delete(familyId);

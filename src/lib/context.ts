@@ -119,10 +119,8 @@ export function createRequestContext() {
   const journalNudges = new JournalNudgeService(store, moments);
   const pastStorySummary = new PastStorySummaryService(store);
   const world = new WorldService(store, babies, familyRoster);
-  // ADR-0005: multi-persona pages go through the Gemini reference-model path
-  // only once the composition spike passes; flipped by env, not a deploy.
-  const useReferenceModelForMulti =
-    optionalEnv("MULTI_PERSONA_REF_MODEL") === "true";
+  // R1 pages always use the canonical multi-LoRA request. Reference-model
+  // fallback is intentionally unavailable because it cannot prove owned inputs.
   const storybooks = new StorybookService(
     store,
     anthropic,
@@ -132,7 +130,7 @@ export function createRequestContext() {
     workflow,
     subscriptions,
     classicCatalog,
-    useReferenceModelForMulti,
+    false,
     null,
     null,
     pastStorySummary,

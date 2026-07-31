@@ -34,6 +34,8 @@ export interface AnthropicAdapter {
   generateStory(input: {
     brief: string;
     personaNames: string[];
+    /** Stable IDs used in Scene and Style Bible output; names remain prose-only. */
+    personaIds?: string[];
     characterNames?: string[];
     pageCount: number;
     storyType: StoryType;
@@ -44,6 +46,7 @@ export interface AnthropicAdapter {
   adaptStory(input: {
     sourceTale: ClassicSourceTale;
     personaNames: string[];
+    personaIds?: string[];
     pageCount: number;
     storyType: StoryType;
     twist?: string;
@@ -118,6 +121,9 @@ export interface FalTrainWebhook {
 export interface FalImageResult {
   imageUrl: string;
   bytes?: Buffer;
+  /** Real queue request identifier used for durable cost/evidence attribution. */
+  providerRequestId?: string;
+  contentType?: string;
 }
 
 export interface FalGenerateImageOptions {
@@ -147,7 +153,10 @@ export interface FalPageImageRequest {
 
 export interface FalPageRepairRequest extends FalPageImageRequest {
   tier: "nano-banana-2-edit" | "nano-banana-pro-edit";
-  referenceImageUrls: string[];
+  /** Signed URL for the preceding owned Page attempt, never a provider placeholder. */
+  failedPageImageUrl: string;
+  /** Signed Family-owned likeness samples or avatars, one for each selected Persona. */
+  identityReferenceImageUrls: string[];
 }
 
 export interface FalAdapter {

@@ -19,6 +19,10 @@ import type {
   EmailPlusVpcRequest,
 } from "@/domain/types";
 import type { FalTrainingRequestRecord, FalWebhookReceipt } from "@/adapters/types";
+import type {
+  ProviderCostLedgerEntry,
+  ProviderKillSwitch,
+} from "@/services/provider-cost-metering";
 
 /**
  * DECISION: SupabaseDataStore keeps the synchronous DataStore shape the
@@ -172,6 +176,9 @@ export class SupabaseDataStore extends DataStore {
       momentsRes,
       falTrainingRequestsRes,
       falWebhookReceiptsRes,
+      storyContextProvenanceRes,
+      providerCostLedgerRes,
+      providerKillSwitchesRes,
     ] = await Promise.all([
       this.client.from("families").select("*").eq("id", familyId),
       q("members"),
@@ -196,6 +203,11 @@ export class SupabaseDataStore extends DataStore {
       q("moments"),
       q("fal_training_requests"),
       q("fal_webhook_receipts"),
+      q("story_context_provenance"),
+      q("provider_cost_ledger"),
+      // Global controls are intentionally visible to every Family; filter
+      // Family-scoped rows below before they enter this unit of work.
+      this.client.from("provider_kill_switches").select("*"),
     ]);
 
     for (const res of [
@@ -219,6 +231,9 @@ export class SupabaseDataStore extends DataStore {
       momentsRes,
       falTrainingRequestsRes,
       falWebhookReceiptsRes,
+      storyContextProvenanceRes,
+      providerCostLedgerRes,
+      providerKillSwitchesRes,
     ]) {
       if (res.error) {
         const msg = res.error.message;
@@ -261,6 +276,10 @@ export class SupabaseDataStore extends DataStore {
         status: r.status,
         loraWeightKey: r.lora_weight_key,
         avatarKey: r.avatar_key ?? null,
+        // Generated review derivatives are family-owned keys, never raw photos.
+        reviewSampleKeys: Array.isArray(r.review_sample_keys)
+          ? r.review_sample_keys.filter((key): key is string => typeof key === "string")
+          : [],
         // Issue 125: persisted likeness-confirmation gate.
         likenessConfirmed: r.likeness_confirmed ?? false,
         promotedFromCharacterId: r.promoted_from_character_id ?? undefined,
@@ -358,6 +377,17 @@ export class SupabaseDataStore extends DataStore {
         personaId: r.persona_id,
         brief: r.brief,
         submittedAt: new Date(r.submitted_at),
+        selectedPersonaIds: Array.isArray(r.selected_persona_ids)
+          ? r.selected_persona_ids.filter((id): id is string => typeof id === "string")
+          : undefined,
+        status: r.status ?? "pending",
+        claimToken: r.claim_token ?? undefined,
+        claimExpiresAt: r.claim_expires_at ? new Date(r.claim_expires_at) : undefined,
+        claimedAt: r.claimed_at ? new Date(r.claimed_at) : undefined,
+        storybookId: r.storybook_id ?? undefined,
+        acceptedAt: r.accepted_at ? new Date(r.accepted_at) : undefined,
+        failedAt: r.failed_at ? new Date(r.failed_at) : undefined,
+        error: r.error ?? undefined,
       };
       this.pendingBriefs.set(r.key, pending);
       this.snap("pending_briefs", r.key);
@@ -463,6 +493,80 @@ export class SupabaseDataStore extends DataStore {
       this.falWebhookReceipts.set(receipt.fingerprint, receipt);
       this.snap("fal_webhook_receipts", receipt.fingerprint);
     }
+    for (const r of storyContextProvenanceRes.data ?? []) {
+      const provenance = {
+        id: r.id as string,
+        familyId: r.family_id as string,
+        storybookId: r.storybook_id as string,
+        babyId: (r.baby_id as string | null) ?? undefined,
+        personaIds: Array.isArray(r.persona_ids) ? r.persona_ids.filter((id): id is string => typeof id === "string") : [],
+        momentIds: Array.isArray(r.moment_ids) ? r.moment_ids.filter((id): id is string => typeof id === "string") : [],
+        firstCount: Number(r.first_count ?? 0),
+        pastStorySummaryIncluded: Boolean(r.past_story_summary_included),
+        photoDescriptionCount: Number(r.photo_description_count ?? 0),
+        tokenEstimate: Number(r.token_estimate ?? 0),
+      };
+      this.storyContextProvenance.set(provenance.id, provenance);
+      const book = this.storybooks.get(provenance.storybookId);
+      if (book && provenance.babyId) {
+        book.sourceManifest = {
+          familyId: provenance.familyId,
+          babyId: provenance.babyId,
+          personaIds: [...provenance.personaIds],
+          momentIds: [...provenance.momentIds],
+          firstCount: provenance.firstCount,
+          pastStorySummaryIncluded: provenance.pastStorySummaryIncluded,
+          photoDescriptionCount: provenance.photoDescriptionCount,
+          tokenEstimate: provenance.tokenEstimate,
+        };
+      }
+      this.snap("story_context_provenance", provenance.id);
+    }
+    for (const r of providerCostLedgerRes.data ?? []) {
+      const owner = r.owning_entity_ids as Record<string, unknown>;
+      const entry: ProviderCostLedgerEntry = {
+        id: r.id as string,
+        provider: r.provider as string,
+        endpoint: r.endpoint as string,
+        model: r.model as string,
+        pricingVersion: r.pricing_version as string,
+        units: (r.units ?? {}) as Record<string, number>,
+        estimatedCostUsd: Number(r.estimated_cost_usd),
+        actualCostUsd: r.actual_cost_usd === null ? null : Number(r.actual_cost_usd),
+        latencyMs: Number(r.latency_ms),
+        requestId: r.request_id as string,
+        providerRequestId: r.provider_request_id as string,
+        owningEntityIds: {
+          familyId: r.family_id as string,
+          ...(typeof owner?.personaId === "string" ? { personaId: owner.personaId } : {}),
+          ...(typeof owner?.storybookId === "string" ? { storybookId: owner.storybookId } : {}),
+          ...(typeof owner?.pageId === "string" ? { pageId: owner.pageId } : {}),
+        },
+        attemptType: r.attempt_type as ProviderCostLedgerEntry["attemptType"],
+        outcome: r.outcome as ProviderCostLedgerEntry["outcome"],
+        costCategory: r.cost_category as ProviderCostLedgerEntry["costCategory"],
+        createdAt: new Date(r.created_at),
+      };
+      this.providerCostLedgerEntries.set(entry.id, entry);
+      this.snap("provider_cost_ledger", entry.id);
+    }
+    for (const r of providerKillSwitchesRes.data ?? []) {
+      if (r.family_id && r.family_id !== familyId) continue;
+      const killSwitch: ProviderKillSwitch = {
+        id: r.id as string,
+        ...(r.family_id ? { familyId: r.family_id as string } : {}),
+        scope: r.scope as ProviderKillSwitch["scope"],
+        ...(r.provider ? { provider: r.provider as string } : {}),
+        ...(r.model ? { model: r.model as string } : {}),
+        ...(r.endpoint ? { endpoint: r.endpoint as string } : {}),
+        threshold: r.threshold as ProviderKillSwitch["threshold"],
+        reason: r.reason as string,
+        createdAt: new Date(r.created_at),
+        active: Boolean(r.active),
+      };
+      this.providerKillSwitches.set(killSwitch.id, killSwitch);
+      this.snap("provider_kill_switches", killSwitch.id);
+    }
 
     const familyMomentIds = [...this.moments.values()]
       .filter((m) => m.familyId === familyId)
@@ -549,6 +653,7 @@ export class SupabaseDataStore extends DataStore {
       const book: Storybook = {
         id: r.id,
         familyId: r.family_id,
+        babyId: r.baby_id ?? undefined,
         createdByMemberId: r.created_by_member_id,
         status: r.status,
         brief: r.brief,
@@ -710,6 +815,7 @@ export class SupabaseDataStore extends DataStore {
           status: p.status,
           lora_weight_key: p.loraWeightKey,
           avatar_key: p.avatarKey,
+          review_sample_keys: p.reviewSampleKeys ?? [],
           // Issue 125: persisted likeness-confirmation gate.
           likeness_confirmed: p.likenessConfirmed ?? false,
           promoted_from_character_id: p.promotedFromCharacterId ?? null,
@@ -867,11 +973,52 @@ export class SupabaseDataStore extends DataStore {
           created_at: s.createdAt.toISOString(),
         }))
       ),
+      // Cost evidence is append-only. Never schedule deletions from the
+      // unit-of-work diff: a provider attempt must remain auditable even when
+      // its Storybook later fails or is retried.
+      () => upsert(
+        "provider_cost_ledger",
+        [...this.providerCostLedgerEntries.values()].map((entry) => ({
+          id: entry.id,
+          family_id: entry.owningEntityIds.familyId,
+          provider: entry.provider,
+          endpoint: entry.endpoint,
+          model: entry.model,
+          pricing_version: entry.pricingVersion,
+          units: entry.units,
+          estimated_cost_usd: entry.estimatedCostUsd,
+          actual_cost_usd: entry.actualCostUsd,
+          latency_ms: entry.latencyMs,
+          request_id: entry.requestId,
+          provider_request_id: entry.providerRequestId,
+          owning_entity_ids: entry.owningEntityIds,
+          attempt_type: entry.attemptType,
+          outcome: entry.outcome,
+          cost_category: entry.costCategory,
+          created_at: entry.createdAt.toISOString(),
+        }))
+      ),
+      () => upsert(
+        "provider_kill_switches",
+        [...this.providerKillSwitches.values()].map((killSwitch) => ({
+          id: killSwitch.id,
+          family_id: killSwitch.familyId ?? null,
+          scope: killSwitch.scope,
+          provider: killSwitch.provider ?? null,
+          model: killSwitch.model ?? null,
+          endpoint: killSwitch.endpoint ?? null,
+          threshold: killSwitch.threshold,
+          reason: killSwitch.reason,
+          active: killSwitch.active,
+          created_at: killSwitch.createdAt.toISOString(),
+        }))
+      ),
       () => upsert(
         "storybooks",
         [...this.storybooks.values()].map((b) => ({
           id: b.id,
           family_id: b.familyId,
+          baby_id: b.babyId ?? null,
           created_by_member_id: b.createdByMemberId,
           status: b.status,
           brief: b.brief,
@@ -881,6 +1028,21 @@ export class SupabaseDataStore extends DataStore {
           reroll_credits: b.rerollCredits,
           created_at: b.createdAt.toISOString(),
           finalized_at: b.finalizedAt?.toISOString() ?? null,
+        }))
+      ),
+      () => upsert(
+        "story_context_provenance",
+        [...this.storyContextProvenance.values()].map((provenance) => ({
+          id: provenance.id,
+          family_id: provenance.familyId,
+          storybook_id: provenance.storybookId,
+          baby_id: provenance.babyId ?? null,
+          persona_ids: provenance.personaIds,
+          moment_ids: provenance.momentIds,
+          first_count: provenance.firstCount ?? 0,
+          past_story_summary_included: provenance.pastStorySummaryIncluded ?? false,
+          photo_description_count: provenance.photoDescriptionCount ?? 0,
+          token_estimate: provenance.tokenEstimate,
         }))
       ),
       () => upsert(
@@ -985,6 +1147,15 @@ export class SupabaseDataStore extends DataStore {
           member_id: p.memberId,
           persona_id: p.personaId,
           brief: p.brief,
+          selected_persona_ids: p.selectedPersonaIds ?? [],
+          status: p.status ?? "pending",
+          claim_token: p.claimToken ?? null,
+          claim_expires_at: p.claimExpiresAt?.toISOString() ?? null,
+          claimed_at: p.claimedAt?.toISOString() ?? null,
+          storybook_id: p.storybookId ?? null,
+          accepted_at: p.acceptedAt?.toISOString() ?? null,
+          failed_at: p.failedAt?.toISOString() ?? null,
+          error: p.error ?? null,
           submitted_at: p.submittedAt.toISOString(),
         })),
         "key"
@@ -1063,6 +1234,11 @@ export class SupabaseDataStore extends DataStore {
       () => deleteMissing("subscriptions", new Set(this.subscriptions.keys()), "family_id"),
       () => deleteMissing("characters", new Set(this.characters.keys())),
       () => deleteMissing("fal_webhook_receipts", new Set(this.falWebhookReceipts.keys()), "fingerprint"),
+      () => deleteMissing("story_context_provenance", new Set(this.storyContextProvenance.keys())),
+      // Provider cost rows are append-only during normal execution. A missing
+      // snapshot row can therefore only be the explicit Hard-delete path.
+      () => deleteMissing("provider_cost_ledger", new Set(this.providerCostLedgerEntries.keys())),
+      () => deleteMissing("provider_kill_switches", new Set(this.providerKillSwitches.keys())),
       () => deleteMissing("fal_training_requests", new Set(this.falTrainingRequests.keys()), "request_id"),
       () => deleteMissing("personas", new Set(this.personas.keys())),
       () => deleteMissing("members", new Set(this.members.keys())),

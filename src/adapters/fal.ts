@@ -14,12 +14,16 @@ import { optionalEnv, requireEnv } from "@/adapters/env";
 // small, and a hand-rolled client keeps the idempotency-key handling explicit.
 const FAL_QUEUE_BASE = "https://queue.fal.run";
 
-// Flux LoRA endpoints (ADR-0002: per-persona Flux LoRA).
-const TRAIN_ENDPOINT = "fal-ai/flux-lora-fast-training";
-const INFER_ENDPOINT = "fal-ai/flux-lora";
-const INPAINT_ENDPOINT = "fal-ai/flux-lora/inpainting";
+// Canonical fal routes are exported so canaries and cost evidence compare
+// against the production boundary rather than copied expected metadata.
+export const FAL_FLUX_1_TRAIN_ENDPOINT = "fal-ai/flux-lora-fast-training";
+export const FAL_FLUX_1_LORA_ENDPOINT = "fal-ai/flux-lora";
+export const FAL_FLUX_1_INPAINT_ENDPOINT = "fal-ai/flux-lora/inpainting";
+export const FAL_FLUX_2_TRAINER_ENDPOINT = "fal-ai/flux-2-trainer-v2";
+export const FAL_FLUX_2_LORA_ENDPOINT = "fal-ai/flux-2/lora";
+export const FAL_NANO_BANANA_2_EDIT_ENDPOINT = "fal-ai/nano-banana-2/edit";
 // ADR-0005 fallback: reference-image multimodal model for multi-Persona Pages.
-const REFERENCE_MODEL_ENDPOINT = "fal-ai/gemini-25-flash-image/edit";
+export const FAL_REFERENCE_MODEL_ENDPOINT = "fal-ai/gemini-25-flash-image/edit";
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -82,7 +86,7 @@ export class RealFalAdapter implements FalAdapter {
   async startTraining(photos: Buffer[]): Promise<FalTrainResult> {
     // Training photos travel as data URIs; fal zips them server-side.
     const webhookUrl = optionalEnv("FAL_WEBHOOK_URL");
-    const submitUrl = new URL(`${FAL_QUEUE_BASE}/${TRAIN_ENDPOINT}`);
+    const submitUrl = new URL(`${FAL_QUEUE_BASE}/${FAL_FLUX_1_TRAIN_ENDPOINT}`);
     if (webhookUrl) submitUrl.searchParams.set("fal_webhook", webhookUrl);
 
     const res = await falFetch(submitUrl.toString(), {
@@ -104,7 +108,7 @@ export class RealFalAdapter implements FalAdapter {
     loraKey: string,
     options?: FalGenerateImageOptions
   ): Promise<FalImageResult> {
-    return this.runInference(INFER_ENDPOINT, {
+    return this.runInference(FAL_FLUX_1_LORA_ENDPOINT, {
       prompt,
       loras: [{ path: loraKey, scale: 1 }],
       image_size: "square_hd",
@@ -134,7 +138,11 @@ export class RealFalAdapter implements FalAdapter {
       input.endpoint,
       {
         prompt: input.prompt,
-        image_urls: input.referenceImageUrls,
+        // The failed page is the edit canvas. Identity inputs remain separate
+        // guidance, and selected LoRAs are retained on every repair tier.
+        image_url: input.failedPageImageUrl,
+        image_urls: input.identityReferenceImageUrls,
+        loras: input.loras.map(({ path, scale }) => ({ path, scale })),
         seed: input.seed,
         model: input.model,
         enable_safety_checker: input.safety.enabled,
@@ -154,7 +162,7 @@ export class RealFalAdapter implements FalAdapter {
     let currentUrl = baseImageUrl;
     let lastResult: FalImageResult | null = null;
     for (const face of faces) {
-      lastResult = await this.runInference(INPAINT_ENDPOINT, {
+      lastResult = await this.runInference(FAL_FLUX_1_INPAINT_ENDPOINT, {
         prompt: `the face in the ${face.region} region, photorealistic likeness`,
         image_url: currentUrl,
         loras: [{ path: face.loraKey, scale: 1 }],
@@ -170,7 +178,7 @@ export class RealFalAdapter implements FalAdapter {
     prompt: string,
     referenceImageUrls: string[]
   ): Promise<FalImageResult> {
-    return this.runInference(REFERENCE_MODEL_ENDPOINT, {
+    return this.runInference(FAL_REFERENCE_MODEL_ENDPOINT, {
       prompt,
       image_urls: referenceImageUrls,
     });
@@ -212,7 +220,12 @@ export class RealFalAdapter implements FalAdapter {
     // must run on bytes before any persist (ADR-0010).
     const imageRes = await falFetch(imageUrl);
     const bytes = Buffer.from(await imageRes.arrayBuffer());
-    return { imageUrl, bytes };
+    return {
+      imageUrl,
+      bytes,
+      providerRequestId: queued.request_id,
+      contentType: imageRes.headers.get("content-type")?.split(";", 1)[0]?.trim(),
+    };
   }
 
   private async pollForResult(queued: FalQueueSubmitResponse): Promise<FalImageOutput> {

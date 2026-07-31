@@ -1,5 +1,5 @@
 import type { DataStore } from "@/db/store";
-import type { Moment, Persona } from "@/domain/types";
+import type { Moment, Persona, StoryContextSourceManifest } from "@/domain/types";
 import { AutoContextService } from "@/services/auto-context";
 
 /**
@@ -61,21 +61,7 @@ export interface StoryContextSet {
   sourceManifest: StoryContextSourceManifest;
 }
 
-/**
- * Family-scoped provenance for a selected context set. This is deliberately an
- * ID manifest, not a copy of source content: raw photos and lifetime
- * transcripts must never be persisted on a Story.
- */
-export interface StoryContextSourceManifest {
-  familyId: string;
-  babyId: string;
-  personaIds: string[];
-  momentIds: string[];
-  firstCount: number;
-  pastStorySummaryIncluded: boolean;
-  photoDescriptionCount: number;
-  tokenEstimate: number;
-}
+export type { StoryContextSourceManifest } from "@/domain/types";
 
 /** Seam: supplies the rolling past-Story summary (issue 90). Default = none. */
 export interface PastStorySummaryProvider {
@@ -152,8 +138,9 @@ function renderCast(cast: CastMember[]): string[] {
   return cast.map((c) => {
     if (c.role === "protagonist") return `- ${c.displayName} — the baby (protagonist)`;
     const rel = c.relationship ? `${c.relationship}` : "family";
-    const calls = c.babyCallsThem ? ` (baby calls them "${c.babyCallsThem}")` : "";
-    return `- ${c.displayName} — ${rel}${calls}`;
+    const babyCallsThem = c.babyCallsThem ? ` (baby calls them "${c.babyCallsThem}")` : "";
+    const theyCallBaby = c.theyCallBaby ? ` (calls the baby "${c.theyCallBaby}")` : "";
+    return `- ${c.displayName} — ${rel}${babyCallsThem}${theyCallBaby}`;
   });
 }
 

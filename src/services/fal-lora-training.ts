@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { BlobStore, FalAdapter, FalTrainingRequestRecord, FalTrainingSubmission } from "@/adapters/types";
 import type { DataStore } from "@/db/store";
+import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
 
 export interface ModeratedTrainingImage {
   filename: string;
@@ -288,6 +289,7 @@ export class FalLoraTrainingService {
     private readonly blobs: BlobStore,
     private readonly routing: FalRoutingDecision = DEFAULT_ROUTING,
     private readonly now: () => Date = () => new Date(),
+    private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store),
   ) {}
 
   async submit(input: FalTrainingInput): Promise<{ requestId: string; status: "queued" }> {
@@ -307,7 +309,45 @@ export class FalLoraTrainingService {
       steps: routing.steps,
       idempotencyKey: input.idempotencyKey,
     };
-    const result = await this.fal!.submitTraining(submission);
+    const startedAt = Date.now();
+    this.costMeter.assertSpendAllowed({
+      familyId: input.familyId,
+      provider: "fal.ai",
+      model: routing.model,
+      endpoint: routing.endpoint,
+    });
+    let result: Awaited<ReturnType<FalAdapter["submitTraining"]>>;
+    try {
+      result = await this.fal!.submitTraining(submission);
+      this.costMeter.recordAttempt({
+        provider: "fal.ai",
+        endpoint: routing.endpoint,
+        model: routing.model,
+        pricingVersion: "r1-training-v1",
+        units: { training_steps: routing.steps },
+        estimatedCostUsd: 0,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: result.jobId,
+        owningEntityIds: { familyId: input.familyId, personaId: input.personaId },
+        attemptType: "training",
+        outcome: "succeeded",
+      });
+    } catch (error) {
+      this.costMeter.recordAttempt({
+        provider: "fal.ai",
+        endpoint: routing.endpoint,
+        model: routing.model,
+        pricingVersion: "r1-training-v1",
+        units: { training_steps: routing.steps },
+        estimatedCostUsd: 0,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: input.idempotencyKey,
+        owningEntityIds: { familyId: input.familyId, personaId: input.personaId },
+        attemptType: "training",
+        outcome: "failed",
+      });
+      throw error;
+    }
     const timestamp = this.now();
     const record: FalTrainingRequestRecord = {
       requestId: result.jobId,

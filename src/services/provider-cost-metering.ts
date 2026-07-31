@@ -13,6 +13,7 @@ export type ProviderAttemptType =
 export type ProviderAttemptOutcome =
   | "succeeded"
   | "failed"
+  | "unknown"
   | "retried"
   | "cancelled"
   | "timed_out";
@@ -89,13 +90,16 @@ export interface ThresholdInput {
   p95FullCapMarginPercent?: number;
 }
 
-export type KillSwitchScope = "all" | "provider-model";
+export type KillSwitchScope = "all" | "provider" | "model" | "endpoint" | "provider-model";
 
 export interface ProviderKillSwitch {
   id: string;
+  /** Undefined means a global control; otherwise the control belongs to one Family. */
+  familyId?: string;
   scope: KillSwitchScope;
   provider?: string;
   model?: string;
+  endpoint?: string;
   threshold: CostThreshold;
   reason: string;
   createdAt: Date;
@@ -103,8 +107,10 @@ export interface ProviderKillSwitch {
 }
 
 export interface SpendRoute {
+  familyId?: string;
   provider: string;
   model: string;
+  endpoint?: string;
 }
 
 export class SpendBlockedError extends Error {
@@ -180,6 +186,23 @@ export class ProviderCostMeteringService {
       throw new Error("provider, endpoint, model, pricingVersion, and requestId are required");
     }
     if (!input.owningEntityIds?.familyId) throw new Error("familyId ownership is required");
+    if (
+      !["text", "image", "training", "moderation", "storage", "queue", "retry", "repair"].includes(
+        input.attemptType
+      )
+    ) {
+      throw new Error("Invalid provider attempt type");
+    }
+    if (![
+      "succeeded",
+      "failed",
+      "unknown",
+      "retried",
+      "cancelled",
+      "timed_out",
+    ].includes(input.outcome)) {
+      throw new Error("Invalid provider attempt outcome");
+    }
     assertFiniteNonNegative(input.estimatedCostUsd, "estimatedCostUsd");
     if (input.actualCostUsd !== undefined) assertFiniteNonNegative(input.actualCostUsd, "actualCostUsd");
     assertFiniteNonNegative(input.latencyMs, "latencyMs");
@@ -310,12 +333,29 @@ export class ProviderCostMeteringService {
     if (input.threshold !== CostThreshold.RED) {
       throw new Error("Only a red threshold may disable provider spend");
     }
+    if (input.scope === "provider" && !input.provider) {
+      throw new Error("provider kill switches require a provider");
+    }
+    if (input.scope === "model" && !input.model) {
+      throw new Error("model kill switches require a model");
+    }
+    if (input.scope === "endpoint" && !input.endpoint) {
+      throw new Error("endpoint kill switches require an endpoint");
+    }
     if (input.scope === "provider-model" && (!input.provider || !input.model)) {
       throw new Error("provider-model kill switches require provider and model");
     }
+    // Do not spread this input: unlike audit rows, a switch is itself an
+    // authorization boundary and must not retain unreviewed caller metadata.
     const killSwitch: ProviderKillSwitch = {
-      ...input,
       id: uuid(),
+      ...(input.familyId ? { familyId: input.familyId } : {}),
+      scope: input.scope,
+      ...(input.provider ? { provider: input.provider } : {}),
+      ...(input.model ? { model: input.model } : {}),
+      ...(input.endpoint ? { endpoint: input.endpoint } : {}),
+      threshold: CostThreshold.RED,
+      reason: input.reason,
       createdAt: this.now(),
       active: true,
     };
@@ -336,18 +376,33 @@ export class ProviderCostMeteringService {
   }
 
   assertSpendAllowed(route: SpendRoute): void {
-    const killSwitch = this.getKillSwitches().find(
-      (switchState) =>
-        switchState.scope === "all" ||
-        (switchState.provider === route.provider && switchState.model === route.model)
-    );
+    const killSwitch = this.getKillSwitches().find((switchState) => {
+      if (switchState.familyId && route.familyId && switchState.familyId !== route.familyId) {
+        return false;
+      }
+      if (switchState.scope === "all") return true;
+      if (switchState.scope === "provider") return switchState.provider === route.provider;
+      if (switchState.scope === "model") return switchState.model === route.model;
+      if (switchState.scope === "endpoint") return switchState.endpoint === route.endpoint;
+      return switchState.provider === route.provider && switchState.model === route.model;
+    });
     if (killSwitch) throw new SpendBlockedError(killSwitch);
   }
 
-  /** Budget gate used immediately before enqueue; red means no silent paid overage. */
+  /** Budget gate used immediately before a payable invocation, never merely enqueue. */
   authorizeSpend(route: SpendRoute & ThresholdInput): CostThreshold {
-    const threshold = this.evaluateThreshold(route);
     this.assertSpendAllowed(route);
+    if (route.p95FullCapMarginPercent === undefined) {
+      throw new SpendBlockedError({
+        id: "missing-p95-margin-evidence",
+        scope: "all",
+        threshold: CostThreshold.RED,
+        reason: "Missing P95 full-cap margin evidence",
+        createdAt: this.now(),
+        active: true,
+      });
+    }
+    const threshold = this.evaluateThreshold(route);
     if (threshold === CostThreshold.RED) {
       throw new SpendBlockedError({
         id: "budget-threshold",

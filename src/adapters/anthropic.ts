@@ -122,6 +122,7 @@ export type StoryGenerationOutcome = "success" | "refusal" | "max_tokens" | "pro
 export interface AnthropicGenerationEvidence {
   model: string;
   outcome: StoryGenerationOutcome;
+  providerRequestId?: string;
   stopReason?: string;
   inputTokens: number;
   outputTokens: number;
@@ -160,6 +161,11 @@ export function validateGeneratedStoryContract(
     typeof story.styleBible.wardrobe !== "object"
   ) {
     throw new Error("Story Style Bible is incomplete");
+  }
+  for (const personaId of selectedPersonaIds) {
+    if (!story.styleBible.wardrobe[personaId]?.trim()) {
+      throw new Error(`Story Style Bible is missing a wardrobe entry for Persona ${personaId}`);
+    }
   }
 }
 
@@ -255,6 +261,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
     this.lastGenerationEvidence = {
       model: getProductionStoryModel(this.routingDecision),
       outcome,
+      providerRequestId: message.id,
       stopReason: message.stop_reason ?? undefined,
       inputTokens: message.usage?.input_tokens ?? 0,
       outputTokens: message.usage?.output_tokens ?? 0,
@@ -264,6 +271,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
   async generateStory(input: {
     brief: string;
     personaNames: string[];
+    personaIds?: string[];
     characterNames?: string[];
     pageCount: number;
     storyType: StoryType;
@@ -272,7 +280,10 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
   }): Promise<GeneratedStory> {
     const client = buildClient();
     const castLine = [
-      input.personaNames.length ? `CAST (use these exact names): ${input.personaNames.join(", ")}.` : "",
+      input.personaNames.length ? `CAST NAMES (use in story prose): ${input.personaNames.join(", ")}.` : "",
+      input.personaIds?.length
+        ? `CAST PERSONA IDS (use these exact IDs in scenes.personaIds and styleBible.wardrobe.castMember): ${input.personaIds.join(", ")}.`
+        : "",
       input.characterNames?.length
         ? `FICTIONAL CHARACTERS (use these exact names): ${input.characterNames.join(", ")}.`
         : "",
@@ -296,7 +307,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
           "In ONE pass produce: the Story text, exactly the requested number of Pages",
           "(1–3 short simple sentences each), one Scene per Page, and a Style Bible that keeps",
           "wardrobe, palette, and art style identical across every Page.",
-          "Scenes' personaIds must use the exact cast names provided.",
+          "Scenes' personaIds and Style Bible wardrobe castMember values must use the exact cast Persona IDs provided.",
         ].join(" "),
       messages: [
         {
@@ -332,7 +343,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
     }
     this.recordEvidence(message);
     const story = parseGeneratedStory(message);
-    validateGeneratedStoryContract(story, input.pageCount, input.personaNames);
+    validateGeneratedStoryContract(story, input.pageCount, input.personaIds ?? input.personaNames);
     return story;
   }
 
@@ -439,6 +450,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
   async adaptStory(input: {
     sourceTale: ClassicSourceTale;
     personaNames: string[];
+    personaIds?: string[];
     pageCount: number;
     storyType: StoryType;
     twist?: string;
@@ -456,7 +468,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
         "In ONE pass produce: the Story text, exactly the requested number of Pages",
         "(1–3 short simple sentences each), one Scene per Page, and a Style Bible that keeps",
         "wardrobe, palette, and art style identical across every Page.",
-        "Scenes' personaIds must use the exact cast names provided.",
+        "Scenes' personaIds and Style Bible wardrobe castMember values must use the exact cast Persona IDs provided.",
       ].join(" "),
       messages: [
         {
@@ -467,7 +479,10 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
             `PLOT BEATS (preserve in order):\n${input.sourceTale.plotBeats
               .map((b, i) => `${i + 1}. ${b}`)
               .join("\n")}`,
-            `CAST (recast the tale's characters as these exact names): ${input.personaNames.join(", ")}.`,
+            `CAST NAMES (recast the tale's characters in prose): ${input.personaNames.join(", ")}.`,
+            input.personaIds?.length
+              ? `CAST PERSONA IDS (use these exact IDs in scenes.personaIds and styleBible.wardrobe.castMember): ${input.personaIds.join(", ")}.`
+              : null,
             `PAGE COUNT: exactly ${input.pageCount} pages, indexes 0 through ${input.pageCount - 1}.`,
             input.twist ? `CUSTOM TWIST (already moderated): ${input.twist}` : null,
           ]
@@ -484,7 +499,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
     });
     this.recordEvidence(message);
     const story = parseGeneratedStory(message);
-    validateGeneratedStoryContract(story, input.pageCount, input.personaNames);
+    validateGeneratedStoryContract(story, input.pageCount, input.personaIds ?? input.personaNames);
     return story;
   }
 }

@@ -40,6 +40,8 @@ export const R1_PROVIDER_E2E_FLOW_PLAN = DEFAULT_R1_PROVIDER_E2E_MANIFEST.flowPl
 
 export type R1ProviderE2EProvider = "fal" | "anthropic";
 export type R1ProviderE2EStatus = "succeeded" | "failed";
+/** Only a production adapter may declare real-provider evidence. */
+export type R1ProviderE2EEvidenceSource = "real-provider" | "development" | "deterministic";
 
 export interface R1ProviderE2EEnv {
   FAL_API_KEY?: string;
@@ -78,6 +80,7 @@ export interface R1ProviderE2EOperation {
 
 export interface R1ProviderE2EEvidence {
   requestId: string;
+  evidenceSource: R1ProviderE2EEvidenceSource;
   provider: R1ProviderE2EProvider;
   endpoint: string;
   model: string;
@@ -91,6 +94,8 @@ export interface R1ProviderE2EEvidence {
 export interface R1ProviderE2EAdapter {
   /** False means this seam is intentionally unavailable in the deterministic harness. */
   available: boolean;
+  /** Explicit provenance; omitted provenance fails closed as deterministic. */
+  evidenceSource?: R1ProviderE2EEvidenceSource;
   /** Development fakes never satisfy release evidence. */
   isDevOnly?: boolean;
   run(operation: R1ProviderE2EOperation): Promise<Partial<R1ProviderE2EEvidence>>;
@@ -147,7 +152,7 @@ export interface R1ProviderE2EReport {
     remainingUsd: number;
   };
   fixturePolicy: typeof DEFAULT_R1_PROVIDER_E2E_MANIFEST.fixturePolicy;
-  flowPlan: readonly typeof DEFAULT_R1_PROVIDER_E2E_MANIFEST.flowPlan[number][];
+  flowPlan: readonly R1ProviderE2EFlowItem[];
   flowChecklist: { total: number; passed: number; failed: number; pending: number };
   requestIds: string[];
   redactedLogs: string[];
@@ -285,20 +290,46 @@ export function evaluateR1ProviderE2EGate(input: R1ProviderE2EGateInput): R1Prov
   };
 }
 
+const SENSITIVE_EVIDENCE_KEY = /credential|secret|token|api[_-]?key|authorization|prompt|photo|image|media/i;
+
+function redactStructuredValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactStructuredValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [
+      key,
+      SENSITIVE_EVIDENCE_KEY.test(key) ? "[REDACTED]" : redactStructuredValue(nested),
+    ]));
+  }
+  return value;
+}
+
 function redactLog(value: string): string {
-  return value
-    .replace(/(credential|secret|token|api[_-]?key|authorization)\s*[=:]\s*[^\s,;]+/gi, "$1=[REDACTED]")
-    .replace(/prompt\s*[:=].*$/gi, "prompt=[REDACTED]")
-    .replace(/photo(?:s| bytes)?\s*[:=].*$/gi, "photo=[REDACTED]")
+  let sanitized = value;
+  try {
+    sanitized = JSON.stringify(redactStructuredValue(JSON.parse(value)));
+  } catch {
+    // Text logs are still treated as untrusted: redact quoted JSON-like values,
+    // key/value fragments, and provider URLs before preserving a short receipt.
+    sanitized = value.replace(
+      /(["']?(?:credential|secret|token|api[_-]?key|authorization|prompt|photo(?:s|[_ -]?bytes)?|image|media)["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/gi,
+      "$1[REDACTED]",
+    );
+  }
+  return sanitized
+    .replace(/https?:\/\/[^\s"',;}\]]+/gi, "[REDACTED_URL]")
     .slice(0, 500);
 }
 
+function adaptersAvailable(adapters: R1ProviderE2EAdapters): boolean {
+  return adapters.liveAdaptersWired && adapters.fal.available && adapters.anthropic.available;
+}
+
 function availableForRelease(adapters: R1ProviderE2EAdapters): boolean {
-  return adapters.liveAdaptersWired &&
-    adapters.fal.available &&
-    adapters.anthropic.available &&
+  return adaptersAvailable(adapters) &&
     adapters.fal.isDevOnly !== true &&
-    adapters.anthropic.isDevOnly !== true;
+    adapters.anthropic.isDevOnly !== true &&
+    adapters.fal.evidenceSource === "real-provider" &&
+    adapters.anthropic.evidenceSource === "real-provider";
 }
 
 export async function runR1ProviderE2E({
@@ -314,33 +345,47 @@ export async function runR1ProviderE2E({
   const evidence: R1ProviderE2EEvidence[] = [];
   const logs: string[] = [];
   let reservedUsd = 0;
-  if (availableForRelease(adapters)) {
+  if (adaptersAvailable(adapters)) {
     for (const operation of DEFAULT_OPERATIONS) {
       if (reservedUsd + operation.maxCostUsd > config.budgetUsd + Number.EPSILON) {
         throw new R1ProviderE2EBudgetError(`R1 provider e2e hard stop before ${operation.operationId}`);
       }
       reservedUsd += operation.maxCostUsd;
       const operationStarted = now();
+      const adapter = adapters[operation.provider];
       try {
-        const result = await adapters[operation.provider].run(operation);
-        const actualCostUsd = result.actualCostUsd ?? 0;
-        if (!Number.isFinite(actualCostUsd) || actualCostUsd < 0 || actualCostUsd > operation.maxCostUsd) {
-          throw new R1ProviderE2EBudgetError(`Invalid actual provider cost for ${operation.operationId}`);
+        const result = await adapter.run(operation);
+        const requestId = typeof result.requestId === "string" ? result.requestId.trim() : "";
+        const durationMs = typeof result.durationMs === "number" ? result.durationMs : Number.NaN;
+        const actualCostUsd = typeof result.actualCostUsd === "number" ? result.actualCostUsd : Number.NaN;
+        const providerEvidenceIsValid =
+          result.status === "succeeded" &&
+          requestId.length >= 8 &&
+          result.provider === operation.provider &&
+          result.endpoint === operation.endpoint &&
+          result.model === operation.model &&
+          result.pricingVersion === operation.pricingVersion &&
+          Number.isFinite(durationMs) && durationMs >= 0 &&
+          Number.isFinite(actualCostUsd) && actualCostUsd >= 0 && actualCostUsd <= operation.maxCostUsd;
+        if (!providerEvidenceIsValid) {
+          throw new R1ProviderE2EBudgetError(`Incomplete or mismatched provider evidence for ${operation.operationId}`);
         }
         evidence.push({
-          requestId: result.requestId ?? `${operation.operationId}:missing-request-id`,
+          requestId,
+          evidenceSource: adapter.evidenceSource ?? "deterministic",
           provider: operation.provider,
           endpoint: operation.endpoint,
           model: operation.model,
           pricingVersion: operation.pricingVersion,
-          status: result.status ?? "succeeded",
-          durationMs: Math.max(0, now().getTime() - operationStarted.getTime()),
+          status: "succeeded",
+          durationMs,
           actualCostUsd,
           redactedLog: redactLog(result.redactedLog ?? `${operation.operationId} completed without retained payload`),
         });
       } catch {
         evidence.push({
           requestId: `${operation.operationId}:error`,
+          evidenceSource: adapter.evidenceSource ?? "deterministic",
           provider: operation.provider,
           endpoint: operation.endpoint,
           model: operation.model,
@@ -356,9 +401,29 @@ export async function runR1ProviderE2E({
     logs.push("Live provider adapters are unavailable; no provider call was attempted");
   }
 
+  const statusByStage = new Map(evidence.map((item) => [
+    DEFAULT_OPERATIONS.find((operation) => operation.endpoint === item.endpoint && operation.model === item.model)?.stageId,
+    item.status === "succeeded" ? "passed" : "failed",
+  ] as const));
+  const flowPlan: R1ProviderE2EFlowItem[] = R1_PROVIDER_E2E_FLOW_PLAN.map((item) => ({
+    ...item,
+    status: statusByStage.get(item.id) ?? "pending",
+  }));
+  const flowChecklist = {
+    total: flowPlan.length,
+    passed: flowPlan.filter((item) => item.status === "passed").length,
+    failed: flowPlan.filter((item) => item.status === "failed").length,
+    pending: flowPlan.filter((item) => item.status === "pending").length,
+  };
   const actualProviderCostUsd = evidence.reduce((sum, item) => sum + item.actualCostUsd, 0);
   const completed = now();
-  const releaseEvidenceEligible = availableForRelease(adapters) && evidence.length > 0 && evidence.every((item) => item.status === "succeeded");
+  const releaseEvidenceEligible =
+    availableForRelease(adapters) &&
+    evidence.length === DEFAULT_OPERATIONS.length &&
+    evidence.every((item) => item.status === "succeeded" && item.evidenceSource === "real-provider") &&
+    new Set(evidence.map((item) => item.requestId)).size === evidence.length &&
+    flowChecklist.pending === 0 &&
+    flowChecklist.failed === 0;
   const decision = evaluateR1ProviderE2EGate({
     modeledAnnualFullCapP95MarginPercent: gate.modeledAnnualFullCapP95MarginPercent ?? 70,
     ordinaryStoryCost: gate.ordinaryStoryCost ?? { threshold: CostThreshold.GREEN },
@@ -367,6 +432,11 @@ export async function runR1ProviderE2E({
     approvalFlag: gate.approvalFlag ?? false,
     releaseEvidenceAvailable: releaseEvidenceEligible,
   });
+  if (decision.status === "blocked" && flowChecklist.pending > 0) {
+    decision.missingEvidence.push(
+      `${flowChecklist.pending} required R1 flow stages remain unexecuted`,
+    );
+  }
   return {
     schemaVersion: R1_PROVIDER_E2E_SCHEMA_VERSION,
     ticket: R1_PROVIDER_E2E_TICKET,
@@ -381,8 +451,8 @@ export async function runR1ProviderE2E({
       remainingUsd: Math.max(0, config.budgetUsd - actualProviderCostUsd),
     },
     fixturePolicy: DEFAULT_R1_PROVIDER_E2E_MANIFEST.fixturePolicy,
-    flowPlan: R1_PROVIDER_E2E_FLOW_PLAN.map((item) => ({ ...item, status: "pending" as const })),
-    flowChecklist: { total: R1_PROVIDER_E2E_FLOW_PLAN.length, passed: 0, failed: 0, pending: R1_PROVIDER_E2E_FLOW_PLAN.length },
+    flowPlan,
+    flowChecklist,
     requestIds: evidence.map((item) => item.requestId),
     redactedLogs: logs.concat(evidence.map((item) => item.redactedLog)).map(redactLog),
     evidence,
