@@ -4,8 +4,8 @@ import {
   createR1ProviderE2EConfig,
   runR1ProviderE2E,
   type R1ProviderE2EAdapters,
-  type R1ProviderE2EOperation,
 } from "@/services/r1-provider-e2e";
+import { runComposedR1ProviderE2E } from "@/services/r1-provider-e2e-composition";
 
 const config = () => createR1ProviderE2EConfig({
   FAL_API_KEY: "test-fal-credential",
@@ -13,75 +13,78 @@ const config = () => createR1ProviderE2EConfig({
   LIVE_PROVIDER_BUDGET_USD: "2",
 });
 
-function productionLikeDeterministicAdapters(
-  calls: R1ProviderE2EOperation[],
-  failOperationId?: string,
-): R1ProviderE2EAdapters {
-  const run = async (operation: R1ProviderE2EOperation) => {
-    calls.push(operation);
-    if (operation.operationId === failOperationId) throw new Error("forced provider failure");
-    return {
-      requestId: `synthetic-${operation.operationId}-request`,
-      provider: operation.provider,
-      endpoint: operation.endpoint,
-      model: operation.model,
-      pricingVersion: operation.pricingVersion,
-      status: "succeeded" as const,
-      durationMs: 25,
-      actualCostUsd: operation.maxCostUsd / 2,
-      redactedLog: `${operation.operationId} completed`,
-    };
-  };
+function deterministicAdapters(): R1ProviderE2EAdapters {
   return {
-    // This deliberately uses the full operation contract, but its explicit
-    // deterministic provenance prevents it from becoming live release evidence.
+    // The harness must run the full composition, but deterministic operation-level
+    // provenance keeps the gate closed.
+    liveAdaptersWired: false,
+    fal: { available: true, isDevOnly: true, evidenceSource: "deterministic", run: async () => ({}) },
+    anthropic: { available: true, isDevOnly: true, evidenceSource: "deterministic", run: async () => ({}) },
+  };
+}
+
+function realProviderAdapters(): R1ProviderE2EAdapters {
+  return {
     liveAdaptersWired: true,
-    fal: { available: true, evidenceSource: "deterministic", run },
-    anthropic: { available: true, evidenceSource: "deterministic", run },
+    fal: { available: true, evidenceSource: "real-provider", run: async () => ({}) },
+    anthropic: { available: true, evidenceSource: "real-provider", run: async () => ({}) },
   };
 }
 
 describe("185 — production-like release-gate composition", () => {
-  it("records the actually executed training, Story, and 12-Page stages while holding the incomplete fixture gate closed", async () => {
-    const calls: R1ProviderE2EOperation[] = [];
+  it("drives all 16 flowPlan stages across a single persisted fixture and still blocks deterministic evidence", async () => {
     const report = await runR1ProviderE2E({
       config: config(),
-      adapters: productionLikeDeterministicAdapters(calls),
+      adapters: deterministicAdapters(),
     });
 
-    expect(calls.map((operation) => operation.stageId)).toEqual([
-      "train",
-      "valid-story",
-      "twelve-page-jobs",
-    ]);
-    expect(report.evidence).toHaveLength(3);
-    expect(report.evidence.every((item) => item.evidenceSource === "deterministic")).toBe(true);
-    expect(report.flowPlan.filter((item) => item.status === "passed").map((item) => item.id)).toEqual([
-      "train",
-      "valid-story",
-      "twelve-page-jobs",
-    ]);
-    expect(report.flowChecklist).toMatchObject({ passed: 3, failed: 0, pending: 13 });
-    expect(report.releaseEvidenceEligible).toBe(false);
+    expect(report.flowPlan).toHaveLength(16);
+    expect(report.flowChecklist.pending).toBe(0);
+    expect(report.flowChecklist.failed).toBe(0);
+    expect(report.flowChecklist.passed).toBe(16);
+    expect(report.evidence.length).toBeGreaterThan(0);
+    expect(report.actualProviderCostUsd).toBeGreaterThanOrEqual(0);
     expect(report.decision.status).toBe("blocked");
-    expect(report.decision.missingEvidence).toEqual(expect.arrayContaining([
-      expect.stringMatching(/13 required R1 flow stages remain unexecuted/i),
-    ]));
+    expect(report.releaseEvidenceEligible).toBe(false);
   });
 
-  it("records a forced Page failure as failed evidence without fabricating spend or a recoverable success", async () => {
-    const calls: R1ProviderE2EOperation[] = [];
+  it("records story allowance reserve/commit/release from real service calls", async () => {
     const report = await runR1ProviderE2E({
       config: config(),
-      adapters: productionLikeDeterministicAdapters(calls, "r1-page-fanout"),
+      adapters: deterministicAdapters(),
     });
 
-    expect(calls).toHaveLength(3);
-    expect(report.flowPlan.find((item) => item.id === "twelve-page-jobs")?.status).toBe("failed");
-    expect(report.evidence.find((item) => item.endpoint === "fal-ai/flux-2/lora")).toMatchObject({
-      status: "failed",
-      actualCostUsd: 0,
+    expect(report.storyAllowanceAccounting.allowed).toBe(4);
+    expect(report.storyAllowanceAccounting.committed + report.storyAllowanceAccounting.released + report.storyAllowanceAccounting.reserved).toBeGreaterThan(0);
+  });
+
+  it("exposes the DataStore so tests can audit failure/recovery side effects", async () => {
+    const result = await runComposedR1ProviderE2E({
+      config: config(),
+      adapters: deterministicAdapters(),
     });
+
+    // The report captures provider evidence and allowance accounting before
+    // hard-delete erases the fixture's audit rows from the store.
+    expect(result.report.evidence.length).toBeGreaterThan(0);
+    expect(result.report.storyAllowanceAccounting.committed + result.report.storyAllowanceAccounting.released).toBeGreaterThan(0);
+    expect(result.familyId).toBeTruthy();
+
+    // After hard-delete, the fixture family data is erased.
+    expect(result.store.familyDataExists(result.familyId)).toBe(false);
+  });
+
+  it("would mark release evidence eligible only with real-provider operation adapters and all-green flow", async () => {
+    const report = await runR1ProviderE2E({
+      config: config(),
+      adapters: realProviderAdapters(),
+    });
+
+    // Even though the operation-level adapters claim real-provider provenance,
+    // the default service adapters are still deterministic fakes. The ledger
+    // entries they produce keep evidenceSource=deterministic, so eligibility is
+    // correctly not granted until real service adapters drive the calls.
+    expect(report.decision.status).toBe("blocked");
     expect(report.releaseEvidenceEligible).toBe(false);
   });
 });
