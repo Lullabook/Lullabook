@@ -18,6 +18,7 @@ const FAL_QUEUE_BASE = "https://queue.fal.run";
 // against the production boundary rather than copied expected metadata.
 export const FAL_FLUX_1_TRAIN_ENDPOINT = "fal-ai/flux-lora-fast-training";
 export const FAL_FLUX_1_LORA_ENDPOINT = "fal-ai/flux-lora";
+export const FAL_FLUX_1_LORA_MODEL = "flux-1-lora";
 export const FAL_FLUX_1_INPAINT_ENDPOINT = "fal-ai/flux-lora/inpainting";
 export const FAL_FLUX_2_TRAINER_ENDPOINT = "fal-ai/flux-2-trainer-v2";
 export const FAL_FLUX_2_LORA_ENDPOINT = "fal-ai/flux-2/lora";
