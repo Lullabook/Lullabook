@@ -31,6 +31,11 @@ import type {
 } from "@/domain/types";
 import type { FalTrainingRequestRecord, FalWebhookReceipt } from "@/adapters/types";
 
+export interface PendingBriefClaimResult {
+  pending: PendingBrief;
+  claimedNow: boolean;
+}
+
 export class DataStore {
   families = new Map<string, Family>();
   members = new Map<string, Member>();
@@ -566,16 +571,38 @@ export class DataStore {
   }
 
   /**
-   * In-memory fallback: the caller has already verified the Brief is claimable.
-   * The durable lease is composed by SupabaseDataStore via migration 021's RPC.
+   * Deterministic fallback for tests/local stores. SupabaseDataStore overrides
+   * this with the row-locking app_claim_pending_brief RPC used in production.
    */
   async claimPendingBrief(
-    _key: string,
-    _token: string,
-    _now: Date,
-    _leaseExpiresAt: Date
-  ): Promise<{ claimed: boolean }> {
-    return { claimed: true };
+    key: string,
+    claimToken: string,
+    now: Date,
+    leaseExpiresAt: Date
+  ): Promise<PendingBriefClaimResult> {
+    const pending = this.pendingBriefs.get(key);
+    if (!pending) throw new Error("Pending Brief is missing");
+    if (pending.status === "accepted") {
+      return { pending, claimedNow: false };
+    }
+    if (
+      pending.status === "running" &&
+      pending.claimExpiresAt !== undefined &&
+      pending.claimExpiresAt.getTime() > now.getTime()
+    ) {
+      return { pending, claimedNow: false };
+    }
+    const claimed: PendingBrief = {
+      ...pending,
+      status: "running",
+      claimToken,
+      claimedAt: now,
+      claimExpiresAt: leaseExpiresAt,
+      failedAt: undefined,
+      error: undefined,
+    };
+    this.pendingBriefs.set(key, claimed);
+    return { pending: claimed, claimedNow: true };
   }
 
   deletePendingBrief(key: string): void {

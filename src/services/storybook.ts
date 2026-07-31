@@ -214,7 +214,11 @@ export class StorybookService {
     return ids[pageIndex] ?? null;
   }
 
-  async generate(memberId: string, brief: Brief): Promise<Storybook> {
+  async generate(
+    memberId: string,
+    brief: Brief,
+    options?: { storybookId?: string; deferEnqueue?: boolean }
+  ): Promise<Storybook> {
     const member = this.store.members.get(memberId);
     if (!member) throw new Error("Member not found");
 
@@ -252,7 +256,7 @@ export class StorybookService {
     }
 
     const storybook: Storybook = {
-      id: uuid(),
+      id: options?.storybookId ?? uuid(),
       familyId: member.familyId,
       babyId: normalized.babyId,
       createdByMemberId: memberId,
@@ -267,16 +271,30 @@ export class StorybookService {
     this.storyCap.reserve(member.familyId, memberId, storybook.id);
     this.store.saveStorybook(storybook);
 
-    // Thin request, fat workflow (ADR-0011): the closure is what the
-    // in-memory fake drains; the durable adapter ignores it and re-enters
-    // runGenerationBody from the serialized payload instead.
+    // Cold-start resume persists the Storybook + claim pointer before it asks
+    // the queue to accept work. Ordinary create routes keep immediate enqueue.
+    if (!options?.deferEnqueue) this.enqueueGeneration(memberId, storybook.id);
+
+    return storybook;
+  }
+
+  /**
+   * Re-dispatches an already-reserved Storybook after a recoverable queue
+   * failure. The stable Storybook ID preserves allowance and provider
+   * idempotency; terminal books are never restarted from this seam.
+   */
+  enqueueGeneration(memberId: string, storybookId: string): void {
+    const storybook = this.store.getStorybook(storybookId, memberId);
+    if (!storybook) throw new Error("Storybook not found");
+    if (storybook.status === "failed") {
+      throw new Error("Storybook generation failed and requires explicit recovery");
+    }
+    if (storybook.status !== "generating") return;
     this.workflow.enqueue(
       `storybook-${storybook.id}`,
       async () => this.runGenerationBody(memberId, storybook.id),
       { type: "storybook-generate", storybookId: storybook.id, memberId }
     );
-
-    return storybook;
   }
 
   async generateFromClassic(
@@ -343,11 +361,7 @@ export class StorybookService {
     this.storyCap.reserve(member.familyId, memberId, storybook.id);
     this.store.saveStorybook(storybook);
 
-    this.workflow.enqueue(
-      `storybook-${storybook.id}`,
-      async () => this.runGenerationBody(memberId, storybook.id),
-      { type: "storybook-generate", storybookId: storybook.id, memberId }
-    );
+    this.enqueueGeneration(memberId, storybook.id);
 
     return storybook;
   }
