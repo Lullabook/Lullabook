@@ -16,6 +16,11 @@ import type {
   RosterScope,
   TraitQuestionnaire,
 } from "@/domain/types";
+import {
+  FAL_FLUX_1_LORA_ENDPOINT,
+  FAL_FLUX_1_LORA_MODEL,
+  FAL_FLUX_1_TRAIN_ENDPOINT,
+} from "@/adapters/fal";
 import { likenessReviewSampleBlobKey, rosterAvatarBlobKey } from "@/lib/roster-avatar";
 import { runPreflightChecks } from "@/services/preflight";
 import { ConsentRequiredError, SubscriptionService } from "@/services/subscription";
@@ -63,6 +68,18 @@ export interface AtomicPersonaCreationResult {
   bond?: BabyPersonBond;
 }
 
+const FAL_FLUX_1_PRICING_VERSION = "r1-fal-flux-1-v1";
+
+const FAL_TRAINING_ROUTE = {
+  endpoint: FAL_FLUX_1_TRAIN_ENDPOINT,
+  model: FAL_FLUX_1_LORA_MODEL,
+} as const;
+
+const FAL_IMAGE_ROUTE = {
+  endpoint: FAL_FLUX_1_LORA_ENDPOINT,
+  model: FAL_FLUX_1_LORA_MODEL,
+} as const;
+
 export class PersonaService {
   constructor(
     private readonly store: DataStore,
@@ -78,8 +95,90 @@ export class PersonaService {
     private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store)
   ) {}
 
-  private assertFalSpendAllowed(familyId: string, endpoint: string, model = "unknown-fal-model"): void {
-    this.costMeter.assertSpendAllowed({ familyId, provider: "fal.ai", endpoint, model });
+  private assertFalSpendAllowed(
+    familyId: string,
+    route: { endpoint: string; model: string },
+  ): void {
+    this.costMeter.assertSpendAllowed({ familyId, provider: "fal.ai", ...route });
+  }
+
+  private async startFalTraining(
+    persona: Persona,
+    photos: Buffer[],
+    attemptType: "training" | "retry",
+    requestId: string,
+  ): Promise<Awaited<ReturnType<FalAdapter["startTraining"]>>> {
+    const startedAt = Date.now();
+    this.assertFalSpendAllowed(persona.familyId, FAL_TRAINING_ROUTE);
+    try {
+      const job = await this.fal.startTraining(photos);
+      this.costMeter.recordAttempt({
+        provider: "fal.ai",
+        ...FAL_TRAINING_ROUTE,
+        pricingVersion: FAL_FLUX_1_PRICING_VERSION,
+        units: { training_images: photos.length },
+        estimatedCostUsd: 0,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: job.jobId,
+        owningEntityIds: { familyId: persona.familyId, personaId: persona.id },
+        attemptType,
+        outcome: "succeeded",
+      });
+      return job;
+    } catch (error) {
+      this.costMeter.recordAttempt({
+        provider: "fal.ai",
+        ...FAL_TRAINING_ROUTE,
+        pricingVersion: FAL_FLUX_1_PRICING_VERSION,
+        units: { training_images: photos.length },
+        estimatedCostUsd: 0,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId,
+        owningEntityIds: { familyId: persona.familyId, personaId: persona.id },
+        attemptType,
+        outcome: "failed",
+      });
+      throw error;
+    }
+  }
+
+  private async generateFalImage(
+    persona: Persona,
+    prompt: string,
+    idempotencyKey: string,
+  ): Promise<Awaited<ReturnType<FalAdapter["generateImage"]>>> {
+    const startedAt = Date.now();
+    this.assertFalSpendAllowed(persona.familyId, FAL_IMAGE_ROUTE);
+    try {
+      const image = await this.fal.generateImage(prompt, persona.loraWeightKey!, { idempotencyKey });
+      this.costMeter.recordAttempt({
+        provider: "fal.ai",
+        ...FAL_IMAGE_ROUTE,
+        pricingVersion: FAL_FLUX_1_PRICING_VERSION,
+        units: { images: 1 },
+        estimatedCostUsd: 0,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: idempotencyKey,
+        owningEntityIds: { familyId: persona.familyId, personaId: persona.id },
+        attemptType: "image",
+        outcome: "succeeded",
+      });
+      return image;
+    } catch (error) {
+      this.costMeter.recordAttempt({
+        provider: "fal.ai",
+        ...FAL_IMAGE_ROUTE,
+        pricingVersion: FAL_FLUX_1_PRICING_VERSION,
+        units: { images: 1 },
+        estimatedCostUsd: 0,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: idempotencyKey,
+        owningEntityIds: { familyId: persona.familyId, personaId: persona.id },
+        attemptType: "image",
+        outcome: "failed",
+      });
+      throw error;
+    }
   }
 
   async createAdult(input: CreatePersonaInput): Promise<Persona> {
@@ -273,8 +372,12 @@ export class PersonaService {
         await this.blobs.put(`${stagingPrefix}/${i}.jpg`, input.photos[i]);
       }
 
-      this.assertFalSpendAllowed(candidate.familyId, "fal.training.start");
-      const job = await this.fal.startTraining(input.photos);
+      const job = await this.startFalTraining(
+        candidate,
+        input.photos,
+        "training",
+        `replacement-training/${candidate.id}/${replacementId}`,
+      );
       await this.trainWithRetry(candidate, job.jobId, member.email, member.id, 1, {
         persist: false,
         derivativeScope: `replacement/${replacementId}`,
@@ -353,8 +456,12 @@ export class PersonaService {
       await this.blobs.put(`photos/${persona.id}/${i}.jpg`, input.photos[i]);
     }
 
-    this.assertFalSpendAllowed(persona.familyId, "fal.training.start");
-    const job = await this.fal.startTraining(input.photos);
+    const job = await this.startFalTraining(
+      persona,
+      input.photos,
+      "training",
+      `persona-training/${persona.id}`,
+    );
     await this.trainWithRetry(persona, job.jobId, member.email, member.id);
 
     if (kind === "adult" && !member.selfPersonaId) {
@@ -392,8 +499,12 @@ export class PersonaService {
             await this.notifications.sendEmail(email, "Your persona is ready", "~5 minutes");
             await this.notifications.sendWebPush(memberId, "Persona ready", "Training complete");
           } else if (attempt < 2) {
-            this.assertFalSpendAllowed(persona.familyId, "fal.training.start");
-            const retry = await this.fal.startTraining([]);
+            const retry = await this.startFalTraining(
+              persona,
+              [],
+              "retry",
+              `persona-training-retry/${persona.id}/${attempt + 1}`,
+            );
             retryJobId = retry.jobId;
           } else {
             persona.status = "failed";
@@ -437,11 +548,10 @@ export class PersonaService {
     const idempotencyPrefix = scope ? `${scope}/` : "";
     try {
       for (let index = 0; index < 2; index++) {
-        this.assertFalSpendAllowed(persona.familyId, "fal.image.generate");
-        const sample = await this.fal.generateImage(
+        const sample = await this.generateFalImage(
+          persona,
           `Likeness review sample ${index + 1}: ${persona.displayName} in a gentle storybook scene, no raw photo`,
-          persona.loraWeightKey,
-          { idempotencyKey: `${idempotencyPrefix}likeness-sample/${persona.id}/${generationId}/${index}` }
+          `${idempotencyPrefix}likeness-sample/${persona.id}/${generationId}/${index}`,
         );
         const sampleKey = likenessReviewSampleBlobKey(
           persona.familyId,
@@ -453,11 +563,10 @@ export class PersonaService {
         sampleKeys.push(sampleKey);
       }
       avatarKey = rosterAvatarBlobKey(persona.familyId, persona.id, generationId);
-      this.assertFalSpendAllowed(persona.familyId, "fal.image.generate");
-      const portrait = await this.fal.generateImage(
+      const portrait = await this.generateFalImage(
+        persona,
         `Neutral portrait headshot of ${persona.displayName}, soft storybook illustration, plain warm background`,
-        persona.loraWeightKey,
-        { idempotencyKey: `${idempotencyPrefix}roster-avatar/${persona.id}/${generationId}` }
+        `${idempotencyPrefix}roster-avatar/${persona.id}/${generationId}`,
       );
       await this.blobs.put(avatarKey, portrait.bytes ?? Buffer.from("roster-avatar"));
       persona.avatarKey = avatarKey;
