@@ -772,6 +772,48 @@ export class SupabaseDataStore extends DataStore {
     }
   }
 
+  override async claimPendingBrief(
+    key: string,
+    token: string,
+    now: Date,
+    leaseExpiresAt: Date
+  ): Promise<{ claimed: boolean }> {
+    const { data, error } = await this.client.rpc("app_claim_pending_brief", {
+      p_key: key,
+      p_claim_token: token,
+      p_now: now.toISOString(),
+      p_lease_expires_at: leaseExpiresAt.toISOString(),
+    });
+    if (error) {
+      throw new Error(`claimPendingBrief failed: ${error.message}`);
+    }
+    const row = (data ?? {}) as Row;
+
+    // Refresh the in-memory unit-of-work from the authoritative row so a
+    // declined claim (already accepted or live lease) never overwrites truth.
+    if (row.key !== undefined || row.status !== undefined) {
+      this.pendingBriefs.set(key, {
+        memberId: row.member_id,
+        personaId: row.persona_id,
+        brief: row.brief,
+        submittedAt: new Date(row.submitted_at),
+        selectedPersonaIds: Array.isArray(row.selected_persona_ids)
+          ? row.selected_persona_ids.filter((id): id is string => typeof id === "string")
+          : undefined,
+        status: row.status ?? "pending",
+        claimToken: row.claim_token ?? undefined,
+        claimExpiresAt: row.claim_expires_at ? new Date(row.claim_expires_at) : undefined,
+        claimedAt: row.claimed_at ? new Date(row.claimed_at) : undefined,
+        storybookId: row.storybook_id ?? undefined,
+        acceptedAt: row.accepted_at ? new Date(row.accepted_at) : undefined,
+        failedAt: row.failed_at ? new Date(row.failed_at) : undefined,
+        error: row.error ?? undefined,
+      });
+    }
+
+    return { claimed: row.claimed_now === true };
+  }
+
   // -------------------------------------------------------------------------
   // Sync-back
   // -------------------------------------------------------------------------
