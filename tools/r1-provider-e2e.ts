@@ -1,29 +1,36 @@
+import { RealAnthropicAdapter } from "@/adapters/anthropic";
+import { RealFalAdapter } from "@/adapters/fal";
 import {
   createR1ProviderE2EConfig,
   DEFAULT_R1_PROVIDER_E2E_MANIFEST,
   runR1ProviderE2E,
   type R1ProviderE2EAdapters,
-  type R1ProviderE2EOperation,
-} from "../src/services/r1-provider-e2e";
+} from "@/services/r1-provider-e2e";
 
 const LIVE_ADAPTERS_NOT_WIRED =
-  "Live provider adapters are not wired by the deterministic contract harness; provide a separately reviewed, separately authorized paid-run adapter implementation.";
+  "Live provider adapters are not wired: set FAL_API_KEY and ANTHROPIC_API_KEY to authorize a real-provider run.";
 
-function unavailable(operation: R1ProviderE2EOperation): never {
-  throw new Error(`${LIVE_ADAPTERS_NOT_WIRED} Operation: ${operation.operationId}`);
+function createAdapters(isLive: boolean): R1ProviderE2EAdapters {
+  return {
+    liveAdaptersWired: isLive,
+    fal: {
+      available: isLive,
+      isDevOnly: !isLive,
+      evidenceSource: isLive ? "real-provider" : "deterministic",
+      run: async (operation) => {
+        throw new Error(`${LIVE_ADAPTERS_NOT_WIRED} Operation: ${operation.operationId}`);
+      },
+    },
+    anthropic: {
+      available: isLive,
+      isDevOnly: !isLive,
+      evidenceSource: isLive ? "real-provider" : "deterministic",
+      run: async (operation) => {
+        throw new Error(`${LIVE_ADAPTERS_NOT_WIRED} Operation: ${operation.operationId}`);
+      },
+    },
+  };
 }
-
-const adapters: R1ProviderE2EAdapters = {
-  liveAdaptersWired: false,
-  fal: {
-    available: false,
-    run: async (operation) => unavailable(operation),
-  },
-  anthropic: {
-    available: false,
-    run: async (operation) => unavailable(operation),
-  },
-};
 
 async function main(): Promise<void> {
   let config;
@@ -35,10 +42,31 @@ async function main(): Promise<void> {
     return;
   }
 
-  const report = await runR1ProviderE2E({ config, adapters });
+  const isLive =
+    Boolean(config.credentials.fal) &&
+    Boolean(config.credentials.anthropic) &&
+    process.env.R1_PROVIDER_E2E_LIVE === "true";
+
+  const adapters = createAdapters(isLive);
+  const serviceAdapters = isLive
+    ? {
+        fal: new RealFalAdapter(),
+        anthropic: new RealAnthropicAdapter(),
+      }
+    : undefined;
+
+  const report = await runR1ProviderE2E({ config, adapters, serviceAdapters });
   console.log(JSON.stringify({ manifest: DEFAULT_R1_PROVIDER_E2E_MANIFEST, report }, null, 2));
-  // A blocked report is evidence that the gate held, not a successful paid run.
-  process.exitCode = report.decision.status === "blocked" ? 2 : 0;
+
+  if (!isLive) {
+    // A blocked report without live adapters is evidence that the gate held.
+    process.exitCode = report.decision.status === "blocked" ? 2 : 0;
+    return;
+  }
+
+  // Live run: exit 0 only when the gate actually passes. Do not treat a live
+  // blocked or failed gate as a successful release authorization.
+  process.exitCode = report.decision.status === "passed" ? 0 : 1;
 }
 
 void main().catch((error: unknown) => {

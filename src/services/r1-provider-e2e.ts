@@ -1,5 +1,10 @@
 import { CostThreshold } from "@/services/provider-cost-metering";
 
+import type {
+  R1ProviderE2EServiceAdapters,
+} from "@/services/r1-provider-e2e-composition";
+import { runComposedR1ProviderE2E } from "@/services/r1-provider-e2e-composition";
+
 export { CostThreshold };
 
 export const APPROVED_R1_PROVIDER_E2E_CEILING_USD = 2;
@@ -175,44 +180,16 @@ export interface R1ProviderE2EReport {
 export interface RunR1ProviderE2EOptions {
   config: R1ProviderE2EConfig;
   adapters: R1ProviderE2EAdapters;
+  serviceAdapters?: Partial<R1ProviderE2EServiceAdapters>;
   now?: () => Date;
   gate?: Partial<Omit<R1ProviderE2EGateInput, "releaseEvidenceAvailable">>;
 }
 
-const DEFAULT_GATE_ROUTE: R1ProviderE2EGateRoute = {
+export const DEFAULT_GATE_ROUTE: R1ProviderE2EGateRoute = {
   provider: "fal.ai",
   model: "fal-ai/flux-2/lora",
 };
 
-const DEFAULT_OPERATIONS: R1ProviderE2EOperation[] = [
-  {
-    operationId: "r1-train-personas",
-    stageId: "train",
-    provider: "fal",
-    endpoint: "fal-ai/flux-2-trainer-v2",
-    model: "flux-2-lora-v2",
-    pricingVersion: "fal-2026-07-20",
-    maxCostUsd: 0.4,
-  },
-  {
-    operationId: "r1-story-text",
-    stageId: "valid-story",
-    provider: "anthropic",
-    endpoint: "anthropic.messages.create",
-    model: "claude-sonnet-4-6",
-    pricingVersion: "anthropic-2026-07-20",
-    maxCostUsd: 0.2,
-  },
-  {
-    operationId: "r1-page-fanout",
-    stageId: "twelve-page-jobs",
-    provider: "fal",
-    endpoint: "fal-ai/flux-2/lora",
-    model: "flux-2-lora",
-    pricingVersion: "fal-2026-07-20",
-    maxCostUsd: 0.8,
-  },
-];
 
 function requiredCredential(env: R1ProviderE2EEnv, name: "FAL_API_KEY" | "ANTHROPIC_API_KEY"): string {
   const value = env[name]?.trim();
@@ -303,7 +280,7 @@ function redactStructuredValue(value: unknown): unknown {
   return value;
 }
 
-function redactLog(value: string): string {
+export function redactLog(value: string): string {
   let sanitized = value;
   try {
     sanitized = JSON.stringify(redactStructuredValue(JSON.parse(value)));
@@ -320,165 +297,21 @@ function redactLog(value: string): string {
     .slice(0, 500);
 }
 
-function adaptersAvailable(adapters: R1ProviderE2EAdapters): boolean {
-  return adapters.liveAdaptersWired && adapters.fal.available && adapters.anthropic.available;
-}
-
-function availableForRelease(adapters: R1ProviderE2EAdapters): boolean {
-  return adaptersAvailable(adapters) &&
-    adapters.fal.isDevOnly !== true &&
-    adapters.anthropic.isDevOnly !== true &&
-    adapters.fal.evidenceSource === "real-provider" &&
-    adapters.anthropic.evidenceSource === "real-provider";
-}
-
 export async function runR1ProviderE2E({
   config,
   adapters,
+  serviceAdapters,
   now = () => new Date(),
   gate = {},
 }: RunR1ProviderE2EOptions): Promise<R1ProviderE2EReport> {
-  if (!Number.isFinite(config.budgetUsd) || config.budgetUsd <= 0 || config.budgetUsd > APPROVED_R1_PROVIDER_E2E_CEILING_USD) {
-    throw new R1ProviderE2EConfigError("Invalid R1 provider e2e smoke budget");
-  }
-  const started = now();
-  const evidence: R1ProviderE2EEvidence[] = [];
-  const logs: string[] = [];
-  let reservedUsd = 0;
-  if (adaptersAvailable(adapters)) {
-    for (const operation of DEFAULT_OPERATIONS) {
-      if (reservedUsd + operation.maxCostUsd > config.budgetUsd + Number.EPSILON) {
-        throw new R1ProviderE2EBudgetError(`R1 provider e2e hard stop before ${operation.operationId}`);
-      }
-      reservedUsd += operation.maxCostUsd;
-      const operationStarted = now();
-      const adapter = adapters[operation.provider];
-      try {
-        const result = await adapter.run(operation);
-        const requestId = typeof result.requestId === "string" ? result.requestId.trim() : "";
-        const durationMs = typeof result.durationMs === "number" ? result.durationMs : Number.NaN;
-        const actualCostUsd = typeof result.actualCostUsd === "number" ? result.actualCostUsd : Number.NaN;
-        const providerEvidenceIsValid =
-          result.status === "succeeded" &&
-          requestId.length >= 8 &&
-          result.provider === operation.provider &&
-          result.endpoint === operation.endpoint &&
-          result.model === operation.model &&
-          result.pricingVersion === operation.pricingVersion &&
-          Number.isFinite(durationMs) && durationMs >= 0 &&
-          Number.isFinite(actualCostUsd) && actualCostUsd >= 0 && actualCostUsd <= operation.maxCostUsd;
-        if (!providerEvidenceIsValid) {
-          throw new R1ProviderE2EBudgetError(`Incomplete or mismatched provider evidence for ${operation.operationId}`);
-        }
-        evidence.push({
-          requestId,
-          evidenceSource: adapter.evidenceSource ?? "deterministic",
-          provider: operation.provider,
-          endpoint: operation.endpoint,
-          model: operation.model,
-          pricingVersion: operation.pricingVersion,
-          status: "succeeded",
-          durationMs,
-          actualCostUsd,
-          redactedLog: redactLog(result.redactedLog ?? `${operation.operationId} completed without retained payload`),
-        });
-      } catch {
-        evidence.push({
-          requestId: `${operation.operationId}:error`,
-          evidenceSource: adapter.evidenceSource ?? "deterministic",
-          provider: operation.provider,
-          endpoint: operation.endpoint,
-          model: operation.model,
-          pricingVersion: operation.pricingVersion,
-          status: "failed",
-          durationMs: Math.max(0, now().getTime() - operationStarted.getTime()),
-          actualCostUsd: 0,
-          redactedLog: `Provider operation ${operation.operationId} failed; sensitive payloads were not retained`,
-        });
-      }
-    }
-  } else {
-    logs.push("Live provider adapters are unavailable; no provider call was attempted");
-  }
-
-  const statusByStage = new Map(evidence.map((item) => [
-    DEFAULT_OPERATIONS.find((operation) => operation.endpoint === item.endpoint && operation.model === item.model)?.stageId,
-    item.status === "succeeded" ? "passed" : "failed",
-  ] as const));
-  const flowPlan: R1ProviderE2EFlowItem[] = R1_PROVIDER_E2E_FLOW_PLAN.map((item) => ({
-    ...item,
-    status: statusByStage.get(item.id) ?? "pending",
-  }));
-  const flowChecklist = {
-    total: flowPlan.length,
-    passed: flowPlan.filter((item) => item.status === "passed").length,
-    failed: flowPlan.filter((item) => item.status === "failed").length,
-    pending: flowPlan.filter((item) => item.status === "pending").length,
-  };
-  const actualProviderCostUsd = evidence.reduce((sum, item) => sum + item.actualCostUsd, 0);
-  const completed = now();
-  const releaseEvidenceEligible =
-    availableForRelease(adapters) &&
-    evidence.length === DEFAULT_OPERATIONS.length &&
-    evidence.every((item) => item.status === "succeeded" && item.evidenceSource === "real-provider") &&
-    new Set(evidence.map((item) => item.requestId)).size === evidence.length &&
-    flowChecklist.pending === 0 &&
-    flowChecklist.failed === 0;
-  const decision = evaluateR1ProviderE2EGate({
-    modeledAnnualFullCapP95MarginPercent: gate.modeledAnnualFullCapP95MarginPercent ?? 70,
-    ordinaryStoryCost: gate.ordinaryStoryCost ?? { threshold: CostThreshold.GREEN },
-    selectedRoute: gate.selectedRoute ?? DEFAULT_GATE_ROUTE,
-    canaryDecision: gate.canaryDecision ?? DEFAULT_GATE_ROUTE,
-    approvalFlag: gate.approvalFlag ?? false,
-    releaseEvidenceAvailable: releaseEvidenceEligible,
+  const result = await runComposedR1ProviderE2E({
+    config,
+    adapters,
+    serviceAdapters,
+    now,
+    gate,
   });
-  if (decision.status === "blocked" && flowChecklist.pending > 0) {
-    decision.missingEvidence.push(
-      `${flowChecklist.pending} required R1 flow stages remain unexecuted`,
-    );
-  }
-  return {
-    schemaVersion: R1_PROVIDER_E2E_SCHEMA_VERSION,
-    ticket: R1_PROVIDER_E2E_TICKET,
-    startedAt: started.toISOString(),
-    completedAt: completed.toISOString(),
-    durationMs: Math.max(0, completed.getTime() - started.getTime()),
-    budget: {
-      configuredUsd: config.budgetUsd,
-      approvedCeilingUsd: APPROVED_R1_PROVIDER_E2E_CEILING_USD,
-      reservedUsd,
-      actualProviderCostUsd,
-      remainingUsd: Math.max(0, config.budgetUsd - actualProviderCostUsd),
-    },
-    fixturePolicy: DEFAULT_R1_PROVIDER_E2E_MANIFEST.fixturePolicy,
-    flowPlan,
-    flowChecklist,
-    requestIds: evidence.map((item) => item.requestId),
-    redactedLogs: logs.concat(evidence.map((item) => item.redactedLog)).map(redactLog),
-    evidence,
-    actualProviderCostUsd,
-    storyAllowanceAccounting: {
-      allowed: DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily,
-      reserved: 0,
-      released: 0,
-      committed: 0,
-      remaining: DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily,
-    },
-    modelVersions: {
-      training: "flux-2-trainer-v2",
-      illustration: "flux-2-lora-v1",
-      story: "claude-sonnet-4-6",
-      pageRepair: "nano-banana-2-edit-v1",
-    },
-    pricingVersions: {
-      fal: "fal-2026-07-20",
-      anthropic: "anthropic-2026-07-20",
-      platformReserve: "r1-economics-2026-07-20",
-    },
-    decision,
-    releaseEvidenceEligible,
-    productionRoutingMutated: false,
-  };
+  return result.report;
 }
 
 export type ExistingR1ProviderE2EAdapter = R1ProviderE2EAdapter;
