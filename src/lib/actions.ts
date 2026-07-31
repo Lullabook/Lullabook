@@ -281,6 +281,12 @@ export async function acceptLikenessAction(
   const { ctx, member } = await requireAuthedContext();
   try {
     ctx.personas.acceptLikeness(personaId, member.id);
+    try {
+      await ctx.coldStart.onPersonaReady(personaId);
+    } catch {
+      // Resume failure is recoverable; the accepted Persona is durable and the
+      // pending Brief remains retryable.
+    }
     await ctx.persist();
     revalidatePath("/personas");
     return { ok: true, data: undefined };

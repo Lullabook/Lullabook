@@ -70,15 +70,28 @@ export class ColdStartService {
       });
       if (!allReady) continue;
 
+      // Take a durable lease before spending on the Storybook. SupabaseDataStore
+      // uses migration 021's row-level claim; the in-memory store's no-op claim
+      // keeps unit tests untouched.
+      const claimToken = uuid();
+      const claimExpiresAt = new Date(now.getTime() + BRIEF_CLAIM_LEASE_MS);
+      const { claimed: gotClaim } = await this.store.claimPendingBrief(
+        key,
+        claimToken,
+        now,
+        claimExpiresAt
+      );
+      if (!gotClaim) continue;
+
       // Persist the lease before requesting the Storybook. In production this
       // map is synchronized as one durable unit of work; a later worker will
       // only recover the claim after its explicit lease expires.
       const claimed: PendingBrief = {
         ...pending,
         status: "running",
-        claimToken: uuid(),
+        claimToken,
         claimedAt: now,
-        claimExpiresAt: new Date(now.getTime() + BRIEF_CLAIM_LEASE_MS),
+        claimExpiresAt,
         error: undefined,
       };
       this.store.savePendingBrief(key, claimed);

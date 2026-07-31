@@ -565,6 +565,19 @@ export class DataStore {
     return this.pendingBriefs.get(key);
   }
 
+  /**
+   * In-memory fallback: the caller has already verified the Brief is claimable.
+   * The durable lease is composed by SupabaseDataStore via migration 021's RPC.
+   */
+  async claimPendingBrief(
+    _key: string,
+    _token: string,
+    _now: Date,
+    _leaseExpiresAt: Date
+  ): Promise<{ claimed: boolean }> {
+    return { claimed: true };
+  }
+
   deletePendingBrief(key: string): void {
     this.pendingBriefs.delete(key);
   }
