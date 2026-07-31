@@ -47,11 +47,13 @@ export interface R1ProviderE2EEnv {
   FAL_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   LIVE_PROVIDER_BUDGET_USD?: string;
+  LIVE_PROVIDER_RUN_APPROVED?: string;
 }
 
 export interface R1ProviderE2EConfig {
   budgetUsd: number;
   credentials: { fal: string; anthropic: string };
+  liveRunApproved: true;
 }
 
 export class R1ProviderE2EConfigError extends Error {
@@ -113,6 +115,29 @@ export interface R1ProviderE2EFlowItem {
   status: "pending" | "passed" | "failed";
 }
 
+export type R1ProviderE2EStageDetail = string | number | boolean | null;
+
+export interface R1ProviderE2EStageEvidence {
+  stageId: string;
+  status: "passed" | "failed";
+  summary: string;
+  details?: Record<string, R1ProviderE2EStageDetail>;
+  redactedLog?: string;
+}
+
+export interface R1ProviderE2ECompositionResult {
+  evidenceSource: R1ProviderE2EEvidenceSource;
+  stageEvidence: R1ProviderE2EStageEvidence[];
+  evidence: R1ProviderE2EEvidence[];
+  storyAllowanceAccounting: R1ProviderE2EReport["storyAllowanceAccounting"];
+  redactedLogs?: string[];
+  reservedUsd?: number;
+}
+
+export interface R1ProviderE2EComposition {
+  run(): Promise<R1ProviderE2ECompositionResult>;
+}
+
 export interface R1ProviderE2EGateRoute {
   provider: string;
   model: string;
@@ -154,6 +179,7 @@ export interface R1ProviderE2EReport {
   fixturePolicy: typeof DEFAULT_R1_PROVIDER_E2E_MANIFEST.fixturePolicy;
   flowPlan: readonly R1ProviderE2EFlowItem[];
   flowChecklist: { total: number; passed: number; failed: number; pending: number };
+  stageEvidence: R1ProviderE2EStageEvidence[];
   requestIds: string[];
   redactedLogs: string[];
   evidence: R1ProviderE2EEvidence[];
@@ -174,7 +200,8 @@ export interface R1ProviderE2EReport {
 
 export interface RunR1ProviderE2EOptions {
   config: R1ProviderE2EConfig;
-  adapters: R1ProviderE2EAdapters;
+  adapters?: R1ProviderE2EAdapters;
+  composition?: R1ProviderE2EComposition;
   now?: () => Date;
   gate?: Partial<Omit<R1ProviderE2EGateInput, "releaseEvidenceAvailable">>;
 }
@@ -229,10 +256,16 @@ export function createR1ProviderE2EConfig(
     FAL_API_KEY: process.env.FAL_API_KEY,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     LIVE_PROVIDER_BUDGET_USD: process.env.LIVE_PROVIDER_BUDGET_USD,
+    LIVE_PROVIDER_RUN_APPROVED: process.env.LIVE_PROVIDER_RUN_APPROVED,
   }
 ): R1ProviderE2EConfig {
   const fal = requiredCredential(env, "FAL_API_KEY");
   const anthropic = requiredCredential(env, "ANTHROPIC_API_KEY");
+  if (env.LIVE_PROVIDER_RUN_APPROVED !== "true") {
+    throw new R1ProviderE2EConfigError(
+      "R1 provider e2e smoke refuses to run: LIVE_PROVIDER_RUN_APPROVED=true is required",
+    );
+  }
   const rawBudget = env.LIVE_PROVIDER_BUDGET_USD?.trim();
   const budgetUsd = rawBudget === undefined ? Number.NaN : Number(rawBudget);
   if (!Number.isFinite(budgetUsd) || budgetUsd <= 0) {
@@ -245,7 +278,7 @@ export function createR1ProviderE2EConfig(
       `LIVE_PROVIDER_BUDGET_USD exceeds the approved $${APPROVED_R1_PROVIDER_E2E_CEILING_USD} ceiling`
     );
   }
-  return { budgetUsd, credentials: { fal, anthropic } };
+  return { budgetUsd, credentials: { fal, anthropic }, liveRunApproved: true };
 }
 
 export function evaluateR1ProviderE2EGate(input: R1ProviderE2EGateInput): R1ProviderE2EGateDecision {
@@ -297,9 +330,12 @@ function redactStructuredValue(value: unknown): unknown {
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value).map(([key, nested]) => [
       key,
-      SENSITIVE_EVIDENCE_KEY.test(key) ? "[REDACTED]" : redactStructuredValue(nested),
+      SENSITIVE_EVIDENCE_KEY.test(key) && typeof nested !== "number" && typeof nested !== "boolean" && nested !== null
+        ? "[REDACTED]"
+        : redactStructuredValue(nested),
     ]));
   }
+  if (typeof value === "string") return redactLog(value);
   return value;
 }
 
@@ -335,17 +371,75 @@ function availableForRelease(adapters: R1ProviderE2EAdapters): boolean {
 export async function runR1ProviderE2E({
   config,
   adapters,
+  composition,
   now = () => new Date(),
   gate = {},
 }: RunR1ProviderE2EOptions): Promise<R1ProviderE2EReport> {
   if (!Number.isFinite(config.budgetUsd) || config.budgetUsd <= 0 || config.budgetUsd > APPROVED_R1_PROVIDER_E2E_CEILING_USD) {
     throw new R1ProviderE2EConfigError("Invalid R1 provider e2e smoke budget");
   }
+  if (config.liveRunApproved !== true) {
+    throw new R1ProviderE2EConfigError("R1 provider e2e smoke requires explicit live-run approval");
+  }
+  if (composition && adapters) {
+    throw new R1ProviderE2EConfigError("Choose either an R1 provider composition or provider adapters, not both");
+  }
   const started = now();
   const evidence: R1ProviderE2EEvidence[] = [];
+  const stageEvidence: R1ProviderE2EStageEvidence[] = [];
   const logs: string[] = [];
   let reservedUsd = 0;
-  if (adaptersAvailable(adapters)) {
+  let compositionEvidenceSource: R1ProviderE2EEvidenceSource | undefined;
+  let storyAllowanceAccounting: R1ProviderE2EReport["storyAllowanceAccounting"] = {
+    allowed: DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily,
+    reserved: 0,
+    released: 0,
+    committed: 0,
+    remaining: DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily,
+  };
+  if (composition) {
+    const result = await composition.run();
+    compositionEvidenceSource = result.evidenceSource;
+    const knownStages = new Set<string>(R1_PROVIDER_E2E_FLOW_PLAN.map((item) => item.id));
+    const seenStages = new Set<string>();
+    for (const item of result.stageEvidence) {
+      if (!knownStages.has(item.stageId) || seenStages.has(item.stageId)) {
+        throw new R1ProviderE2EConfigError(`Invalid or duplicate R1 stage evidence: ${item.stageId}`);
+      }
+      seenStages.add(item.stageId);
+      stageEvidence.push({
+        ...item,
+        summary: redactLog(item.summary),
+        details: item.details
+          ? redactStructuredValue(item.details) as Record<string, R1ProviderE2EStageDetail>
+          : undefined,
+        redactedLog: item.redactedLog ? redactLog(item.redactedLog) : undefined,
+      });
+    }
+    evidence.push(...result.evidence.map((item) => ({ ...item, redactedLog: redactLog(item.redactedLog) })));
+    const accounting = result.storyAllowanceAccounting;
+    const accountingValues = [
+      accounting.allowed,
+      accounting.reserved,
+      accounting.released,
+      accounting.committed,
+      accounting.remaining,
+    ];
+    if (
+      accounting.allowed !== DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily ||
+      accountingValues.some((value) => !Number.isInteger(value) || value < 0) ||
+      accounting.reserved + accounting.committed > accounting.allowed ||
+      accounting.remaining !== accounting.allowed - accounting.reserved - accounting.committed
+    ) {
+      throw new R1ProviderE2EConfigError("Invalid R1 Story allowance evidence");
+    }
+    storyAllowanceAccounting = { ...accounting };
+    reservedUsd = result.reservedUsd ?? 0;
+    if (!Number.isFinite(reservedUsd) || reservedUsd < 0 || reservedUsd > config.budgetUsd) {
+      throw new R1ProviderE2EBudgetError("R1 provider composition exceeded its authorized reservation");
+    }
+    logs.push(...(result.redactedLogs ?? []).map(redactLog));
+  } else if (adapters && adaptersAvailable(adapters)) {
     for (const operation of DEFAULT_OPERATIONS) {
       if (reservedUsd + operation.maxCostUsd > config.budgetUsd + Number.EPSILON) {
         throw new R1ProviderE2EBudgetError(`R1 provider e2e hard stop before ${operation.operationId}`);
@@ -398,13 +492,23 @@ export async function runR1ProviderE2E({
       }
     }
   } else {
-    logs.push("Live provider adapters are unavailable; no provider call was attempted");
+    logs.push("Live provider composition is unavailable; no provider call was attempted");
   }
 
-  const statusByStage = new Map(evidence.map((item) => [
-    DEFAULT_OPERATIONS.find((operation) => operation.endpoint === item.endpoint && operation.model === item.model)?.stageId,
-    item.status === "succeeded" ? "passed" : "failed",
-  ] as const));
+  const statusByStage = new Map<string, R1ProviderE2EFlowItem["status"]>();
+  for (const item of stageEvidence) {
+    statusByStage.set(item.stageId, item.status);
+  }
+  if (!composition) {
+    for (const item of evidence) {
+      const stageId = DEFAULT_OPERATIONS.find(
+        (operation) => operation.endpoint === item.endpoint && operation.model === item.model,
+      )?.stageId;
+      if (stageId) {
+        statusByStage.set(stageId, item.status === "succeeded" ? "passed" : "failed");
+      }
+    }
+  }
   const flowPlan: R1ProviderE2EFlowItem[] = R1_PROVIDER_E2E_FLOW_PLAN.map((item) => ({
     ...item,
     status: statusByStage.get(item.id) ?? "pending",
@@ -417,10 +521,16 @@ export async function runR1ProviderE2E({
   };
   const actualProviderCostUsd = evidence.reduce((sum, item) => sum + item.actualCostUsd, 0);
   const completed = now();
+  const providerRouteEligible = composition
+    ? compositionEvidenceSource === "real-provider"
+    : adapters ? availableForRelease(adapters) : false;
   const releaseEvidenceEligible =
-    availableForRelease(adapters) &&
-    evidence.length === DEFAULT_OPERATIONS.length &&
-    evidence.every((item) => item.status === "succeeded" && item.evidenceSource === "real-provider") &&
+    providerRouteEligible &&
+    evidence.length > 0 &&
+    evidence.every((item) =>
+      item.evidenceSource === "real-provider" && (composition !== undefined || item.status === "succeeded")
+    ) &&
+    evidence.some((item) => item.status === "succeeded") &&
     new Set(evidence.map((item) => item.requestId)).size === evidence.length &&
     flowChecklist.pending === 0 &&
     flowChecklist.failed === 0;
@@ -453,17 +563,12 @@ export async function runR1ProviderE2E({
     fixturePolicy: DEFAULT_R1_PROVIDER_E2E_MANIFEST.fixturePolicy,
     flowPlan,
     flowChecklist,
+    stageEvidence,
     requestIds: evidence.map((item) => item.requestId),
     redactedLogs: logs.concat(evidence.map((item) => item.redactedLog)).map(redactLog),
     evidence,
     actualProviderCostUsd,
-    storyAllowanceAccounting: {
-      allowed: DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily,
-      reserved: 0,
-      released: 0,
-      committed: 0,
-      remaining: DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily,
-    },
+    storyAllowanceAccounting,
     modelVersions: {
       training: "flux-2-trainer-v2",
       illustration: "flux-2-lora-v1",

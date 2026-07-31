@@ -3,85 +3,81 @@ import { describe, expect, it } from "vitest";
 import {
   createR1ProviderE2EConfig,
   runR1ProviderE2E,
-  type R1ProviderE2EAdapters,
-  type R1ProviderE2EOperation,
 } from "@/services/r1-provider-e2e";
+import { createDeterministicR1ProviderE2EComposition } from "@/services/r1-provider-e2e-deterministic";
 
 const config = () => createR1ProviderE2EConfig({
   FAL_API_KEY: "test-fal-credential",
   ANTHROPIC_API_KEY: "test-anthropic-credential",
   LIVE_PROVIDER_BUDGET_USD: "2",
+  LIVE_PROVIDER_RUN_APPROVED: "true",
 });
 
-function productionLikeDeterministicAdapters(
-  calls: R1ProviderE2EOperation[],
-  failOperationId?: string,
-): R1ProviderE2EAdapters {
-  const run = async (operation: R1ProviderE2EOperation) => {
-    calls.push(operation);
-    if (operation.operationId === failOperationId) throw new Error("forced provider failure");
-    return {
-      requestId: `synthetic-${operation.operationId}-request`,
-      provider: operation.provider,
-      endpoint: operation.endpoint,
-      model: operation.model,
-      pricingVersion: operation.pricingVersion,
-      status: "succeeded" as const,
-      durationMs: 25,
-      actualCostUsd: operation.maxCostUsd / 2,
-      redactedLog: `${operation.operationId} completed`,
-    };
-  };
-  return {
-    // This deliberately uses the full operation contract, but its explicit
-    // deterministic provenance prevents it from becoming live release evidence.
-    liveAdaptersWired: true,
-    fal: { available: true, evidenceSource: "deterministic", run },
-    anthropic: { available: true, evidenceSource: "deterministic", run },
-  };
-}
-
 describe("185 — production-like release-gate composition", () => {
-  it("records the actually executed training, Story, and 12-Page stages while holding the incomplete fixture gate closed", async () => {
-    const calls: R1ProviderE2EOperation[] = [];
+  it("executes every accepted R1 stage against one stateful fixture and keeps deterministic evidence non-release-eligible", async () => {
     const report = await runR1ProviderE2E({
       config: config(),
-      adapters: productionLikeDeterministicAdapters(calls),
+      composition: createDeterministicR1ProviderE2EComposition(),
     });
 
-    expect(calls.map((operation) => operation.stageId)).toEqual([
-      "train",
-      "valid-story",
-      "twelve-page-jobs",
-    ]);
-    expect(report.evidence).toHaveLength(3);
+    expect(report.flowPlan.map((item) => [item.id, item.status])).toEqual(
+      report.flowPlan.map((item) => [item.id, "passed"]),
+    );
+    expect(report.flowChecklist).toEqual({ total: 16, passed: 16, failed: 0, pending: 0 });
+    expect(report.stageEvidence.map((item) => item.stageId)).toEqual(
+      report.flowPlan.map((item) => item.id),
+    );
+    expect(report.evidence.length).toBeGreaterThan(3);
     expect(report.evidence.every((item) => item.evidenceSource === "deterministic")).toBe(true);
-    expect(report.flowPlan.filter((item) => item.status === "passed").map((item) => item.id)).toEqual([
-      "train",
-      "valid-story",
-      "twelve-page-jobs",
-    ]);
-    expect(report.flowChecklist).toMatchObject({ passed: 3, failed: 0, pending: 13 });
     expect(report.releaseEvidenceEligible).toBe(false);
     expect(report.decision.status).toBe("blocked");
-    expect(report.decision.missingEvidence).toEqual(expect.arrayContaining([
-      expect.stringMatching(/13 required R1 flow stages remain unexecuted/i),
-    ]));
   });
 
-  it("records a forced Page failure as failed evidence without fabricating spend or a recoverable success", async () => {
-    const calls: R1ProviderE2EOperation[] = [];
+  it("proves recovery, idempotency, allowance, isolation, and deletion from executed state rather than checklist labels", async () => {
     const report = await runR1ProviderE2E({
       config: config(),
-      adapters: productionLikeDeterministicAdapters(calls, "r1-page-fanout"),
+      composition: createDeterministicR1ProviderE2EComposition(),
     });
+    const stages = new Map(report.stageEvidence.map((item) => [item.stageId, item]));
 
-    expect(calls).toHaveLength(3);
-    expect(report.flowPlan.find((item) => item.id === "twelve-page-jobs")?.status).toBe("failed");
-    expect(report.evidence.find((item) => item.endpoint === "fal-ai/flux-2/lora")).toMatchObject({
-      status: "failed",
-      actualCostUsd: 0,
+    expect(stages.get("forced-text-failure")?.details).toMatchObject({
+      storyStatus: "failed",
+      allowanceReleased: 1,
+      imageCalls: 0,
     });
-    expect(report.releaseEvidenceEligible).toBe(false);
+    expect(stages.get("page-failure")?.details).toMatchObject({
+      storyStatus: "draft",
+      failedPages: 1,
+      allowanceCommitted: true,
+    });
+    expect(stages.get("repair-failure")?.details).toMatchObject({
+      pageStatus: "failed",
+      repairAttempts: 2,
+      allowanceDelta: 0,
+    });
+    expect(stages.get("duplicate-callback")?.details).toMatchObject({
+      duplicateAccepted: true,
+      artifactDownloads: 2,
+      costLedgerDelta: 0,
+    });
+    expect(stages.get("rls-cross-family-denial")?.details).toMatchObject({
+      denied: true,
+    });
+    expect(stages.get("hard-delete")?.details).toMatchObject({
+      deletedFamilyDataRemaining: false,
+      deletedDatabaseRows: expect.any(Number),
+      deletedBlobKeys: expect.any(Number),
+      deletedProviderArtifacts: 2,
+      otherFamilyDataRemaining: true,
+    });
+    expect(Number(stages.get("hard-delete")?.details?.deletedDatabaseRows)).toBeGreaterThan(0);
+    expect(Number(stages.get("hard-delete")?.details?.deletedBlobKeys)).toBeGreaterThan(0);
+    expect(report.storyAllowanceAccounting).toEqual({
+      allowed: 4,
+      reserved: 0,
+      released: 1,
+      committed: 2,
+      remaining: 2,
+    });
   });
 });

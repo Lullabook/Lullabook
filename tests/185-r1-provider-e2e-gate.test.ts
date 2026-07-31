@@ -15,6 +15,7 @@ const env = (budget = 2) => ({
   FAL_API_KEY: "placeholder-fal-credential",
   ANTHROPIC_API_KEY: "placeholder-anthropic-credential",
   LIVE_PROVIDER_BUDGET_USD: String(budget),
+  LIVE_PROVIDER_RUN_APPROVED: "true",
 });
 
 const blockedAdapters = (): R1ProviderE2EAdapters => ({
@@ -34,12 +35,21 @@ const gateInput = (overrides: Partial<R1ProviderE2EGateInput> = {}): R1ProviderE
 });
 
 describe("185 — production-like native R1 real-provider release gate", () => {
-  it("refuses missing credentials, a non-positive live budget, and budgets over the approved $2 ceiling", () => {
+  it("refuses missing credentials, approval, a non-positive live budget, and budgets over the approved $2 ceiling", () => {
     expect(() => createR1ProviderE2EConfig({ ...env(), FAL_API_KEY: "" })).toThrow(R1ProviderE2EConfigError);
     expect(() => createR1ProviderE2EConfig({ ...env(), ANTHROPIC_API_KEY: undefined })).toThrow(/ANTHROPIC_API_KEY/);
+    expect(() => createR1ProviderE2EConfig({ ...env(), LIVE_PROVIDER_RUN_APPROVED: undefined })).toThrow(/LIVE_PROVIDER_RUN_APPROVED/);
     expect(() => createR1ProviderE2EConfig({ ...env(), LIVE_PROVIDER_BUDGET_USD: "0" })).toThrow(/positive/);
     expect(() => createR1ProviderE2EConfig({ ...env(), LIVE_PROVIDER_BUDGET_USD: "not-a-number" })).toThrow(/positive/);
     expect(() => createR1ProviderE2EConfig(env(APPROVED_R1_PROVIDER_E2E_CEILING_USD + 0.01))).toThrow(R1ProviderE2EConfigError);
+  });
+
+  it("rejects a hand-constructed config that attempts to bypass live-run approval", async () => {
+    const approved = createR1ProviderE2EConfig(env());
+    await expect(runR1ProviderE2E({
+      config: { ...approved, liveRunApproved: false } as unknown as typeof approved,
+      adapters: blockedAdapters(),
+    })).rejects.toThrow(/approval/i);
   });
 
   it("declares synthetic-subjects and consenting-adults fixture policy in the manifest", () => {

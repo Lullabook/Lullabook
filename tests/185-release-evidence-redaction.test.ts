@@ -11,6 +11,7 @@ const config = () => createR1ProviderE2EConfig({
   FAL_API_KEY: "test-fal-credential",
   ANTHROPIC_API_KEY: "test-anthropic-credential",
   LIVE_PROVIDER_BUDGET_USD: "2",
+  LIVE_PROVIDER_RUN_APPROVED: "true",
 });
 
 function adapters(source: "real-provider" | "deterministic", log: string, omitRequestId = false): R1ProviderE2EAdapters {
@@ -53,6 +54,33 @@ describe("185 — release evidence redaction", () => {
     expect(report.redactedLogs.every((line) => line.includes("[REDACTED]"))).toBe(true);
     // Three provider results are insufficient for the whole accepted R1 flow.
     expect(report.releaseEvidenceEligible).toBe(false);
+  });
+
+  it("redacts composition stage details and logs before they enter the report", async () => {
+    const report = await runR1ProviderE2E({
+      config: config(),
+      composition: {
+        run: async () => ({
+          evidenceSource: "deterministic" as const,
+          stageEvidence: [{
+            stageId: "trial",
+            status: "passed" as const,
+            summary: "provider URL https://v3.fal.media/private.png?token=summary-secret",
+            details: {
+              authorization: "Bearer STAGESECRET",
+              providerUrl: "https://v3.fal.media/private.png?token=detail-secret",
+            },
+            redactedLog: JSON.stringify({ prompt: "private stage prompt" }),
+          }],
+          evidence: [],
+          storyAllowanceAccounting: { allowed: 4, reserved: 0, released: 0, committed: 0, remaining: 4 },
+        }),
+      },
+    });
+    const serialized = JSON.stringify(report);
+
+    expect(serialized).not.toMatch(/STAGESECRET|summary-secret|detail-secret|private stage prompt|v3\.fal\.media/i);
+    expect(report.stageEvidence[0]?.details).toMatchObject({ authorization: "[REDACTED]" });
   });
 
   it("rejects missing request IDs and explicit deterministic evidence even when other provider fields are plausible", async () => {
