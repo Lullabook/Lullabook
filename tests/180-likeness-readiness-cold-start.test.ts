@@ -165,6 +165,77 @@ describe("180 — native Likeness readiness and cold-start Brief resume", () => 
     expect(acceptedBrief?.storybookId).toBeTruthy();
   });
 
+  it("does not reset an accepted canonical Brief when the original unnormalized submission replays", async () => {
+    const ctx = createTestContext();
+    const guardian = await subscribedGuardian(ctx);
+    const persona: Persona = {
+      id: "persona-canonical-replay",
+      familyId: guardian.familyId,
+      createdByMemberId: guardian.id,
+      kind: "baby",
+      displayName: "Replay",
+      status: "ready",
+      loraWeightKey: "lora/replay",
+      avatarKey: null,
+      likenessConfirmed: true,
+      createdAt: new Date(),
+    };
+    ctx.store.savePersona(persona);
+    const unnormalized = briefFor([]);
+
+    ctx.coldStart.submitBriefWhileTraining(guardian.id, persona.id, unnormalized);
+    await ctx.coldStart.onPersonaReady(persona.id);
+    const [[key, accepted]] = [...ctx.store.pendingBriefs.entries()];
+    expect(accepted.status).toBe("accepted");
+
+    ctx.coldStart.submitBriefWhileTraining(guardian.id, persona.id, unnormalized);
+    await ctx.coldStart.onPersonaReady(persona.id);
+
+    expect(ctx.store.getPendingBrief(key)?.status).toBe("accepted");
+    expect(ctx.store.getPendingBrief(key)?.storybookId).toBe(accepted.storybookId);
+    expect(ctx.store.storybooks.size).toBe(1);
+    expect(ctx.store.storyAllowanceReservations.size).toBe(1);
+  });
+
+  it("rejects a selected Persona from another Family before persisting a waiting Brief", async () => {
+    const ctx = createTestContext();
+    const guardianA = await subscribedGuardian(ctx);
+    const guardianB = ctx.onboarding.ensureFamilyForNewUser(
+      "guardian-b",
+      "guardian-b@example.com"
+    );
+    const anchor: Persona = {
+      id: "persona-family-a",
+      familyId: guardianA.familyId,
+      createdByMemberId: guardianA.id,
+      kind: "baby",
+      displayName: "Family A",
+      status: "training",
+      loraWeightKey: null,
+      avatarKey: null,
+      likenessConfirmed: false,
+      createdAt: new Date(),
+    };
+    const foreign: Persona = {
+      ...anchor,
+      id: "persona-family-b",
+      familyId: guardianB.familyId,
+      createdByMemberId: guardianB.id,
+      displayName: "Family B",
+    };
+    ctx.store.savePersona(anchor);
+    ctx.store.savePersona(foreign);
+
+    expect(() =>
+      ctx.coldStart.submitBriefWhileTraining(
+        guardianA.id,
+        anchor.id,
+        briefFor([anchor.id, foreign.id])
+      )
+    ).toThrow(/family|persona/i);
+    expect(ctx.store.pendingBriefs.size).toBe(0);
+  });
+
   it("keeps a waiting Brief visible and recoverable when provider generation fails", async () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);

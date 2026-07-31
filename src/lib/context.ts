@@ -140,7 +140,12 @@ export function createRequestContext() {
   const family = new FamilyService(store, notifications);
   const hardDelete = new HardDeleteService(store, blobs, notifications);
   const exportSvc = new ExportService(store, pdf, (key) => blobs.signedUrl(key));
-  const coldStart = new ColdStartService(store, storybooks);
+  const persistStore = async () => store.sync();
+  const dispatchWorkflow = async () => workflow.flush();
+  const coldStart = new ColdStartService(store, storybooks, {
+    persist: persistStore,
+    dispatch: dispatchWorkflow,
+  });
   const onboarding = new OnboardingService(store);
   const roster = new PersonaRosterService(store);
   const textStories = new TextStoryService(store, anthropic, childSafety);
@@ -181,8 +186,8 @@ export function createRequestContext() {
     textStories,
     /** Sync map mutations to Postgres, then release buffered Inngest sends. */
     async persist(): Promise<void> {
-      await store.sync();
-      await workflow.flush();
+      await persistStore();
+      await dispatchWorkflow();
     },
   };
 }

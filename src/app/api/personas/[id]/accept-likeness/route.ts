@@ -7,8 +7,8 @@ import { withBearerAuth, jsonOk, jsonError } from "@/lib/api-route";
  * generation spend. The gate is server-enforced (storybook.generate throws when
  * `likenessConfirmed !== true`) and persisted (migration 011).
  *
- * Only the Guardian may confirm (corollary of "only a Guardian may create a
- * Baby Persona"); enforced inside PersonaService.acceptLikeness.
+ * Baby likeness requires a Guardian; a linked Adult subject confirms their own
+ * likeness. PersonaService.acceptLikeness enforces the subject-aware boundary.
  */
 export async function POST(
   request: Request,
@@ -20,7 +20,10 @@ export async function POST(
     if (!persona) return jsonError("Persona not found", 404);
     try {
       ctx.personas.acceptLikeness(id, member.id);
+      // Likeness acceptance must be durable before a waiting Brief can claim
+      // allowance or enqueue provider work.
       await ctx.persist();
+      await ctx.coldStart.onPersonaReady(id);
       return jsonOk({ ok: true, personaId: id });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed";

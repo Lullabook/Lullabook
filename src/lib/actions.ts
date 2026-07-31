@@ -283,6 +283,7 @@ export async function acceptLikenessAction(
   try {
     ctx.personas.acceptLikeness(personaId, member.id);
     await ctx.persist();
+    await ctx.coldStart.onPersonaReady(personaId);
     revalidatePath("/personas");
     return { ok: true, data: undefined };
   } catch (err) {
