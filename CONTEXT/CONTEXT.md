@@ -402,7 +402,13 @@ per-Baby watermark advances only on generation reaching Story text. See
 
 ---
 
-_Last updated 2026-07-07 (PRD v20). Provenance for each version's PRD/ADR
-links is in that version's blockquote above; versions in order: v5 → v6 →
-v7 → v8 → v9 → v12 (Tier/Trial/Story cap/Credit/Custom art
-style/Story Context Engine; ADR-0022/0023) → v13 → v16/v17 → v19 → v20._
+_Last updated 2026-07-21 (ADR-0028 / PRD v21 implementation audited). Provenance
+for each version's PRD/ADR links is in that version's blockquote above; versions
+in order: v5 → v6 → v7 → v8 → v9 → v12 (Tier/Trial/Story cap/Credit/Custom art
+style/Story Context Engine; ADR-0022/0023) → v13 → v16/v17 → v19 → v20 → v21
+(R1 Family/Persona/provider economics; ADR-0028). ADR-0028 tickets 176-185
+implemented in commit 654d5e3; independent debug audit 2026-07-21
+(`npm run verify` PASS, 139 files/817 tests) found the suite green but the
+production path NOT release-done — BLOCKER gaps on 177/178/179/183/184/185 and
+MAJOR/HIGH findings on 176/180/181/182, recorded in
+`CONTEXT/handoffs/DEBUG-AUDIT-2026-07-21-r1-176-185.md`._
