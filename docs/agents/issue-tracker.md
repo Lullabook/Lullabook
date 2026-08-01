@@ -1,46 +1,114 @@
-# Issue tracker: GitHub
+# Issue tracker: GitHub Projects
 
-Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+GitHub Projects is the workflow board for this repo. GitHub Issues and pull requests
+are the durable ticket/code artifacts; the project's single-select `Status` field is
+the canonical workflow state. Use the `gh` CLI for all operations.
+
+## Configuration
+
+```text
+Repository: Lullabook/Lullabook
+Project owner: <user-or-organization>
+Project number: <number from the project URL>
+Status field: Status
+```
+
+Verify the repository and project before writing:
+
+```bash
+gh repo view --json nameWithOwner
+gh project view <project-number> --owner <project-owner> --format json
+gh auth status
+```
+
+Project writes require the CLI `project` scope; read-only discovery requires
+`read:project`:
+
+```bash
+gh auth refresh -s project
+# or, for read-only discovery:
+gh auth refresh -s read:project
+```
+
+Never place tokens in this file, issue bodies, or handoffs.
+
+## Workflow state
+
+The project must have one `Status` single-select field with these exact options:
+
+```text
+Planned, Agent Ready, Coding, Debugger Ready, Debugging,
+Grading Ready, Grading, Done, Canceled, Duplicate
+```
+
+Labels are metadata only. Do not use labels as a second stage machine. Review
+built-in Project workflows: GitHub can set `Done` when an issue closes or a pull
+request merges, which must be disabled or constrained when only the independent
+grader may set `Done`.
 
 ## Conventions
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`
-- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
+- **Create an issue:** `gh issue create --repo Lullabook/Lullabook --title "..." --body-file <file>`
+- **Add it to the project:** `gh project item-add <project-number> --owner <project-owner> --url <issue-url> --format json`
+- **Read an issue:** `gh issue view <number> --repo Lullabook/Lullabook --comments`
+- **List project items:** `gh project item-list <project-number> --owner <project-owner> --format json --limit 100`
+- **Comment:** `gh issue comment <number> --repo Lullabook/Lullabook --body-file <file>`
+- **Labels:** `gh issue edit <number> --repo Lullabook/Lullabook --add-label "..."` / `--remove-label "..."` for category/triage metadata only.
+- **Close:** only after the appropriate workflow decision; closing is not a substitute for setting Project `Status`.
 
-Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
+Inspect live field and option IDs before scripting a status mutation:
+
+```bash
+gh project field-list <project-number> --owner <project-owner> --format json
+gh project item-list <project-number> --owner <project-owner> --format json --limit 100
+```
+
+Move a non-draft project item with the returned GraphQL node IDs:
+
+```bash
+gh project item-edit \
+  --id <project-item-id> \
+  --project-id <project-node-id> \
+  --field-id <status-field-id> \
+  --single-select-option-id <status-option-id> \
+  --format json
+```
+
+Read the project item back after every mutation. A successful CLI exit is not
+evidence that the field changed.
 
 ## Local work items
 
-Tracer-bullet slices also live as markdown under `CONTEXT/issues/` (dependency-ordered). Skills should read those files when working in-repo; use GitHub issues when publishing outward.
+Tracer-bullet slices also live as markdown under `CONTEXT/issues/` (dependency-ordered).
+Skills should read those files when working in-repo; publishing requires a GitHub
+issue added to the configured Project and a read-back-confirmed `Status`.
 
-## When a skill says "publish to the issue tracker"
+## When a skill says “publish to the issue tracker”
 
-Create a GitHub issue.
+Create a GitHub issue, add it to the configured GitHub Project, set its Project
+`Status`, and read the item back. Do not leave a ticket only in a local markdown
+mirror.
 
-## When a skill says "fetch the relevant ticket"
+## When a skill says “fetch the relevant ticket”
 
-Run `gh issue view <number> --comments`.
+Run `gh issue view <number> --repo Lullabook/Lullabook --comments`, then fetch its
+project item with `gh project item-list` when stage matters.
 
 ## Wayfinding operations
 
-Where the `/wayfinder` skill's artifacts live in this repo.
-
 ### The map
-A single GitHub issue labelled **`wayfinder:map`** (one per effort). Its body holds
-`## Notes`, `## Decisions so far` (the index), and `## Fog`. Every one of its tickets
-carries a shared **map-slug label** (e.g. `wayfinder:postr1`) so the whole ticket set
-is queryable by that label; the map itself is found by `wayfinder:map`.
 
-### Tickets
-Each ticket is a GitHub issue carrying: the map-slug label; exactly one **type**
-label (`wayfinder:research` | `wayfinder:prototype` | `wayfinder:grilling` |
-`wayfinder:task`); and `wayfinder:claimed` once a session claims it (set **first**,
-before any work). Body:
-```
+A single GitHub issue labelled `wayfinder:map`, added to the configured Project. Its
+body holds `## Notes`, `## Decisions so far`, and `## Fog`. Every ticket is added to
+the same Project; `wayfinder:<type>` labels are taxonomy only.
+
+### Tickets and blocking
+
+Each ticket carries the map-slug label, exactly one type label
+(`wayfinder:research` | `wayfinder:prototype` | `wayfinder:grilling` |
+`wayfinder:task`), and `wayfinder:claimed` once a session claims it. Body:
+
+```markdown
 ## Question
 <the decision or investigation this ticket resolves>
 
@@ -49,19 +117,14 @@ Part of the map: #<map-issue>
 Blocked by: #<n>, #<m>        <!-- omitted when nothing blocks it -->
 ```
 
-### Blocking + the frontier
-Blocking is the **`Blocked by: #n, #m`** body line (authoritative; matches the
-`/wayfinder` local-markdown fallback — GitHub's native dependency API is not used).
-A ticket is **unblocked** when every issue on its `Blocked by` line is CLOSED. The
-**frontier** = open, unblocked, unclaimed tickets of a map:
-```bash
-gh issue list --label wayfinder:postr1 --state open --limit 100 \
-  --json number,title,labels,body        # then drop wayfinder:claimed,
-                                          # and any whose Blocked-by issues aren't all closed
-```
+Use GitHub's native sub-issue/dependency relationship where available. Otherwise,
+the `Blocked by` body line is the fallback. The Project `Status` field is the stage;
+the issue's open/closed state is not.
 
 ### Resolving a ticket
-Post the answer as a **resolution comment**, **close** the issue, and append a
+
+Post the answer as a resolution comment, update the Project `Status` and read it
+back, close the issue only when the configured workflow allows it, and append a
 one-line pointer to the map's `## Decisions so far`. Link created assets from the
-issue; don't paste them in. A resolved chunk that's become grillable re-enters
+issue; don't paste them in. A resolved chunk that has become grillable re-enters
 `/part1`.

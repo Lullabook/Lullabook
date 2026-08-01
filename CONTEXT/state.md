@@ -17,12 +17,13 @@ Keep it under ~40 lines. Trim aggressively.
   webhook) and 178 (photos persisted before moderation) are next.
 - Not verified after those fixes: Persona creation / photo upload, real
   illustrations, PDF export, share links, hard-delete, Journal, audio.
-- 2026-07-31 /part2: LUL-105 + LUL-110 built → Debugger Ready (handoff
-  `SESSION-HANDOFF-2026-07-31-part2-LUL-105-110.md`). Next: /part3 on both +
-  LUL-109, all bounce 1 of 3.
-- Gotchas: Linear MCP tools don't load in sessions on the custom endpoint
-  (board moves need human hand or API key). `.env.example` is gitignored but
-  the Sentry check requires it — fresh worktrees fail verify until copied in.
+- Previous /part2 run built the two release-gate slices recorded in
+  `SESSION-HANDOFF-2026-07-31-part2-LUL-105-110.md`; before the next stage, map the
+  remaining work into the configured GitHub Project and read back each item's
+  `Status`.
+- Gotchas: GitHub Project writes require `gh auth`'s `project` scope and live
+  project/item/field IDs. `.env.example` is gitignored but the Sentry check
+  requires it — fresh worktrees fail verify until copied in.
   Metro binds `[::1]` only on this machine — run
   `mobile/scripts/ipv4-metro-proxy.mjs` alongside `expo start` or Expo Go
   cannot connect. `npm run db:migrate` + `RUN-LOCAL.md` are **stale** (stop at
