@@ -228,7 +228,11 @@ export class StorybookService {
     return ids[pageIndex] ?? null;
   }
 
-  async generate(memberId: string, brief: Brief): Promise<Storybook> {
+  async generate(
+    memberId: string,
+    brief: Brief,
+    options?: { storybookId?: string; deferEnqueue?: boolean }
+  ): Promise<Storybook> {
     const member = this.store.members.get(memberId);
     if (!member) throw new Error("Member not found");
 
@@ -250,7 +254,7 @@ export class StorybookService {
     }
 
     const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
-    if (note) await this.childSafety.checkText(note, `brief-${memberId}`);
+    if (note) await this.childSafety.checkText(note, `brief-${memberId}`, member.familyId);
 
     const normalized = this.normalizeBrief(memberId, brief);
 
@@ -266,7 +270,7 @@ export class StorybookService {
     }
 
     const storybook: Storybook = {
-      id: uuid(),
+      id: options?.storybookId ?? uuid(),
       familyId: member.familyId,
       babyId: normalized.babyId,
       createdByMemberId: memberId,
@@ -281,16 +285,30 @@ export class StorybookService {
     this.storyCap.reserve(member.familyId, memberId, storybook.id);
     this.store.saveStorybook(storybook);
 
-    // Thin request, fat workflow (ADR-0011): the closure is what the
-    // in-memory fake drains; the durable adapter ignores it and re-enters
-    // runGenerationBody from the serialized payload instead.
+    // Cold-start resume persists the Storybook + claim pointer before it asks
+    // the queue to accept work. Ordinary create routes keep immediate enqueue.
+    if (!options?.deferEnqueue) this.enqueueGeneration(memberId, storybook.id);
+
+    return storybook;
+  }
+
+  /**
+   * Re-dispatches an already-reserved Storybook after a recoverable queue
+   * failure. The stable Storybook ID preserves allowance and provider
+   * idempotency; terminal books are never restarted from this seam.
+   */
+  enqueueGeneration(memberId: string, storybookId: string): void {
+    const storybook = this.store.getStorybook(storybookId, memberId);
+    if (!storybook) throw new Error("Storybook not found");
+    if (storybook.status === "failed") {
+      throw new Error("Storybook generation failed and requires explicit recovery");
+    }
+    if (storybook.status !== "generating") return;
     this.workflow.enqueue(
       `storybook-${storybook.id}`,
       async () => this.runGenerationBody(memberId, storybook.id),
       { type: "storybook-generate", storybookId: storybook.id, memberId }
     );
-
-    return storybook;
   }
 
   async generateFromClassic(
@@ -316,7 +334,7 @@ export class StorybookService {
     }
 
     const twist = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
-    if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`);
+    if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`, member.familyId);
 
     if (process.env.R1_ONE_PLAN === "true" && brief.pageCount !== undefined && brief.pageCount !== 12) {
       throw new Error("R1 Storybooks must contain exactly 12 Pages");
@@ -357,11 +375,7 @@ export class StorybookService {
     this.storyCap.reserve(member.familyId, memberId, storybook.id);
     this.store.saveStorybook(storybook);
 
-    this.workflow.enqueue(
-      `storybook-${storybook.id}`,
-      async () => this.runGenerationBody(memberId, storybook.id),
-      { type: "storybook-generate", storybookId: storybook.id, memberId }
-    );
+    this.enqueueGeneration(memberId, storybook.id);
 
     return storybook;
   }
@@ -967,7 +981,8 @@ export class StorybookService {
           try {
             const mod = await this.childSafety.checkGeneratedImageBytes(
               bytes,
-              `${storybook.id}/page-${pageIndex}`
+              `${storybook.id}/page-${pageIndex}`,
+              storybook.familyId
             );
             await this.blobs.put(
               moderationKey,
@@ -1167,7 +1182,7 @@ export class StorybookService {
       const res = await fetch(candidate.content);
       if (!res.ok) throw new Error("Failed to fetch illustration candidate");
       const bytes = Buffer.from(await res.arrayBuffer());
-      await this.childSafety.checkUpload(bytes, `candidate-${candidateId}`);
+      await this.childSafety.checkUpload(bytes, `candidate-${candidateId}`, book.familyId);
       const blobKey = `${book.id}/pages/${page.id}/selected-${candidateId}.png`;
       await this.blobs.put(blobKey, bytes);
       page.illustrationBlobKey = blobKey;

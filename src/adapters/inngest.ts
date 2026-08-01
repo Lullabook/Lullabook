@@ -32,9 +32,13 @@ export function workflowEventFromPayload(payload: WorkflowJobPayload) {
     : payload.type === "page-recover"
       ? EVENTS.pageRecoverRequested
       : EVENTS.personaCreationFinalized;
-  return payload.type === "persona-creation-finalized"
-    ? { id: payload.eventId, name, data: payload }
-    : { name, data: payload };
+  if (payload.type === "persona-creation-finalized") {
+    return { id: payload.eventId, name, data: payload };
+  }
+  if (payload.type === "storybook-generate") {
+    return { id: `storybook-${payload.storybookId}`, name, data: payload };
+  }
+  return { name, data: payload };
 }
 
 /**

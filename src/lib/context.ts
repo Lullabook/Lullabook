@@ -140,7 +140,12 @@ export function createRequestContext() {
   const family = new FamilyService(store, notifications);
   const hardDelete = new HardDeleteService(store, blobs, notifications);
   const exportSvc = new ExportService(store, pdf, (key) => blobs.signedUrl(key));
-  const coldStart = new ColdStartService(store, storybooks);
+  const persistStore = async () => store.sync();
+  const dispatchWorkflow = async () => workflow.flush();
+  const coldStart = new ColdStartService(store, storybooks, {
+    persist: persistStore,
+    dispatch: dispatchWorkflow,
+  });
   const onboarding = new OnboardingService(store);
   const roster = new PersonaRosterService(store);
   const textStories = new TextStoryService(store, anthropic, childSafety);
@@ -181,15 +186,15 @@ export function createRequestContext() {
     textStories,
     /** Sync map mutations to Postgres, then release buffered Inngest sends. */
     async persist(): Promise<void> {
-      await store.sync();
-      await workflow.flush();
+      await persistStore();
+      await dispatchWorkflow();
       // Sync order matters and differs by adapter. Inngest only *sends* events
       // here, so state must be committed first — a remote worker must never
       // read a store that hasn't landed. LocalDevWorkflowAdapter instead
-      // DRAINS the jobs inline, mutating this same store during the flush
+      // DRAINS the jobs inline, mutating this same store during the dispatch
       // above; without a second sync the terminal status and every Page it
       // produced are silently dropped and the book strands in `generating`.
-      if (workflow instanceof LocalDevWorkflowAdapter) await store.sync();
+      if (workflow instanceof LocalDevWorkflowAdapter) await persistStore();
     },
   };
 }

@@ -132,6 +132,7 @@ export class VoiceClipService {
 
     this.store.saveModerationAudit({
       id: uuid(),
+      familyId: member.familyId,
       resourceType: "voice_consent",
       resourceId: personaId,
       outcome: "allowed",

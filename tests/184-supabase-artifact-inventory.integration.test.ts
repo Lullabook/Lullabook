@@ -103,22 +103,45 @@ describe("184 — Supabase provider artifact inventory", () => {
       ],
       provider_cost_ledger: [costRow("cost-a", "family-a"), costRow("cost-b", "family-b")],
       provider_kill_switches: [switchRow("switch-a", "family-a"), switchRow("switch-b", "family-b")],
+      moderation_audit: [
+        {
+          id: "audit-a",
+          family_id: "family-a",
+          resource_type: "generated_image",
+          resource_id: "book-a/page-0",
+          outcome: "allowed",
+          reason: null,
+          created_at: now,
+        },
+        {
+          id: "audit-b",
+          family_id: "family-b",
+          resource_type: "generated_image",
+          resource_id: "book-b/page-0",
+          outcome: "allowed",
+          reason: null,
+          created_at: now,
+        },
+      ],
     };
     const store = new SupabaseDataStore(durableClient(tables));
 
     await store.hydrateFamily("family-a");
     expect([...store.providerCostLedgerEntries.keys()]).toEqual(["cost-a"]);
     expect([...store.providerKillSwitches.keys()]).toEqual(["switch-a"]);
+    expect([...store.moderationAudit.keys()]).toEqual(["audit-a"]);
 
     store.hardDeleteFamily("family-a");
     await store.sync();
 
     expect(tables.provider_cost_ledger.map((row) => row.id)).toEqual(["cost-b"]);
     expect(tables.provider_kill_switches.map((row) => row.id)).toEqual(["switch-b"]);
+    expect(tables.moderation_audit.map((row) => row.id)).toEqual(["audit-b"]);
 
     const restarted = new SupabaseDataStore(durableClient(tables));
     await restarted.hydrateFamily("family-b");
     expect([...restarted.providerCostLedgerEntries.keys()]).toEqual(["cost-b"]);
     expect([...restarted.providerKillSwitches.keys()]).toEqual(["switch-b"]);
+    expect([...restarted.moderationAudit.keys()]).toEqual(["audit-b"]);
   });
 });

@@ -42,8 +42,9 @@ import { WorldService } from "@/services/world";
 
 export function createTestContext<T extends FalAdapter = FakeFal>(options?: {
   fal?: T;
+  store?: DataStore;
 }) {
-  const store = new DataStore();
+  const store = options?.store ?? new DataStore();
   const anthropic = new FakeAnthropic();
   const classicCatalog = new FakeClassicCatalog();
   // Issue 123: an explicit fal override (e.g. DevFalFallbackAdapter) wires
@@ -151,7 +152,10 @@ export function createTestContext<T extends FalAdapter = FakeFal>(options?: {
   const family = new FamilyService(store, notifications);
   const hardDelete = new HardDeleteService(store, blobs, notifications);
   const exportSvc = new ExportService(store, pdf);
-  const coldStart = new ColdStartService(store, storybooks);
+  const coldStart = new ColdStartService(store, storybooks, {
+    persist: async () => undefined,
+    dispatch: async () => workflow.flush(),
+  });
   const onboarding = new OnboardingService(store);
   const textStories = new TextStoryService(store, anthropic, childSafety);
   const homeDashboard = new HomeDashboardService(store, moments, storybooks);

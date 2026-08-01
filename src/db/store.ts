@@ -31,6 +31,11 @@ import type {
 } from "@/domain/types";
 import type { FalTrainingRequestRecord, FalWebhookReceipt } from "@/adapters/types";
 
+export interface PendingBriefClaimResult {
+  pending: PendingBrief;
+  claimedNow: boolean;
+}
+
 export class DataStore {
   families = new Map<string, Family>();
   members = new Map<string, Member>();
@@ -566,20 +571,87 @@ export class DataStore {
   }
 
   /**
-   * In-memory fallback: the caller has already verified the Brief is claimable.
-   * The durable lease is composed by SupabaseDataStore via migration 021's RPC.
+   * Deterministic fallback for tests/local stores. SupabaseDataStore overrides
+   * this with the row-locking app_claim_pending_brief RPC used in production.
    */
   async claimPendingBrief(
-    _key: string,
-    _token: string,
-    _now: Date,
-    _leaseExpiresAt: Date
-  ): Promise<{ claimed: boolean }> {
-    return { claimed: true };
+    key: string,
+    claimToken: string,
+    now: Date,
+    leaseExpiresAt: Date
+  ): Promise<PendingBriefClaimResult> {
+    const pending = this.pendingBriefs.get(key);
+    if (!pending) throw new Error("Pending Brief is missing");
+    if (pending.status === "accepted") {
+      return { pending, claimedNow: false };
+    }
+    if (
+      pending.status === "running" &&
+      pending.claimExpiresAt !== undefined &&
+      pending.claimExpiresAt.getTime() > now.getTime()
+    ) {
+      return { pending, claimedNow: false };
+    }
+    const claimed: PendingBrief = {
+      ...pending,
+      status: "running",
+      claimToken,
+      claimedAt: now,
+      claimExpiresAt: leaseExpiresAt,
+      failedAt: undefined,
+      error: undefined,
+    };
+    this.pendingBriefs.set(key, claimed);
+    return { pending: claimed, claimedNow: true };
   }
 
   deletePendingBrief(key: string): void {
     this.pendingBriefs.delete(key);
+  }
+
+  getModerationAuditIdsByFamily(familyId: string): string[] {
+    const memberIds = [...this.members.values()]
+      .filter((member) => member.familyId === familyId)
+      .map((member) => member.id);
+    const personaIds = new Set(
+      [...this.personas.values()]
+        .filter((persona) => persona.familyId === familyId)
+        .map((persona) => persona.id)
+    );
+    const characterIds = new Set(
+      [...this.characters.values()]
+        .filter((character) => character.familyId === familyId)
+        .map((character) => character.id)
+    );
+    const bookIds = new Set(
+      [...this.storybooks.values()]
+        .filter((book) => book.familyId === familyId)
+        .map((book) => book.id)
+    );
+    const pageIds = new Set(
+      [...this.pages.values()]
+        .filter((page) => bookIds.has(page.storybookId))
+        .map((page) => page.id)
+    );
+    const candidateIds = new Set(
+      [...this.pageCandidates.values()]
+        .filter((candidate) => pageIds.has(candidate.pageId))
+        .map((candidate) => candidate.id)
+    );
+
+    return [...this.moderationAudit.entries()]
+      .filter(([, entry]) => {
+        // Explicit durable ownership is authoritative. Legacy resource-ID
+        // inference is only for historical rows that predate familyId.
+        if (entry.familyId !== undefined) return entry.familyId === familyId;
+        if (personaIds.has(entry.resourceId) || characterIds.has(entry.resourceId)) return true;
+        if ([...bookIds].some((bookId) =>
+          entry.resourceId === bookId || entry.resourceId.startsWith(`${bookId}/`)
+        )) return true;
+        if (candidateIds.has(entry.resourceId.replace(/^candidate-/, ""))) return true;
+        return memberIds.some((memberId) => entry.resourceId.includes(memberId));
+      })
+      .map(([id]) => id);
   }
 
   hardDeleteFamily(familyId: string): void {
@@ -590,9 +662,7 @@ export class DataStore {
       [...this.members.values()].filter((m) => m.familyId === familyId).map((m) => m.id)
     );
 
-    const personaIds = [...this.personas.values()]
-      .filter((p) => p.familyId === familyId)
-      .map((p) => p.id);
+    const moderationAuditIds = new Set(this.getModerationAuditIdsByFamily(familyId));
 
     const deletedPageIds = new Set(
       [...this.pages.values()]
@@ -643,15 +713,8 @@ export class DataStore {
       const pending = this.pendingBriefs.get(key);
       if (pending && memberIds.has(pending.memberId)) this.pendingBriefs.delete(key);
     }
-    for (const [id, e] of this.moderationAudit) {
-      const isMatch =
-        memberIds.has(e.resourceId) ||
-        bookIds.includes(e.resourceId) ||
-        personaIds.includes(e.resourceId) ||
-        [...memberIds].some((m) => e.resourceId.includes(m));
-      if (isMatch) {
-        this.moderationAudit.delete(id);
-      }
+    for (const id of moderationAuditIds) {
+      this.moderationAudit.delete(id);
     }
     for (const [id, p] of this.pushSubscriptions) {
       if (memberIds.has(p.memberId)) this.pushSubscriptions.delete(id);

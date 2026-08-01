@@ -1,11 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DataStore } from "@/db/store";
+import { DataStore, type PendingBriefClaimResult } from "@/db/store";
 import type {
   Character,
   ConsentReceipt,
   Family,
   LightConsentReceipt,
   Member,
+  ModerationAuditEntry,
   Page,
   PageCandidate,
   PendingBrief,
@@ -163,6 +164,55 @@ export class SupabaseDataStore extends DataStore {
     return (data ?? []).length;
   }
 
+  override async claimPendingBrief(
+    key: string,
+    claimToken: string,
+    now: Date,
+    leaseExpiresAt: Date
+  ): Promise<PendingBriefClaimResult> {
+    const expected = this.pendingBriefs.get(key);
+    if (!expected) throw new Error("Pending Brief is missing");
+    const { data, error } = await this.client.rpc("app_claim_pending_brief", {
+      p_key: key,
+      p_claim_token: claimToken,
+      p_now: now.toISOString(),
+      p_lease_expires_at: leaseExpiresAt.toISOString(),
+    });
+    if (error) throw new Error(`claimPendingBrief failed: ${error.message}`);
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("claimPendingBrief returned an invalid row");
+    }
+    const row = data as Row;
+    if (
+      row.key !== key ||
+      row.member_id !== expected.memberId ||
+      row.persona_id !== expected.personaId
+    ) {
+      throw new Error("claimPendingBrief returned a mismatched Family-owned row");
+    }
+    const selectedPersonaIds = Array.isArray(row.selected_persona_ids)
+      ? row.selected_persona_ids.filter((id): id is string => typeof id === "string")
+      : [];
+    const pending: PendingBrief = {
+      memberId: row.member_id,
+      personaId: row.persona_id,
+      brief: row.brief,
+      submittedAt: new Date(row.submitted_at),
+      selectedPersonaIds:
+        selectedPersonaIds.length > 0 ? selectedPersonaIds : [row.persona_id],
+      status: row.status ?? "pending",
+      claimToken: row.claim_token ?? undefined,
+      claimExpiresAt: row.claim_expires_at ? new Date(row.claim_expires_at) : undefined,
+      claimedAt: row.claimed_at ? new Date(row.claimed_at) : undefined,
+      storybookId: row.storybook_id ?? undefined,
+      acceptedAt: row.accepted_at ? new Date(row.accepted_at) : undefined,
+      failedAt: row.failed_at ? new Date(row.failed_at) : undefined,
+      error: row.error ?? undefined,
+    };
+    this.pendingBriefs.set(key, pending);
+    return { pending, claimedNow: row.claimed_now === true };
+  }
+
   async hydrateFamily(familyId: string): Promise<void> {
     if (this.hydratedFamilyIds.has(familyId)) return;
     this.hydratedFamilyIds.add(familyId);
@@ -197,6 +247,7 @@ export class SupabaseDataStore extends DataStore {
       storyContextProvenanceRes,
       providerCostLedgerRes,
       providerKillSwitchesRes,
+      moderationAuditRes,
     ] = await Promise.all([
       this.client.from("families").select("*").eq("id", familyId),
       q("members"),
@@ -226,6 +277,7 @@ export class SupabaseDataStore extends DataStore {
       // Global controls are intentionally visible to every Family; filter
       // Family-scoped rows below before they enter this unit of work.
       this.client.from("provider_kill_switches").select("*"),
+      q("moderation_audit"),
     ]);
 
     for (const res of [
@@ -252,6 +304,7 @@ export class SupabaseDataStore extends DataStore {
       storyContextProvenanceRes,
       providerCostLedgerRes,
       providerKillSwitchesRes,
+      moderationAuditRes,
     ]) {
       if (res.error) {
         const msg = res.error.message;
@@ -390,14 +443,18 @@ export class SupabaseDataStore extends DataStore {
       this.snap("invites", r.id);
     }
     for (const r of (pendingBriefsRes.data ?? []) as Row[]) {
+      const hydratedSelectedPersonaIds = Array.isArray(r.selected_persona_ids)
+        ? r.selected_persona_ids.filter((id): id is string => typeof id === "string")
+        : [];
       const pending: PendingBrief = {
         memberId: r.member_id,
         personaId: r.persona_id,
         brief: r.brief,
         submittedAt: new Date(r.submitted_at),
-        selectedPersonaIds: Array.isArray(r.selected_persona_ids)
-          ? r.selected_persona_ids.filter((id): id is string => typeof id === "string")
-          : undefined,
+        selectedPersonaIds:
+          hydratedSelectedPersonaIds.length > 0
+            ? hydratedSelectedPersonaIds
+            : [r.persona_id],
         status: r.status ?? "pending",
         claimToken: r.claim_token ?? undefined,
         claimExpiresAt: r.claim_expires_at ? new Date(r.claim_expires_at) : undefined,
@@ -585,6 +642,19 @@ export class SupabaseDataStore extends DataStore {
       this.providerKillSwitches.set(killSwitch.id, killSwitch);
       this.snap("provider_kill_switches", killSwitch.id);
     }
+    for (const r of moderationAuditRes.data ?? []) {
+      const entry: ModerationAuditEntry = {
+        id: r.id as string,
+        familyId: r.family_id as string,
+        resourceType: r.resource_type as string,
+        resourceId: r.resource_id as string,
+        outcome: r.outcome as ModerationAuditEntry["outcome"],
+        reason: (r.reason as string | null) ?? null,
+        createdAt: new Date(r.created_at),
+      };
+      this.moderationAudit.set(entry.id, entry);
+      this.snap("moderation_audit", entry.id);
+    }
 
     const familyMomentIds = [...this.moments.values()]
       .filter((m) => m.familyId === familyId)
@@ -771,48 +841,6 @@ export class SupabaseDataStore extends DataStore {
         }
       }
     }
-  }
-
-  override async claimPendingBrief(
-    key: string,
-    token: string,
-    now: Date,
-    leaseExpiresAt: Date
-  ): Promise<{ claimed: boolean }> {
-    const { data, error } = await this.client.rpc("app_claim_pending_brief", {
-      p_key: key,
-      p_claim_token: token,
-      p_now: now.toISOString(),
-      p_lease_expires_at: leaseExpiresAt.toISOString(),
-    });
-    if (error) {
-      throw new Error(`claimPendingBrief failed: ${error.message}`);
-    }
-    const row = (data ?? {}) as Row;
-
-    // Refresh the in-memory unit-of-work from the authoritative row so a
-    // declined claim (already accepted or live lease) never overwrites truth.
-    if (row.key !== undefined || row.status !== undefined) {
-      this.pendingBriefs.set(key, {
-        memberId: row.member_id,
-        personaId: row.persona_id,
-        brief: row.brief,
-        submittedAt: new Date(row.submitted_at),
-        selectedPersonaIds: Array.isArray(row.selected_persona_ids)
-          ? row.selected_persona_ids.filter((id): id is string => typeof id === "string")
-          : undefined,
-        status: row.status ?? "pending",
-        claimToken: row.claim_token ?? undefined,
-        claimExpiresAt: row.claim_expires_at ? new Date(row.claim_expires_at) : undefined,
-        claimedAt: row.claimed_at ? new Date(row.claimed_at) : undefined,
-        storybookId: row.storybook_id ?? undefined,
-        acceptedAt: row.accepted_at ? new Date(row.accepted_at) : undefined,
-        failedAt: row.failed_at ? new Date(row.failed_at) : undefined,
-        error: row.error ?? undefined,
-      });
-    }
-
-    return { claimed: row.claimed_now === true };
   }
 
   // -------------------------------------------------------------------------
@@ -1177,6 +1205,7 @@ export class SupabaseDataStore extends DataStore {
         "moderation_audit",
         [...this.moderationAudit.values()].map((e) => ({
           id: e.id,
+          family_id: e.familyId ?? null,
           resource_type: e.resourceType,
           resource_id: e.resourceId,
           outcome: e.outcome,

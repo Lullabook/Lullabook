@@ -9,6 +9,8 @@ import {
 } from "@/db/persona-creation-protocol";
 
 export interface ProductionPersonaCreationInput extends PersonaCreationReservationInput {
+  /** Authenticated Family owner used only for moderation audit ownership. */
+  familyId?: string;
   photos: Buffer[];
   selfie?: Buffer;
 }
@@ -45,7 +47,11 @@ export class ProductionPersonaCreationService {
       if (!liveness.matched) throw new Error("Selfie does not match uploaded photos");
     }
     for (const photo of input.photos) {
-      await this.childSafety.checkUpload(photo, `persona-create:${input.requestFingerprint}`);
+      await this.childSafety.checkUpload(
+        photo,
+        `persona-create:${input.requestFingerprint}`,
+        input.familyId
+      );
     }
     return this.protocol.createFromModeratedPhotos(input, input.photos);
   }

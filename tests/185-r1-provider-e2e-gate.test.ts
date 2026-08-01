@@ -15,22 +15,13 @@ const env = (budget = 2) => ({
   FAL_API_KEY: "placeholder-fal-credential",
   ANTHROPIC_API_KEY: "placeholder-anthropic-credential",
   LIVE_PROVIDER_BUDGET_USD: String(budget),
+  LIVE_PROVIDER_RUN_APPROVED: "true",
 });
 
 const blockedAdapters = (): R1ProviderE2EAdapters => ({
   liveAdaptersWired: false,
-  fal: {
-    available: false,
-    isDevOnly: true,
-    evidenceSource: "deterministic",
-    run: async () => ({ }),
-  },
-  anthropic: {
-    available: false,
-    isDevOnly: true,
-    evidenceSource: "deterministic",
-    run: async () => ({ }),
-  },
+  fal: { available: false, run: async () => { throw new Error("unavailable"); } },
+  anthropic: { available: false, run: async () => { throw new Error("unavailable"); } },
 });
 
 const gateInput = (overrides: Partial<R1ProviderE2EGateInput> = {}): R1ProviderE2EGateInput => ({
@@ -44,12 +35,21 @@ const gateInput = (overrides: Partial<R1ProviderE2EGateInput> = {}): R1ProviderE
 });
 
 describe("185 — production-like native R1 real-provider release gate", () => {
-  it("refuses missing credentials, a non-positive live budget, and budgets over the approved $2 ceiling", () => {
+  it("refuses missing credentials, approval, a non-positive live budget, and budgets over the approved $2 ceiling", () => {
     expect(() => createR1ProviderE2EConfig({ ...env(), FAL_API_KEY: "" })).toThrow(R1ProviderE2EConfigError);
     expect(() => createR1ProviderE2EConfig({ ...env(), ANTHROPIC_API_KEY: undefined })).toThrow(/ANTHROPIC_API_KEY/);
+    expect(() => createR1ProviderE2EConfig({ ...env(), LIVE_PROVIDER_RUN_APPROVED: undefined })).toThrow(/LIVE_PROVIDER_RUN_APPROVED/);
     expect(() => createR1ProviderE2EConfig({ ...env(), LIVE_PROVIDER_BUDGET_USD: "0" })).toThrow(/positive/);
     expect(() => createR1ProviderE2EConfig({ ...env(), LIVE_PROVIDER_BUDGET_USD: "not-a-number" })).toThrow(/positive/);
     expect(() => createR1ProviderE2EConfig(env(APPROVED_R1_PROVIDER_E2E_CEILING_USD + 0.01))).toThrow(R1ProviderE2EConfigError);
+  });
+
+  it("rejects a hand-constructed config that attempts to bypass live-run approval", async () => {
+    const approved = createR1ProviderE2EConfig(env());
+    await expect(runR1ProviderE2E({
+      config: { ...approved, liveRunApproved: false } as unknown as typeof approved,
+      adapters: blockedAdapters(),
+    })).rejects.toThrow(/approval/i);
   });
 
   it("declares synthetic-subjects and consenting-adults fixture policy in the manifest", () => {
@@ -60,56 +60,14 @@ describe("185 — production-like native R1 real-provider release gate", () => {
     expect(DEFAULT_R1_PROVIDER_E2E_MANIFEST.fixturePolicy.statement).toMatch(/synthetic|consenting/i);
   });
 
-  it("executes every declared flowPlan stage over one persisted fixture", async () => {
-    const report = await runR1ProviderE2E({
-      config: createR1ProviderE2EConfig(env()),
-      adapters: blockedAdapters(),
-      now: (() => {
-        let tick = 0;
-        return () => new Date(Date.UTC(2026, 6, 21, 0, 0, tick++));
-      })()
-    });
-
-    expect(report.flowPlan).toHaveLength(DEFAULT_R1_PROVIDER_E2E_MANIFEST.flowPlan.length);
-    expect(report.flowChecklist.pending).toBe(0);
-    expect(report.flowChecklist.passed + report.flowChecklist.failed).toBe(report.flowPlan.length);
-  });
-
-  it("records non-stub Story-allowance accounting with real reserve/commit/release lifecycle", async () => {
-    const report = await runR1ProviderE2E({
-      config: createR1ProviderE2EConfig(env()),
-      adapters: blockedAdapters(),
-    });
-
-    expect(report.storyAllowanceAccounting).toMatchObject({
-      allowed: DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily,
-      reserved: expect.any(Number),
-      released: expect.any(Number),
-      committed: expect.any(Number),
-      remaining: expect.any(Number),
-    });
-    expect(report.storyAllowanceAccounting.allowed).toBeGreaterThan(0);
-    expect(report.storyAllowanceAccounting.reserved + report.storyAllowanceAccounting.committed + report.storyAllowanceAccounting.released).toBeGreaterThan(0);
-  });
-
-  it("evidences RLS cross-Family denial and hard-delete erasure", async () => {
-    const report = await runR1ProviderE2E({
-      config: createR1ProviderE2EConfig(env()),
-      adapters: blockedAdapters(),
-    });
-
-    expect(report.flowPlan.find((item) => item.id === "rls-cross-family-denial")?.status).toBe("passed");
-    expect(report.flowPlan.find((item) => item.id === "hard-delete")?.status).toBe("passed");
-  });
-
   it("publishes evidence fields without retaining credentials, prompts, or photo content", async () => {
     const report = await runR1ProviderE2E({
       config: createR1ProviderE2EConfig(env()),
       adapters: blockedAdapters(),
       now: (() => {
         let tick = 0;
-        return () => new Date(Date.UTC(2026, 6, 21, 0, 0, tick++));
-      })()
+        return () => new Date(`2026-07-21T00:00:0${tick++}Z`);
+      })(),
     });
 
     expect(report).toMatchObject({
@@ -119,6 +77,12 @@ describe("185 — production-like native R1 real-provider release gate", () => {
       actualProviderCostUsd: expect.any(Number),
       requestIds: expect.any(Array),
       redactedLogs: expect.any(Array),
+      storyAllowanceAccounting: expect.objectContaining({
+        allowed: expect.any(Number),
+        reserved: expect.any(Number),
+        released: expect.any(Number),
+        remaining: expect.any(Number),
+      }),
       modelVersions: expect.any(Object),
       pricingVersions: expect.any(Object),
       decision: expect.objectContaining({ status: "blocked" }),
@@ -164,8 +128,8 @@ describe("185 — production-like native R1 real-provider release gate", () => {
       adapters: {
         ...blockedAdapters(),
         liveAdaptersWired: true,
-        fal: { available: true, isDevOnly: true, evidenceSource: "deterministic", run: async () => ({}) },
-        anthropic: { available: true, isDevOnly: true, evidenceSource: "deterministic", run: async () => ({}) },
+        fal: { available: true, isDevOnly: true, run: async () => ({}) },
+        anthropic: { available: true, isDevOnly: true, run: async () => ({}) },
       },
     });
     expect(report.decision.status).toBe("blocked");

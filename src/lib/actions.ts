@@ -234,6 +234,7 @@ export async function createPersonaAction(
     await runPersonaCreationActionBoundary({
       creation: {
         ...creationInput,
+        familyId: member.familyId,
         requestFingerprint: personaCreationRequestFingerprint(creationInput),
       },
       repository,
@@ -281,13 +282,8 @@ export async function acceptLikenessAction(
   const { ctx, member } = await requireAuthedContext();
   try {
     ctx.personas.acceptLikeness(personaId, member.id);
-    try {
-      await ctx.coldStart.onPersonaReady(personaId);
-    } catch {
-      // Resume failure is recoverable; the accepted Persona is durable and the
-      // pending Brief remains retryable.
-    }
     await ctx.persist();
+    await ctx.coldStart.onPersonaReady(personaId);
     revalidatePath("/personas");
     return { ok: true, data: undefined };
   } catch (err) {

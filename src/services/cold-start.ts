@@ -1,19 +1,34 @@
-import { v4 as uuid } from "uuid";
+import { v4 as uuid, v5 as uuidv5 } from "uuid";
 import type { DataStore } from "@/db/store";
 import type { Brief, PendingBrief } from "@/domain/types";
 import { StorybookService } from "@/services/storybook";
 
 const BRIEF_CLAIM_LEASE_MS = 5 * 60 * 1000;
+const BRIEF_STORYBOOK_ID_NAMESPACE = "5c4f0e2e-6c86-4be7-9bc2-4de88b6f6de7";
+
+interface ColdStartDurability {
+  /** Persist map mutations without dispatching buffered workflow events. */
+  persist: () => Promise<void>;
+  /** Obtain durable downstream acceptance for buffered workflow events. */
+  dispatch: () => Promise<void>;
+}
 
 function sanitizedError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(/https?:\/\/\S+/g, "[redacted-url]").slice(0, 500);
 }
 
+function selectedPersonaIds(pending: PendingBrief): string[] {
+  return pending.selectedPersonaIds && pending.selectedPersonaIds.length > 0
+    ? pending.selectedPersonaIds
+    : [pending.personaId];
+}
+
 export class ColdStartService {
   constructor(
     private readonly store: DataStore,
-    private readonly storybooks: StorybookService
+    private readonly storybooks: StorybookService,
+    private readonly durability?: ColdStartDurability
   ) {}
 
   submitBriefWhileTraining(memberId: string, personaId: string, brief: Brief): void {
@@ -22,103 +37,129 @@ export class ColdStartService {
     if (persona.status !== "training" && persona.status !== "ready") {
       throw new Error("Persona not available");
     }
-    const selectedPersonaIds = [...new Set(
+    const selected = [...new Set(
       brief.starringPersonaIds.includes(personaId)
         ? brief.starringPersonaIds
         : [personaId, ...brief.starringPersonaIds]
     )];
-    const existing = [...this.store.pendingBriefs.entries()].find(
-      ([, pending]) =>
-        pending.memberId === memberId &&
-        JSON.stringify(pending.brief) === JSON.stringify(brief)
-    );
-    const key = existing?.[0] ?? `brief:${memberId}:${JSON.stringify({ ...brief, starringPersonaIds: [...selectedPersonaIds].sort() })}`;
-    const previous = existing?.[1];
+    for (const selectedId of selected) {
+      if (!this.store.getPersona(selectedId, memberId)) {
+        throw new Error("Selected Persona is not available in this Family");
+      }
+    }
+    const normalizedBrief = { ...brief, starringPersonaIds: selected };
+    const key = `brief:${memberId}:${JSON.stringify({
+      ...normalizedBrief,
+      starringPersonaIds: [...selected].sort(),
+    })}`;
+    const previous = this.store.getPendingBrief(key);
     // An accepted Brief is a durable pointer to the already-reserved Storybook;
     // never reset it into a second spend attempt when the submit route replays.
     if (previous?.status === "accepted" && previous.storybookId) return;
     this.store.savePendingBrief(key, {
       memberId,
       personaId,
-      brief: { ...brief, starringPersonaIds: selectedPersonaIds },
-      selectedPersonaIds,
+      brief: normalizedBrief,
+      selectedPersonaIds: selected,
       status: previous?.status === "running" ? "running" : "pending",
       claimToken: previous?.status === "running" ? previous.claimToken : undefined,
       claimExpiresAt: previous?.status === "running" ? previous.claimExpiresAt : undefined,
+      claimedAt: previous?.status === "running" ? previous.claimedAt : undefined,
+      storybookId: previous?.storybookId,
       submittedAt: previous?.submittedAt ?? new Date(),
     });
   }
 
   async onPersonaReady(personaId: string): Promise<void> {
-    for (const [key, pending] of this.store.pendingBriefs) {
-      const selectedPersonaIds = pending.selectedPersonaIds ?? [pending.personaId];
-      if (!selectedPersonaIds.includes(personaId)) continue;
-      // `accepted` is the crash-safe completion record. It is deliberately kept
-      // rather than deleted so a replay can reuse the accepted Storybook ID.
-      if (pending.status === "accepted" && pending.storybookId) continue;
+    for (const [key, current] of [...this.store.pendingBriefs.entries()]) {
+      const requiredPersonaIds = selectedPersonaIds(current);
+      if (!requiredPersonaIds.includes(personaId)) continue;
+      if (current.status === "accepted" && current.storybookId) continue;
 
-      const now = new Date();
-      const liveClaim =
-        pending.status === "running" &&
-        pending.claimExpiresAt !== undefined &&
-        pending.claimExpiresAt.getTime() > now.getTime();
-      if (liveClaim) continue;
-
-      const allReady = selectedPersonaIds.every((selectedId) => {
-        const persona = this.store.personas.get(selectedId);
-        return persona?.status === "ready" && persona.likenessConfirmed === true;
+      const allReady = requiredPersonaIds.every((selectedId) => {
+        try {
+          const persona = this.store.getPersona(selectedId, current.memberId);
+          return persona?.status === "ready" && persona.likenessConfirmed === true;
+        } catch {
+          return false;
+        }
       });
       if (!allReady) continue;
 
-      // Take a durable lease before spending on the Storybook. SupabaseDataStore
-      // uses migration 021's row-level claim; the in-memory store's no-op claim
-      // keeps unit tests untouched.
+      const now = new Date();
       const claimToken = uuid();
-      const claimExpiresAt = new Date(now.getTime() + BRIEF_CLAIM_LEASE_MS);
-      const { claimed: gotClaim } = await this.store.claimPendingBrief(
+      const claim = await this.store.claimPendingBrief(
         key,
         claimToken,
         now,
-        claimExpiresAt
+        new Date(now.getTime() + BRIEF_CLAIM_LEASE_MS)
       );
-      if (!gotClaim) continue;
+      if (!claim.claimedNow) continue;
 
-      // Persist the lease before requesting the Storybook. In production this
-      // map is synchronized as one durable unit of work; a later worker will
-      // only recover the claim after its explicit lease expires.
-      const claimed: PendingBrief = {
-        ...pending,
-        status: "running",
-        claimToken,
-        claimedAt: now,
-        claimExpiresAt,
-        error: undefined,
+      let claimed: PendingBrief = {
+        ...claim.pending,
+        selectedPersonaIds: requiredPersonaIds,
       };
-      this.store.savePendingBrief(key, claimed);
+      let storybookId =
+        claimed.storybookId ?? uuidv5(key, BRIEF_STORYBOOK_ID_NAMESPACE);
       try {
-        // generate() durably reserves allowance and persists the Storybook
-        // before enqueueing downstream provider work. Record that accepted ID
-        // immediately, rather than treating asynchronous generation as done.
-        const storybook = await this.storybooks.generate(claimed.memberId, claimed.brief);
+        const existingStorybook = this.store.storybooks.get(storybookId);
+        if (existingStorybook) {
+          // Enforce the actor/Family boundary before reusing a crash-left row.
+          this.store.getStorybook(storybookId, claimed.memberId);
+        } else {
+          const storybook = await this.storybooks.generate(claimed.memberId, claimed.brief, {
+            storybookId,
+            deferEnqueue: true,
+          });
+          storybookId = storybook.id;
+        }
+
+        claimed = {
+          ...claimed,
+          status: "running",
+          storybookId,
+          error: undefined,
+          failedAt: undefined,
+        };
+        this.store.savePendingBrief(key, claimed);
+
+        if (this.durability) {
+          // Commit the claim, allowance reservation, Storybook, and retry pointer
+          // before asking the queue to accept provider work.
+          await this.durability.persist();
+        }
+        this.storybooks.enqueueGeneration(claimed.memberId, storybookId);
+        if (this.durability) await this.durability.dispatch();
+
         this.store.savePendingBrief(key, {
           ...claimed,
           status: "accepted",
-          storybookId: storybook.id,
+          storybookId,
           acceptedAt: new Date(),
           claimToken: undefined,
           claimExpiresAt: undefined,
         });
+        if (this.durability) await this.durability.persist();
       } catch (error) {
-        // Keep the Brief visible and retryable after a provider outage. Never
-        // retain a tokenized provider URL or raw error payload in durable state.
+        // Preserve the same Storybook pointer when dispatch fails. A later claim
+        // re-dispatches that stable ID instead of reserving allowance again.
         this.store.savePendingBrief(key, {
           ...claimed,
           status: "failed",
+          storybookId,
           claimToken: undefined,
           claimExpiresAt: undefined,
           failedAt: new Date(),
           error: sanitizedError(error),
         });
+        if (this.durability) {
+          try {
+            await this.durability.persist();
+          } catch {
+            // Keep the original provider/queue failure as the caller-visible error.
+          }
+        }
         throw error;
       }
     }

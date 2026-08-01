@@ -5,7 +5,7 @@ import type { FalTrainingRequestRecord, FalWebhookReceipt, NotificationAdapter }
 import { RlsViolationError } from "@/db/store";
 import type { Baby, BabyPersonBond, ConsentReceipt, Page, Persona, Storybook } from "@/domain/types";
 import { HardDeleteService } from "@/services/hard-delete";
-import type { ProviderCostLedgerEntry } from "@/services/provider-cost-metering";
+import { CostThreshold, type ProviderCostLedgerEntry } from "@/services/provider-cost-metering";
 import { EmailPlusVpcService } from "@/services/email-plus-vpc";
 import { createTestContext, goodPhoto } from "@/test/fixtures";
 
@@ -94,6 +94,7 @@ describe("184 — provider artifacts, RLS, and inventory-based Hard-delete", () 
   it("inventories and erases every owned DB/blob/provider artifact idempotently", async () => {
     const ctx = createTestContext();
     const guardian = ctx.onboarding.ensureFamilyForNewUser("delete-184", "delete@example.com");
+    const otherGuardian = ctx.onboarding.ensureFamilyForNewUser("keep-184", "keep@example.com");
     const now = new Date();
     const baby: Baby = {
       id: "baby-184",
@@ -212,6 +213,36 @@ describe("184 — provider artifacts, RLS, and inventory-based Hard-delete", () 
     ctx.store.falTrainingRequests.set(falRequest.requestId, falRequest);
     ctx.store.falWebhookReceipts.set(falReceipt.fingerprint, falReceipt);
     ctx.store.providerCostLedgerEntries.set(ledger.id, ledger);
+    ctx.store.providerKillSwitches.set("switch-184", {
+      id: "switch-184",
+      familyId: guardian.familyId,
+      scope: "endpoint",
+      endpoint: "fal-ai/flux-2/lora",
+      threshold: CostThreshold.RED,
+      reason: "Family-scoped provider control",
+      createdAt: now,
+      active: true,
+    });
+    ctx.store.saveModerationAudit({
+      id: "moderation-page-184",
+      familyId: guardian.familyId,
+      resourceType: "generated_image",
+      resourceId: `${book.id}/page-0`,
+      outcome: "allowed",
+      reason: null,
+      createdAt: now,
+    });
+    ctx.store.saveModerationAudit({
+      id: "moderation-keep-184",
+      familyId: otherGuardian.familyId,
+      resourceType: "generated_image",
+      // Explicit ownership is authoritative even if a legacy resource ID
+      // collides with a deleted Family's production Page identifier.
+      resourceId: `${book.id}/page-0`,
+      outcome: "allowed",
+      reason: null,
+      createdAt: now,
+    });
     asMap<unknown>((ctx.store as unknown as { storyContextProvenance: Map<string, unknown> }).storyContextProvenance).set(
       "provenance-184",
       {
@@ -261,9 +292,13 @@ describe("184 — provider artifacts, RLS, and inventory-based Hard-delete", () 
     const report = (await hardDelete.hardDelete(guardian.id)) as unknown as DeleteReport;
 
     expect(report.inventory).toEqual(expect.objectContaining({
+      families: 1,
+      members: 1,
       babies: 1,
       babyPersonBonds: 1,
       consentReceipts: 1,
+      moderationAudit: 1,
+      providerKillSwitches: 1,
       sourcePhotos: 1,
       reviewSamples: 1,
       avatars: 1,
@@ -289,7 +324,11 @@ describe("184 — provider artifacts, RLS, and inventory-based Hard-delete", () 
     expect(ctx.store.falWebhookReceipts.size).toBe(0);
     expect(asMap<unknown>((ctx.store as unknown as { storyContextProvenance: Map<string, unknown> }).storyContextProvenance).size).toBe(0);
     expect(report.deleted.database.providerCostLedger).toBe(1);
+    expect(report.deleted.database.moderationAudit).toBe(1);
+    expect(report.deleted.database.providerKillSwitches).toBe(1);
     expect(ctx.store.providerCostLedgerEntries.size).toBe(0);
+    expect(ctx.store.providerKillSwitches.size).toBe(0);
+    expect([...ctx.store.moderationAudit.keys()]).toEqual(["moderation-keep-184"]);
     expect(await ctx.blobs.get(temporaryProviderUrl)).toEqual(Buffer.from("provider-owned"));
     for (const key of ownedKeys) expect(await ctx.blobs.get(key)).toBeNull();
 

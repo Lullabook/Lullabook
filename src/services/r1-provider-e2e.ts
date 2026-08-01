@@ -1,10 +1,5 @@
 import { CostThreshold } from "@/services/provider-cost-metering";
 
-import type {
-  R1ProviderE2EServiceAdapters,
-} from "@/services/r1-provider-e2e-composition";
-import { runComposedR1ProviderE2E } from "@/services/r1-provider-e2e-composition";
-
 export { CostThreshold };
 
 export const APPROVED_R1_PROVIDER_E2E_CEILING_USD = 2;
@@ -52,11 +47,13 @@ export interface R1ProviderE2EEnv {
   FAL_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   LIVE_PROVIDER_BUDGET_USD?: string;
+  LIVE_PROVIDER_RUN_APPROVED?: string;
 }
 
 export interface R1ProviderE2EConfig {
   budgetUsd: number;
   credentials: { fal: string; anthropic: string };
+  liveRunApproved: true;
 }
 
 export class R1ProviderE2EConfigError extends Error {
@@ -118,6 +115,29 @@ export interface R1ProviderE2EFlowItem {
   status: "pending" | "passed" | "failed";
 }
 
+export type R1ProviderE2EStageDetail = string | number | boolean | null;
+
+export interface R1ProviderE2EStageEvidence {
+  stageId: string;
+  status: "passed" | "failed";
+  summary: string;
+  details?: Record<string, R1ProviderE2EStageDetail>;
+  redactedLog?: string;
+}
+
+export interface R1ProviderE2ECompositionResult {
+  evidenceSource: R1ProviderE2EEvidenceSource;
+  stageEvidence: R1ProviderE2EStageEvidence[];
+  evidence: R1ProviderE2EEvidence[];
+  storyAllowanceAccounting: R1ProviderE2EReport["storyAllowanceAccounting"];
+  redactedLogs?: string[];
+  reservedUsd?: number;
+}
+
+export interface R1ProviderE2EComposition {
+  run(): Promise<R1ProviderE2ECompositionResult>;
+}
+
 export interface R1ProviderE2EGateRoute {
   provider: string;
   model: string;
@@ -159,6 +179,7 @@ export interface R1ProviderE2EReport {
   fixturePolicy: typeof DEFAULT_R1_PROVIDER_E2E_MANIFEST.fixturePolicy;
   flowPlan: readonly R1ProviderE2EFlowItem[];
   flowChecklist: { total: number; passed: number; failed: number; pending: number };
+  stageEvidence: R1ProviderE2EStageEvidence[];
   requestIds: string[];
   redactedLogs: string[];
   evidence: R1ProviderE2EEvidence[];
@@ -179,17 +200,46 @@ export interface R1ProviderE2EReport {
 
 export interface RunR1ProviderE2EOptions {
   config: R1ProviderE2EConfig;
-  adapters: R1ProviderE2EAdapters;
-  serviceAdapters?: Partial<R1ProviderE2EServiceAdapters>;
+  adapters?: R1ProviderE2EAdapters;
+  composition?: R1ProviderE2EComposition;
   now?: () => Date;
   gate?: Partial<Omit<R1ProviderE2EGateInput, "releaseEvidenceAvailable">>;
 }
 
-export const DEFAULT_GATE_ROUTE: R1ProviderE2EGateRoute = {
+const DEFAULT_GATE_ROUTE: R1ProviderE2EGateRoute = {
   provider: "fal.ai",
   model: "fal-ai/flux-2/lora",
 };
 
+const DEFAULT_OPERATIONS: R1ProviderE2EOperation[] = [
+  {
+    operationId: "r1-train-personas",
+    stageId: "train",
+    provider: "fal",
+    endpoint: "fal-ai/flux-2-trainer-v2",
+    model: "flux-2-lora-v2",
+    pricingVersion: "fal-2026-07-20",
+    maxCostUsd: 0.4,
+  },
+  {
+    operationId: "r1-story-text",
+    stageId: "valid-story",
+    provider: "anthropic",
+    endpoint: "anthropic.messages.create",
+    model: "claude-sonnet-4-6",
+    pricingVersion: "anthropic-2026-07-20",
+    maxCostUsd: 0.2,
+  },
+  {
+    operationId: "r1-page-fanout",
+    stageId: "twelve-page-jobs",
+    provider: "fal",
+    endpoint: "fal-ai/flux-2/lora",
+    model: "flux-2-lora",
+    pricingVersion: "fal-2026-07-20",
+    maxCostUsd: 0.8,
+  },
+];
 
 function requiredCredential(env: R1ProviderE2EEnv, name: "FAL_API_KEY" | "ANTHROPIC_API_KEY"): string {
   const value = env[name]?.trim();
@@ -206,10 +256,16 @@ export function createR1ProviderE2EConfig(
     FAL_API_KEY: process.env.FAL_API_KEY,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     LIVE_PROVIDER_BUDGET_USD: process.env.LIVE_PROVIDER_BUDGET_USD,
+    LIVE_PROVIDER_RUN_APPROVED: process.env.LIVE_PROVIDER_RUN_APPROVED,
   }
 ): R1ProviderE2EConfig {
   const fal = requiredCredential(env, "FAL_API_KEY");
   const anthropic = requiredCredential(env, "ANTHROPIC_API_KEY");
+  if (env.LIVE_PROVIDER_RUN_APPROVED !== "true") {
+    throw new R1ProviderE2EConfigError(
+      "R1 provider e2e smoke refuses to run: LIVE_PROVIDER_RUN_APPROVED=true is required",
+    );
+  }
   const rawBudget = env.LIVE_PROVIDER_BUDGET_USD?.trim();
   const budgetUsd = rawBudget === undefined ? Number.NaN : Number(rawBudget);
   if (!Number.isFinite(budgetUsd) || budgetUsd <= 0) {
@@ -222,7 +278,7 @@ export function createR1ProviderE2EConfig(
       `LIVE_PROVIDER_BUDGET_USD exceeds the approved $${APPROVED_R1_PROVIDER_E2E_CEILING_USD} ceiling`
     );
   }
-  return { budgetUsd, credentials: { fal, anthropic } };
+  return { budgetUsd, credentials: { fal, anthropic }, liveRunApproved: true };
 }
 
 export function evaluateR1ProviderE2EGate(input: R1ProviderE2EGateInput): R1ProviderE2EGateDecision {
@@ -274,13 +330,16 @@ function redactStructuredValue(value: unknown): unknown {
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value).map(([key, nested]) => [
       key,
-      SENSITIVE_EVIDENCE_KEY.test(key) ? "[REDACTED]" : redactStructuredValue(nested),
+      SENSITIVE_EVIDENCE_KEY.test(key) && typeof nested !== "number" && typeof nested !== "boolean" && nested !== null
+        ? "[REDACTED]"
+        : redactStructuredValue(nested),
     ]));
   }
+  if (typeof value === "string") return redactLog(value);
   return value;
 }
 
-export function redactLog(value: string): string {
+function redactLog(value: string): string {
   let sanitized = value;
   try {
     sanitized = JSON.stringify(redactStructuredValue(JSON.parse(value)));
@@ -297,21 +356,234 @@ export function redactLog(value: string): string {
     .slice(0, 500);
 }
 
+function adaptersAvailable(adapters: R1ProviderE2EAdapters): boolean {
+  return adapters.liveAdaptersWired && adapters.fal.available && adapters.anthropic.available;
+}
+
+function availableForRelease(adapters: R1ProviderE2EAdapters): boolean {
+  return adaptersAvailable(adapters) &&
+    adapters.fal.isDevOnly !== true &&
+    adapters.anthropic.isDevOnly !== true &&
+    adapters.fal.evidenceSource === "real-provider" &&
+    adapters.anthropic.evidenceSource === "real-provider";
+}
+
 export async function runR1ProviderE2E({
   config,
   adapters,
-  serviceAdapters,
+  composition,
   now = () => new Date(),
   gate = {},
 }: RunR1ProviderE2EOptions): Promise<R1ProviderE2EReport> {
-  const result = await runComposedR1ProviderE2E({
-    config,
-    adapters,
-    serviceAdapters,
-    now,
-    gate,
+  if (!Number.isFinite(config.budgetUsd) || config.budgetUsd <= 0 || config.budgetUsd > APPROVED_R1_PROVIDER_E2E_CEILING_USD) {
+    throw new R1ProviderE2EConfigError("Invalid R1 provider e2e smoke budget");
+  }
+  if (config.liveRunApproved !== true) {
+    throw new R1ProviderE2EConfigError("R1 provider e2e smoke requires explicit live-run approval");
+  }
+  if (composition && adapters) {
+    throw new R1ProviderE2EConfigError("Choose either an R1 provider composition or provider adapters, not both");
+  }
+  const started = now();
+  const evidence: R1ProviderE2EEvidence[] = [];
+  const stageEvidence: R1ProviderE2EStageEvidence[] = [];
+  const logs: string[] = [];
+  let reservedUsd = 0;
+  let compositionEvidenceSource: R1ProviderE2EEvidenceSource | undefined;
+  let storyAllowanceAccounting: R1ProviderE2EReport["storyAllowanceAccounting"] = {
+    allowed: DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily,
+    reserved: 0,
+    released: 0,
+    committed: 0,
+    remaining: DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily,
+  };
+  if (composition) {
+    const result = await composition.run();
+    compositionEvidenceSource = result.evidenceSource;
+    const knownStages = new Set<string>(R1_PROVIDER_E2E_FLOW_PLAN.map((item) => item.id));
+    const seenStages = new Set<string>();
+    for (const item of result.stageEvidence) {
+      if (!knownStages.has(item.stageId) || seenStages.has(item.stageId)) {
+        throw new R1ProviderE2EConfigError(`Invalid or duplicate R1 stage evidence: ${item.stageId}`);
+      }
+      seenStages.add(item.stageId);
+      stageEvidence.push({
+        ...item,
+        summary: redactLog(item.summary),
+        details: item.details
+          ? redactStructuredValue(item.details) as Record<string, R1ProviderE2EStageDetail>
+          : undefined,
+        redactedLog: item.redactedLog ? redactLog(item.redactedLog) : undefined,
+      });
+    }
+    evidence.push(...result.evidence.map((item) => ({ ...item, redactedLog: redactLog(item.redactedLog) })));
+    const accounting = result.storyAllowanceAccounting;
+    const accountingValues = [
+      accounting.allowed,
+      accounting.reserved,
+      accounting.released,
+      accounting.committed,
+      accounting.remaining,
+    ];
+    if (
+      accounting.allowed !== DEFAULT_R1_PROVIDER_E2E_MANIFEST.storyAllowancePerFamily ||
+      accountingValues.some((value) => !Number.isInteger(value) || value < 0) ||
+      accounting.reserved + accounting.committed > accounting.allowed ||
+      accounting.remaining !== accounting.allowed - accounting.reserved - accounting.committed
+    ) {
+      throw new R1ProviderE2EConfigError("Invalid R1 Story allowance evidence");
+    }
+    storyAllowanceAccounting = { ...accounting };
+    reservedUsd = result.reservedUsd ?? 0;
+    if (!Number.isFinite(reservedUsd) || reservedUsd < 0 || reservedUsd > config.budgetUsd) {
+      throw new R1ProviderE2EBudgetError("R1 provider composition exceeded its authorized reservation");
+    }
+    logs.push(...(result.redactedLogs ?? []).map(redactLog));
+  } else if (adapters && adaptersAvailable(adapters)) {
+    for (const operation of DEFAULT_OPERATIONS) {
+      if (reservedUsd + operation.maxCostUsd > config.budgetUsd + Number.EPSILON) {
+        throw new R1ProviderE2EBudgetError(`R1 provider e2e hard stop before ${operation.operationId}`);
+      }
+      reservedUsd += operation.maxCostUsd;
+      const operationStarted = now();
+      const adapter = adapters[operation.provider];
+      try {
+        const result = await adapter.run(operation);
+        const requestId = typeof result.requestId === "string" ? result.requestId.trim() : "";
+        const durationMs = typeof result.durationMs === "number" ? result.durationMs : Number.NaN;
+        const actualCostUsd = typeof result.actualCostUsd === "number" ? result.actualCostUsd : Number.NaN;
+        const providerEvidenceIsValid =
+          result.status === "succeeded" &&
+          requestId.length >= 8 &&
+          result.provider === operation.provider &&
+          result.endpoint === operation.endpoint &&
+          result.model === operation.model &&
+          result.pricingVersion === operation.pricingVersion &&
+          Number.isFinite(durationMs) && durationMs >= 0 &&
+          Number.isFinite(actualCostUsd) && actualCostUsd >= 0 && actualCostUsd <= operation.maxCostUsd;
+        if (!providerEvidenceIsValid) {
+          throw new R1ProviderE2EBudgetError(`Incomplete or mismatched provider evidence for ${operation.operationId}`);
+        }
+        evidence.push({
+          requestId,
+          evidenceSource: adapter.evidenceSource ?? "deterministic",
+          provider: operation.provider,
+          endpoint: operation.endpoint,
+          model: operation.model,
+          pricingVersion: operation.pricingVersion,
+          status: "succeeded",
+          durationMs,
+          actualCostUsd,
+          redactedLog: redactLog(result.redactedLog ?? `${operation.operationId} completed without retained payload`),
+        });
+      } catch {
+        evidence.push({
+          requestId: `${operation.operationId}:error`,
+          evidenceSource: adapter.evidenceSource ?? "deterministic",
+          provider: operation.provider,
+          endpoint: operation.endpoint,
+          model: operation.model,
+          pricingVersion: operation.pricingVersion,
+          status: "failed",
+          durationMs: Math.max(0, now().getTime() - operationStarted.getTime()),
+          actualCostUsd: 0,
+          redactedLog: `Provider operation ${operation.operationId} failed; sensitive payloads were not retained`,
+        });
+      }
+    }
+  } else {
+    logs.push("Live provider composition is unavailable; no provider call was attempted");
+  }
+
+  const statusByStage = new Map<string, R1ProviderE2EFlowItem["status"]>();
+  for (const item of stageEvidence) {
+    statusByStage.set(item.stageId, item.status);
+  }
+  if (!composition) {
+    for (const item of evidence) {
+      const stageId = DEFAULT_OPERATIONS.find(
+        (operation) => operation.endpoint === item.endpoint && operation.model === item.model,
+      )?.stageId;
+      if (stageId) {
+        statusByStage.set(stageId, item.status === "succeeded" ? "passed" : "failed");
+      }
+    }
+  }
+  const flowPlan: R1ProviderE2EFlowItem[] = R1_PROVIDER_E2E_FLOW_PLAN.map((item) => ({
+    ...item,
+    status: statusByStage.get(item.id) ?? "pending",
+  }));
+  const flowChecklist = {
+    total: flowPlan.length,
+    passed: flowPlan.filter((item) => item.status === "passed").length,
+    failed: flowPlan.filter((item) => item.status === "failed").length,
+    pending: flowPlan.filter((item) => item.status === "pending").length,
+  };
+  const actualProviderCostUsd = evidence.reduce((sum, item) => sum + item.actualCostUsd, 0);
+  const completed = now();
+  const providerRouteEligible = composition
+    ? compositionEvidenceSource === "real-provider"
+    : adapters ? availableForRelease(adapters) : false;
+  const releaseEvidenceEligible =
+    providerRouteEligible &&
+    evidence.length > 0 &&
+    evidence.every((item) =>
+      item.evidenceSource === "real-provider" && (composition !== undefined || item.status === "succeeded")
+    ) &&
+    evidence.some((item) => item.status === "succeeded") &&
+    new Set(evidence.map((item) => item.requestId)).size === evidence.length &&
+    flowChecklist.pending === 0 &&
+    flowChecklist.failed === 0;
+  const decision = evaluateR1ProviderE2EGate({
+    modeledAnnualFullCapP95MarginPercent: gate.modeledAnnualFullCapP95MarginPercent ?? 70,
+    ordinaryStoryCost: gate.ordinaryStoryCost ?? { threshold: CostThreshold.GREEN },
+    selectedRoute: gate.selectedRoute ?? DEFAULT_GATE_ROUTE,
+    canaryDecision: gate.canaryDecision ?? DEFAULT_GATE_ROUTE,
+    approvalFlag: gate.approvalFlag ?? false,
+    releaseEvidenceAvailable: releaseEvidenceEligible,
   });
-  return result.report;
+  if (decision.status === "blocked" && flowChecklist.pending > 0) {
+    decision.missingEvidence.push(
+      `${flowChecklist.pending} required R1 flow stages remain unexecuted`,
+    );
+  }
+  return {
+    schemaVersion: R1_PROVIDER_E2E_SCHEMA_VERSION,
+    ticket: R1_PROVIDER_E2E_TICKET,
+    startedAt: started.toISOString(),
+    completedAt: completed.toISOString(),
+    durationMs: Math.max(0, completed.getTime() - started.getTime()),
+    budget: {
+      configuredUsd: config.budgetUsd,
+      approvedCeilingUsd: APPROVED_R1_PROVIDER_E2E_CEILING_USD,
+      reservedUsd,
+      actualProviderCostUsd,
+      remainingUsd: Math.max(0, config.budgetUsd - actualProviderCostUsd),
+    },
+    fixturePolicy: DEFAULT_R1_PROVIDER_E2E_MANIFEST.fixturePolicy,
+    flowPlan,
+    flowChecklist,
+    stageEvidence,
+    requestIds: evidence.map((item) => item.requestId),
+    redactedLogs: logs.concat(evidence.map((item) => item.redactedLog)).map(redactLog),
+    evidence,
+    actualProviderCostUsd,
+    storyAllowanceAccounting,
+    modelVersions: {
+      training: "flux-2-trainer-v2",
+      illustration: "flux-2-lora-v1",
+      story: "claude-sonnet-4-6",
+      pageRepair: "nano-banana-2-edit-v1",
+    },
+    pricingVersions: {
+      fal: "fal-2026-07-20",
+      anthropic: "anthropic-2026-07-20",
+      platformReserve: "r1-economics-2026-07-20",
+    },
+    decision,
+    releaseEvidenceEligible,
+    productionRoutingMutated: false,
+  };
 }
 
 export type ExistingR1ProviderE2EAdapter = R1ProviderE2EAdapter;
