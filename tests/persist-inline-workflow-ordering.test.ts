@@ -50,31 +50,45 @@ function persistBody(): string {
   return CONTEXT_SRC.slice(open, i + 1);
 }
 
+/**
+ * The composition root calls sync/flush through one-line aliases
+ * (`persistStore` / `dispatchWorkflow`) so `ColdStartService` can share them.
+ * Accept either spelling — but only after proving each alias still means what
+ * its name says, so a rename to something *different* cannot pass silently.
+ */
+const SYNC_CALL = /(?:store\.sync\(\)|persistStore\(\))/g;
+const DISPATCH_CALL = /(?:workflow\.flush\(\)|dispatchWorkflow\(\))/;
+
 describe("persist() — inline workflow ordering", () => {
   it("the premise still holds: the local adapter drains jobs inside flush()", () => {
     // If this ever stops being true the second sync can go away.
     expect(ADAPTER_SRC).toMatch(/async flush\(\)[\s\S]{0,120}?this\.drain\(\)/);
   });
 
+  it("the aliases still mean store.sync() and workflow.flush()", () => {
+    expect(CONTEXT_SRC).toMatch(/const persistStore = async \(\) => store\.sync\(\);/);
+    expect(CONTEXT_SRC).toMatch(/const dispatchWorkflow = async \(\) => workflow\.flush\(\);/);
+  });
+
   it("syncs again after flush, so inline job output is persisted", () => {
     const body = persistBody();
-    const flushAt = body.indexOf("workflow.flush()");
+    const flushAt = body.search(DISPATCH_CALL);
     expect(flushAt).toBeGreaterThan(-1);
-    // At least one store.sync() must come AFTER the flush.
-    const syncsAfterFlush = [...body.slice(flushAt).matchAll(/store\.sync\(\)/g)];
+    // At least one sync must come AFTER the dispatch.
+    const syncsAfterFlush = [...body.slice(flushAt).matchAll(SYNC_CALL)];
     expect(syncsAfterFlush.length).toBeGreaterThan(0);
   });
 
   it("still syncs BEFORE flush, so a remote worker never reads uncommitted state", () => {
     const body = persistBody();
-    const flushAt = body.indexOf("workflow.flush()");
-    const syncsBeforeFlush = [...body.slice(0, flushAt).matchAll(/store\.sync\(\)/g)];
+    const flushAt = body.search(DISPATCH_CALL);
+    const syncsBeforeFlush = [...body.slice(0, flushAt).matchAll(SYNC_CALL)];
     expect(syncsBeforeFlush.length).toBeGreaterThan(0);
   });
 
   it("the second sync is gated on the inline adapter, not paid in production", () => {
     const body = persistBody();
-    const flushAt = body.indexOf("workflow.flush()");
+    const flushAt = body.search(DISPATCH_CALL);
     expect(body.slice(flushAt)).toMatch(/LocalDevWorkflowAdapter/);
   });
 });
