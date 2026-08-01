@@ -80,6 +80,16 @@ export const DEFAULT_STORYBOOK_GENERATION_CONFIG: Required<StorybookGenerationCo
   },
 };
 
+/**
+ * Keep a Baby id only when the Baby actually exists. A stale pointer must not
+ * reach the `storybooks.baby_id` foreign key — see
+ * `tests/storybook-dangling-selected-baby.test.ts`.
+ */
+function resolveBabyId(babyId: string | null | undefined, store: DataStore): string | undefined {
+  if (!babyId) return undefined;
+  return store.babies.has(babyId) ? babyId : undefined;
+}
+
 function deterministicPageSeed(storybookId: string, pageIndex: number): number {
   let hash = 2166136261;
   for (const char of `${storybookId}:${pageIndex}`) {
@@ -201,7 +211,11 @@ export class StorybookService {
     return {
       ...brief,
       starringPersonaIds,
-      babyId: brief.babyId ?? member.selectedBabyId ?? undefined,
+      // A `selectedBabyId` can outlive its Baby row (sync() upserts tables
+      // independently, so a partial persist strands the pointer). Handing an
+      // unknown id to the storybooks.baby_id FK fails the whole generation and
+      // nothing in the UI can clear it — degrade to "no Baby" instead.
+      babyId: resolveBabyId(brief.babyId ?? member.selectedBabyId, this.store),
       pageCount: resolvePageCount(brief),
     };
   }

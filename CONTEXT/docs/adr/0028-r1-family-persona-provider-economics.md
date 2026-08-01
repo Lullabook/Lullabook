@@ -1,6 +1,6 @@
 # 0028 — R1 multi-Persona Family, provider routing, and margin gate
 
-- Status: Accepted (2026-07-20)
+- Status: Accepted (2026-07-20); implemented in commit 654d5e3 (tickets 176-185). Independent debug audit 2026-07-21 (`npm run verify` PASS, 139 files/817 tests) found the deterministic suite green but the production path NOT release-done: BLOCKER gaps on 177 (Guardian bypass), 178 (tested atomic path is dead code; production moderates after persistence), 179 (production webhook unsigned), 183 (metering/kill-switch unwired), 184 (Hard-delete can't inventory provider artifacts), 185 (not a real e2e gate), plus MAJOR/HIGH findings on 176, 180, 181, 182. Full register: CONTEXT/handoffs/DEBUG-AUDIT-2026-07-21-r1-176-185.md. Do not treat 176-185 as release-done until these are fixed and re-graded.
 - Supersedes for R1 only: ADR-0025’s Just Us price, Story cap, and Persona assumptions; issue 146’s one-Baby restriction.
 - Retains: ADR-0025’s collaboration-axis design for a later release, server-authoritative entitlement, and shared Family allowance.
 - Depends on: ADR-0001, ADR-0002, ADR-0005, ADR-0006, ADR-0007, ADR-0008, ADR-0010, ADR-0011, ADR-0012, ADR-0014, ADR-0020, ADR-0022, ADR-0024, ADR-0027.
