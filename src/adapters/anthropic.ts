@@ -283,7 +283,10 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
       input.personaNames.length ? `CAST NAMES (use in story prose): ${input.personaNames.join(", ")}.` : "",
       input.personaIds?.length
         ? `CAST PERSONA IDS (use these exact IDs in scenes.personaIds and styleBible.wardrobe.castMember): ${input.personaIds.join(", ")}.`
-        : "",
+        : // No Personas in this cast. The schema still requires personaIds, so
+          // say what belongs there — otherwise the model invents IDs and every
+          // Scene trips the selected-Personas-only contract check.
+          "NO CAST PERSONA IDS: this Story stars fictional Characters only. Every scene's personaIds must be an empty array, and styleBible.wardrobe must be keyed by Character name.",
       input.characterNames?.length
         ? `FICTIONAL CHARACTERS (use these exact names): ${input.characterNames.join(", ")}.`
         : "",
@@ -297,7 +300,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
 
     let message: Anthropic.Message;
     try {
-      message = await client.messages.create({
+      message = await client.messages.stream({
         model: getProductionStoryModel(this.routingDecision),
         max_tokens: MAX_TOKENS,
         system: [
@@ -330,7 +333,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
           schema: GENERATED_STORY_SCHEMA,
         },
       },
-      });
+      }).finalMessage();
     } catch (error) {
       this.lastGenerationEvidence = {
         model: getProductionStoryModel(this.routingDecision),
@@ -364,7 +367,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
       return `- ${c.displayName}${traits ? ` (${traits})` : ""}`;
     });
 
-    const message = await client.messages.create({
+    const message = await client.messages.stream({
       model: getProductionStoryModel(this.routingDecision),
       max_tokens: MAX_TOKENS,
       system: [
@@ -387,7 +390,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
             .join("\n\n"),
         },
       ],
-    });
+    }).finalMessage();
 
     if (message.stop_reason === "refusal") {
       throw new Error("Story generation was refused by the model's safety system");
@@ -456,7 +459,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
     twist?: string;
   }): Promise<GeneratedStory> {
     const client = buildClient();
-    const message = await client.messages.create({
+    const message = await client.messages.stream({
       model: getProductionStoryModel(this.routingDecision),
       max_tokens: MAX_TOKENS,
       system: [
@@ -496,7 +499,7 @@ export class RealAnthropicAdapter implements AnthropicAdapter {
           schema: GENERATED_STORY_SCHEMA,
         },
       },
-    });
+    }).finalMessage();
     this.recordEvidence(message);
     const story = parseGeneratedStory(message);
     validateGeneratedStoryContract(story, input.pageCount, input.personaIds ?? input.personaNames);

@@ -12,6 +12,7 @@ node_modules/
 .next/
 .next-free/
 .next-paid/
+.next-all/
 test-results/
 playwright-report/
 out/
@@ -41,6 +42,9 @@ tsconfig.tsbuildinfo
 * 2.*
 * 2
 * [0-9].*
+
+# Unrelated local tooling that lives beside the repo, not in it
+codex-native-selector/
 
 # Generated audit / debug artifacts (not source)
 appaudit-report-*.md

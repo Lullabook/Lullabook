@@ -24,7 +24,13 @@ const { createMock } = vi.hoisted(() => ({ createMock: vi.fn() }));
 
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class FakeAnthropicSdk {
-    messages = { create: createMock };
+    // The adapter streams at MAX_TOKENS (the SDK refuses a non-streaming
+    // request that large) and resolves via finalMessage(). Route both shapes
+    // through the same mock so call-argument assertions keep working.
+    messages = {
+      create: createMock,
+      stream: (args: unknown) => ({ finalMessage: () => createMock(args) }),
+    };
     constructor(_opts: unknown) {}
   },
 }));

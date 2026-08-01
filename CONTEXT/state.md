@@ -8,12 +8,27 @@ Keep it under ~40 lines. Trim aggressively.
 
 ## Now
 
+- 2026-08-01 live run: brought the app up against real Supabase + real
+  Anthropic. Five production blockers found and fixed test-first; verify PASS
+  (172 files / 971 tests). R1 core loop works end to end for the first time
+  (Brief → 12-Page `draft`, real text, persisted). Handoff
+  `SESSION-HANDOFF-2026-08-01-live-run-five-blockers.md`. **Does not clear the
+  six blockers in `DEBUG-AUDIT-2026-07-21-r1-176-185.md`** — 179 (unsigned fal
+  webhook) and 178 (photos persisted before moderation) are next.
+- Not verified after those fixes: Persona creation / photo upload, real
+  illustrations, PDF export, share links, hard-delete, Journal, audio.
 - 2026-07-31 /part2: LUL-105 + LUL-110 built → Debugger Ready (handoff
   `SESSION-HANDOFF-2026-07-31-part2-LUL-105-110.md`). Next: /part3 on both +
   LUL-109, all bounce 1 of 3.
 - Gotchas: Linear MCP tools don't load in sessions on the custom endpoint
   (board moves need human hand or API key). `.env.example` is gitignored but
   the Sentry check requires it — fresh worktrees fail verify until copied in.
+  Metro binds `[::1]` only on this machine — run
+  `mobile/scripts/ipv4-metro-proxy.mjs` alongside `expo start` or Expo Go
+  cannot connect. `npm run db:migrate` + `RUN-LOCAL.md` are **stale** (stop at
+  migration 012 of 022); use `CONTEXT/local-dev/schema-catchup-012-022.sql`.
+  Supabase keys were rotated to the `sb_publishable_`/`sb_secret_` format — a
+  dead key surfaces as a misleading "hostname could not be found".
 - Retrieval graph added to `CONTEXT/` (ROUTER + generated indexes + this file).
   Measured against the raw-vault baseline on 2026-07-29 — see Recently tried.
 

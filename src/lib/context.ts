@@ -3,7 +3,7 @@ import { createBlobStore } from "@/lib/create-blob-store";
 import { CuratedClassicCatalog } from "@/adapters/classic-catalog";
 import { optionalEnv } from "@/adapters/env";
 import { FakeLiveness } from "@/adapters/fakes";
-import { createWorkflowAdapter } from "@/lib/create-workflow-adapter";
+import { createWorkflowAdapter, LocalDevWorkflowAdapter } from "@/lib/create-workflow-adapter";
 import { RekognitionLivenessAdapter } from "@/adapters/liveness";
 import {
   selectFalAdapter,
@@ -183,6 +183,13 @@ export function createRequestContext() {
     async persist(): Promise<void> {
       await store.sync();
       await workflow.flush();
+      // Sync order matters and differs by adapter. Inngest only *sends* events
+      // here, so state must be committed first — a remote worker must never
+      // read a store that hasn't landed. LocalDevWorkflowAdapter instead
+      // DRAINS the jobs inline, mutating this same store during the flush
+      // above; without a second sync the terminal status and every Page it
+      // produced are silently dropped and the book strands in `generating`.
+      if (workflow instanceof LocalDevWorkflowAdapter) await store.sync();
     },
   };
 }

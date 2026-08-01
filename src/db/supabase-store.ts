@@ -96,6 +96,24 @@ export class SupabaseDataStore extends DataStore {
     if (familyId) await this.hydrateFamily(familyId);
   }
 
+  /**
+   * Resolve the Family that owns an Email-Plus consent link. The confirm
+   * endpoint is unauthenticated by design — the Guardian clicks a link from
+   * their inbox, carrying only the token — so the token is the ONLY handle
+   * onto the Family. Without this the store stays empty and every confirm
+   * fails closed as "Invalid or expired consent link" (ADR-0008/ADR-0018).
+   * An unknown token hydrates nothing; the caller still fails closed.
+   */
+  async hydrateByConsentToken(token: string): Promise<void> {
+    const { data, error } = await this.client
+      .from("email_plus_vpc_requests")
+      .select("family_id")
+      .eq("token", token)
+      .maybeSingle();
+    if (error) throw new Error(`hydrateByConsentToken failed: ${error.message}`);
+    if (data) await this.hydrateFamily(data.family_id as string);
+  }
+
   async hydrateInvite(inviteId: string): Promise<void> {
     const { data, error } = await this.client
       .from("invites")
@@ -239,7 +257,7 @@ export class SupabaseDataStore extends DataStore {
         const msg = res.error.message;
         if (msg.includes("Could not find the table")) {
           throw new Error(
-            `${msg} — your Supabase project is missing newer tables. Open Supabase Dashboard → SQL Editor, paste and run CONTEXT/local-dev/schema-incremental-004-007.sql, then refresh.`
+            `${msg} — your Supabase project is missing newer tables. Open Supabase Dashboard → SQL Editor, then paste and run the migrations in supabase/migrations/ that your project has not applied yet, in order. Then refresh.`
           );
         }
         throw new Error(`hydrateFamily failed: ${msg}`);

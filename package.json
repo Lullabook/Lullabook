@@ -6,6 +6,7 @@
     "dev": "next dev",
     "dev:free": "DEV_FORCE_SUBSCRIPTION=inactive NEXT_DEV_DIST_DIR=.next-free next dev -p 3000",
     "dev:paid": "DEV_FORCE_SUBSCRIPTION=active DEV_DEMO_SEED=true DEV_FAL_FALLBACK=true DEV_LIVENESS_BYPASS=true NEXT_DEV_DIST_DIR=.next-paid next dev -p 3001",
+    "dev:all": "DEV_FORCE_SUBSCRIPTION=active DEV_DEMO_SEED=true DEV_FAL_FALLBACK=true DEV_LIVENESS_BYPASS=true R1_AUDIO_ENABLED=true R1_MULTI_FAMILY_ENABLED=true R1_JOURNAL_MACHINERY_ENABLED=true NEXT_DEV_DIST_DIR=.next-all next dev -p 3002",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
