@@ -382,7 +382,7 @@ describe("178 — PostgreSQL Persona creation protocol", () => {
   });
 
   it.each(["baby", "adult"] as const)(
-    "revalidates Guardian authority when finalizing a %s Persona",
+    "keeps Baby Guardian-only while allowing an own-subject Adult Member to finalize",
     async (kind) => {
       await withIsolatedPostgres(async ({ asService, asSystem, asUser, fixture }) => {
         const fingerprint = createHash("sha256").update(`guardian-demotion-${kind}-v1`).digest("hex");
@@ -417,10 +417,18 @@ describe("178 — PostgreSQL Persona creation protocol", () => {
         );
         await asSystem("update members set role = 'member' where id = $1", [fixture.familyA.memberId]);
 
-        await expect(asService(
-          "select * from app_finalize_persona_creation($1::uuid)",
-          [reservationId],
-        )).rejects.toThrow(/Guardian authority is required/i);
+        if (kind === "baby") {
+          await expect(asService(
+            "select * from app_finalize_persona_creation($1::uuid)",
+            [reservationId],
+          )).rejects.toThrow(/Guardian authority is required/i);
+        } else {
+          const finalized = await asService<{ state: string }>(
+            "select * from app_finalize_persona_creation($1::uuid)",
+            [reservationId],
+          );
+          expect(finalized.rows[0]?.state).toBe("finalized");
+        }
       });
     },
   );
