@@ -9,6 +9,7 @@ import {
   LauncherError,
   resolveWorkspace,
   run,
+  waitForReadiness,
 } from "../scripts/super-engineering-launcher.mjs";
 
 /**
@@ -34,6 +35,8 @@ interface FakeChild {
   killed: boolean;
   kill: ReturnType<typeof vi.fn>;
   once: ReturnType<typeof vi.fn>;
+  on: ReturnType<typeof vi.fn>;
+  emitError: (err: Error) => void;
 }
 
 const tmpDirs: string[] = [];
@@ -48,6 +51,7 @@ function makeFakeSpawn(spawnLog: SpawnRecord[]) {
   return vi.fn((cmd: string, args: string[], options: Record<string, unknown>) => {
     let killed = false;
     const exitHandlers: Array<() => void> = [];
+    const errorHandlers: Array<(err: Error) => void> = [];
     const child: FakeChild = {
       pid: 1000 + spawnLog.length,
       killed: false,
@@ -59,6 +63,12 @@ function makeFakeSpawn(spawnLog: SpawnRecord[]) {
       once: vi.fn((event: string, handler: () => void) => {
         if (event === "exit") exitHandlers.push(handler);
       }),
+      on: vi.fn((event: string, handler: (err: Error) => void) => {
+        if (event === "error") errorHandlers.push(handler);
+      }),
+      emitError: (err: Error) => {
+        for (const handler of errorHandlers) handler(err);
+      },
     };
     spawnLog.push({ cmd, args, options, child });
     return child;
@@ -143,7 +153,10 @@ describe("196 — happy path: backend → readiness → proxy → iOS command", 
     expect(spawnLog[0].args).toEqual(["run", "dev:paid"]);
     expect(spawnLog[0].options.cwd).toBe(REPO_ROOT);
     // Readiness was polled (and the backend was the only child when it happened).
-    expect(fakeFetch).toHaveBeenCalledWith(READINESS_URL, { method: "GET" });
+    expect(fakeFetch).toHaveBeenCalledWith(READINESS_URL, {
+      method: "GET",
+      signal: expect.any(AbortSignal),
+    });
     expect(spawnCountsAtFetch).toContain(1);
     // Then the IPv4 Metro proxy…
     expect(spawnLog[1].cmd).toBe("node");
@@ -183,6 +196,59 @@ describe("196 — failure paths", () => {
   });
 });
 
+describe("196 — bounded HTTP readiness", () => {
+  it("does not hang forever when a single readiness fetch attempt never resolves", async () => {
+    let requestSignal: AbortSignal | undefined;
+    const hangingFetch = vi.fn(
+      (_url: string, init?: { method?: string; signal?: AbortSignal }) => {
+        requestSignal = init?.signal;
+        return new Promise<never>(() => {});
+      }
+    ); // never settles
+
+    const start = Date.now();
+    const result = await waitForReadiness({
+      fetchFn: hangingFetch,
+      url: "http://127.0.0.1:9999/",
+      timeoutMs: 200,
+      pollMs: 20,
+    });
+    const elapsed = Date.now() - start;
+
+    expect(result).toBe(false);
+    expect(requestSignal?.aborted).toBe(true);
+    // Bounded: a single hung attempt must not defeat the overall timeout.
+    expect(elapsed).toBeLessThan(2000);
+  }, 3000);
+});
+
+describe("196 — spawn failure resilience", () => {
+  it("a child spawn error is handled (not thrown) and stops the other children", async () => {
+    const spawnLog: SpawnRecord[] = [];
+    const fakeSpawn = makeFakeSpawn(spawnLog);
+    const fakeFetch = vi.fn(async () => ({ status: 200 }));
+
+    const result = await run({
+      env: { SUPERCONDUCTOR_WORKSPACE_PATH: REPO_ROOT },
+      spawnFn: fakeSpawn,
+      fetchFn: fakeFetch,
+    });
+    expect(result.ok).toBe(true);
+    expect(spawnLog).toHaveLength(3);
+
+    // Every tracked child registered an 'error' listener (no unhandled 'error' crash).
+    for (const record of spawnLog) {
+      expect(record.child.on).toHaveBeenCalledWith("error", expect.any(Function));
+    }
+
+    // Simulate the backend process failing to launch (e.g. ENOENT); this must not
+    // throw, and must stop the sibling children instead of leaking them.
+    expect(() => spawnLog[0].child.emitError(new Error("spawn npm ENOENT"))).not.toThrow();
+    expect(spawnLog[1].child.kill).toHaveBeenCalled();
+    expect(spawnLog[2].child.kill).toHaveBeenCalled();
+  });
+});
+
 describe("196 — SIGINT/SIGTERM cleanup", () => {
   it("cleanup kills the backend, proxy, and Metro children and returns the signal's shell exit code", async () => {
     const spawnLog: SpawnRecord[] = [];
@@ -208,19 +274,32 @@ describe("196 — SIGINT/SIGTERM cleanup", () => {
 });
 
 describe("196 — credentials hygiene", () => {
-  it("passes no env of its own to children (dev-profile credentials only)", async () => {
+  it("does not pass inherited credentials to the proxy or Expo children", async () => {
     const spawnLog: SpawnRecord[] = [];
     const fakeSpawn = makeFakeSpawn(spawnLog);
     const fakeFetch = vi.fn(async () => ({ status: 200 }));
 
     await run({
-      env: { SUPERCONDUCTOR_WORKSPACE_PATH: REPO_ROOT },
+      env: {
+        ...process.env,
+        SUPERCONDUCTOR_WORKSPACE_PATH: REPO_ROOT,
+        ANTHROPIC_API_KEY: "anthropic-secret",
+        FAL_API_KEY: "fal-secret",
+        SUPABASE_SERVICE_ROLE_KEY: "supabase-secret",
+        EXPO_PUBLIC_DEV_PASSWORD: "dev-password",
+      },
       spawnFn: fakeSpawn,
       fetchFn: fakeFetch,
     });
 
-    for (const record of spawnLog) {
-      expect(record.options.env).toBeUndefined();
+    // Backend needs server credentials, so it keeps inherited env by default.
+    expect(spawnLog[0].options.env).toBeUndefined();
+    for (const record of spawnLog.slice(1)) {
+      expect(record.options.env).toEqual(expect.objectContaining({ PATH: process.env.PATH }));
+      expect(record.options.env).not.toHaveProperty("ANTHROPIC_API_KEY");
+      expect(record.options.env).not.toHaveProperty("FAL_API_KEY");
+      expect(record.options.env).not.toHaveProperty("SUPABASE_SERVICE_ROLE_KEY");
+      expect(record.options.env).not.toHaveProperty("EXPO_PUBLIC_DEV_PASSWORD");
     }
   });
 

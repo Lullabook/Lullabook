@@ -20,7 +20,10 @@ export interface ChildLike {
 export interface RunOptions {
   env?: Record<string, string | undefined>;
   spawnFn?: (command: string, args: string[], options: Record<string, unknown>) => ChildLike;
-  fetchFn?: (url: string, init?: { method?: string }) => Promise<{ status: number }>;
+  fetchFn?: (
+    url: string,
+    init?: { method?: string; signal?: AbortSignal }
+  ) => Promise<{ status: number }>;
   registerSignal?: (signal: string, handler: () => void) => void;
   log?: (message: string) => void;
   readiness?: ReadinessOptions;
@@ -35,7 +38,10 @@ export interface RunResult {
 export declare function resolveWorkspace(env: Record<string, string | undefined>): string;
 
 export declare function waitForReadiness(options?: ReadinessOptions & {
-  fetchFn?: (url: string, init?: { method?: string }) => Promise<{ status: number }>;
+  fetchFn?: (
+    url: string,
+    init?: { method?: string; signal?: AbortSignal }
+  ) => Promise<{ status: number }>;
   log?: (message: string) => void;
 }): Promise<boolean>;
 

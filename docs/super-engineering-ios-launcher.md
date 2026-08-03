@@ -40,10 +40,11 @@ npm run super:run
 **Stopping:** `Ctrl-C` (SIGINT) or SIGTERM stops the backend, proxy, and Metro
 children and exits with the signal's shell code (130 / 143).
 
-**Credentials:** the launcher adds, echoes, and stores no environment of its
-own — children inherit the shell env, and the only credentials in play are the
-development-only simulator credentials already defined by the mobile dev
-profile (`mobile/package.json` → `ios:paid`). No provider key is carried.
+**Credentials:** the launcher adds, echoes, and stores no credentials. The
+backend inherits shell env for server config; proxy and Expo children receive
+only a safe baseline env. The only mobile credentials in play are the
+development-only simulator credentials defined by the mobile dev profile
+(`mobile/package.json` → `ios:paid`). No provider key is carried to Expo.
 
 ## Fresh worktree prerequisites
 

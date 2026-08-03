@@ -19,9 +19,11 @@
  *      latest workspace code.
  *
  * SIGINT/SIGTERM stop the backend, proxy, and Metro children. The launcher
- * adds, echoes, and stores no environment: children inherit the shell env, and
- * the only credentials in play are the dev-profile ones already defined in
- * mobile/package.json (dev-only simulator credentials — never provider keys).
+ * adds, echoes, and stores no credentials: the backend inherits the shell env
+ * for server config, while the proxy and Expo children receive only a safe
+ * baseline env. The only mobile credentials in play are the dev-profile ones
+ * already defined in mobile/package.json (dev-only simulator credentials — never
+ * provider keys).
  */
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -33,12 +35,38 @@ export const BACKEND_PORT = 3001; // port consumed by the mobile dev profile (mo
 export const READINESS_URL = `http://127.0.0.1:${BACKEND_PORT}/`;
 const READINESS_TIMEOUT_MS = 120_000;
 const READINESS_POLL_MS = 1_000;
+// Bounds a single readiness attempt so one hung connection cannot defeat the
+// overall readiness timeout above.
+const READINESS_ATTEMPT_TIMEOUT_MS = 5_000;
+const MOBILE_ENV_KEYS = new Set([
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "PWD",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "LANG",
+  "LC_ALL",
+  "TERM",
+  "CI",
+  "FORCE_COLOR",
+  "SUPERCONDUCTOR_WORKSPACE_PATH",
+]);
 
 export class LauncherError extends Error {
   constructor(message) {
     super(message);
     this.name = "LauncherError";
   }
+}
+
+function mobileChildEnv(env) {
+  return Object.fromEntries(
+    Object.entries(env).filter(([key]) => MOBILE_ENV_KEYS.has(key))
+  );
 }
 
 /** Resolve the current workspace; throw LauncherError unless it is a Lullabook checkout. */
@@ -75,13 +103,33 @@ export async function waitForReadiness({
 } = {}) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    const remainingMs = deadline - Date.now();
+    const attemptTimeoutMs = Math.max(1, Math.min(remainingMs, READINESS_ATTEMPT_TIMEOUT_MS));
     try {
-      const res = await fetchFn(url, { method: "GET" });
-      if (res.status < 500) {
-        log(`backend ready (HTTP ${res.status})`);
-        return true;
+      // Race each attempt against its own bound: a single hung connection
+      // (TCP connects but never responds) must not stall the whole wait past
+      // the overall timeoutMs above.
+      const controller = new AbortController();
+      let attemptTimer;
+      try {
+        const res = await Promise.race([
+          fetchFn(url, { method: "GET", signal: controller.signal }),
+          new Promise((_, reject) => {
+            attemptTimer = setTimeout(() => {
+              controller.abort();
+              reject(new Error("readiness attempt timed out"));
+            }, attemptTimeoutMs);
+          }),
+        ]);
+        if (res.status < 500) {
+          log(`backend ready (HTTP ${res.status})`);
+          return true;
+        }
+        log(`backend responded HTTP ${res.status} — waiting`);
+      } finally {
+        clearTimeout(attemptTimer);
+        controller.abort();
       }
-      log(`backend responded HTTP ${res.status} — waiting`);
     } catch {
       log("backend not reachable yet — waiting");
     }
@@ -107,6 +155,7 @@ export async function run({
 } = {}) {
   const workspace = resolveWorkspace(env);
   const mobileDir = path.join(workspace, "mobile");
+  const childEnv = mobileChildEnv({ ...process.env, ...env });
   const children = new Set();
 
   const killAll = (signal = "SIGTERM") => {
@@ -122,6 +171,14 @@ export async function run({
   const track = (child, label) => {
     children.add(child);
     child.once?.("exit", () => children.delete(child));
+    // Without an 'error' listener, a spawn failure (e.g. ENOENT) is an
+    // unhandled EventEmitter 'error' and crashes the whole launcher instead
+    // of failing gracefully and cleaning up the siblings it already started.
+    child.on?.("error", (err) => {
+      log(`${label} failed to start: ${err.message ?? err} — stopping the others`);
+      children.delete(child);
+      killAll("SIGTERM");
+    });
     log(`  started ${label} (pid ${child.pid ?? "n/a"})`);
     return child;
   };
@@ -164,12 +221,20 @@ export async function run({
     spawnFn("node", [path.join(mobileDir, "scripts", "ipv4-metro-proxy.mjs")], {
       cwd: mobileDir,
       stdio: "inherit",
+      env: childEnv,
     }),
     "IPv4 Metro proxy"
   );
 
   log("invoking mobile iOS launch command (npm run ios:paid → expo start --ios)");
-  track(spawnFn("npm", ["run", "ios:paid"], { cwd: mobileDir, stdio: "inherit" }), "mobile ios:paid");
+  track(
+    spawnFn("npm", ["run", "ios:paid"], {
+      cwd: mobileDir,
+      stdio: "inherit",
+      env: childEnv,
+    }),
+    "mobile ios:paid"
+  );
 
   return { ok: true, exitCode: 0, cleanup };
 }
