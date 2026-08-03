@@ -1,6 +1,12 @@
 import { getApiUrl } from "@/lib/env";
 import { getAccessToken } from "@/lib/supabase";
 import {
+  ApiSignInRequiredError,
+  ApiStatusError,
+  CREATE_REQUEST_TIMEOUT_MS,
+  CreateRequestTimeoutError,
+} from "@/lib/generation-flow";
+import {
   classifyConsentRequiredError,
   classifyEntitlementError,
 } from "@/lib/entitlement-error";
@@ -8,29 +14,51 @@ import type { Character, Persona, StoryType } from "@domain/types";
 
 const apiBase = getApiUrl();
 
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs?: number
+): Promise<T> {
   const token = await getAccessToken();
-  const res = await fetch(`${apiBase}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-    // Issue 171 (SEC-1): a 403 carrying a known entitlement code is the
-    // server's paywall boundary — surface it typed so callers route to
-    // billing.tsx. Non-entitlement 403s stay plain errors (never hijacked).
-    const entitlementErr = classifyEntitlementError(res.status, body);
-    if (entitlementErr) throw entitlementErr;
-    // Issue 173: the 172 consent gate's 403 routes to the consent flow.
-    const consentErr = classifyConsentRequiredError(res.status, body);
-    if (consentErr) throw consentErr;
-    throw new Error(body.error ?? `Request failed (${res.status})`);
+  // Issue 187 — a bounded request is the only thing that keeps a slow create
+  // from freezing the Generate control. Abort on the budget; the caller gets
+  // a typed timeout error (never a hung promise).
+  const controller = new AbortController();
+  const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+  try {
+    const res = await fetch(`${apiBase}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init.headers ?? {}),
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      // Issue 171 (SEC-1): a 403 carrying a known entitlement code is the
+      // server's paywall boundary — surface it typed so callers route to
+      // billing.tsx. Non-entitlement 403s stay plain errors (never hijacked).
+      const entitlementErr = classifyEntitlementError(res.status, body);
+      if (entitlementErr) throw entitlementErr;
+      // Issue 173: the 172 consent gate's 403 routes to the consent flow.
+      const consentErr = classifyConsentRequiredError(res.status, body);
+      if (consentErr) throw consentErr;
+      // Issue 187: 401s and other statuses are typed so screens route by kind
+      // (sign-in) instead of message-sniffing.
+      if (res.status === 401) throw new ApiSignInRequiredError();
+      throw new ApiStatusError(res.status, body.error ?? `Request failed (${res.status})`);
+    }
+    return res.json() as Promise<T>;
+  } catch (err) {
+    if (timer && err instanceof Error && err.name === "AbortError") {
+      throw new CreateRequestTimeoutError();
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json() as Promise<T>;
 }
 
 export async function apiFormData<T>(path: string, body: FormData): Promise<T> {
@@ -268,7 +296,13 @@ export function createStorybook(brief: import("@domain/types").Brief): Promise<{
   storybookId: string;
   status: string;
 }> {
-  return apiFetch("/api/storybooks", { method: "POST", body: JSON.stringify(brief) });
+  // Issue 187 — a create stalled >20s must not leave the Generate control
+  // frozen: the request aborts and the caller renders a typed retry card.
+  return apiFetch(
+    "/api/storybooks",
+    { method: "POST", body: JSON.stringify(brief) },
+    CREATE_REQUEST_TIMEOUT_MS
+  );
 }
 
 export function listStorybooks(babyId?: string): Promise<{ storybooks: StorybookSummary[] }> {
@@ -294,6 +328,8 @@ export interface StorybookDetailWire {
   storyType: StoryType;
   rerollBudgetRemaining: number;
   rerollCredits: number;
+  /** Issue 187 — server-derived generation progress (phase + ready/total Pages). */
+  progress: import("@/lib/generation-flow").GenerationProgress;
   pages: StorybookPageWire[];
 }
 

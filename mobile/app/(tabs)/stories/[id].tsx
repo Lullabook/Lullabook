@@ -21,8 +21,18 @@ import {
   type StorybookDetailWire,
   type StorybookPageWire,
 } from "@/lib/api";
+import {
+  READER_POLL_BUDGET_MS,
+  READER_POLL_INTERVAL_MS,
+  classifyGenerationError,
+  generationProgressCopy,
+  isPollBudgetExhausted,
+  isTerminalStatus,
+  type GenerationFailure,
+} from "@/lib/generation-flow";
 import { BookCover } from "@/components/story-cover";
 import { C, F } from "@/constants/theme";
+import { recordStartup } from "@/lib/startup-timing";
 
 // Issue 145 — audio is cut from R1: the VoicePlayback component (issue 114)
 // was removed with it; it returns from git history when R2 re-enables audio.
@@ -74,7 +84,7 @@ export default function StorybookReaderScreen() {
   const [book, setBook] = useState<StorybookDetailWire | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<GenerationFailure | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   // Issue 160 (E4): finalize is deliberate — the CTA opens an inline confirm
   // sheet that names the re-roll lock before anything is sent to the server.
@@ -99,12 +109,13 @@ export default function StorybookReaderScreen() {
       .then(setCanShare)
       .catch(() => setCanShare(false));
   }, []);
-  // Issue 101: bounded poll — never spin forever. A book that hasn't reached a
-  // terminal state within the budget is surfaced as a timed-out state with a
-  // retry, never an infinite "Illustrating" spinner.
+  // Issue 101/187: bounded poll — never spin forever. A book that hasn't
+  // reached a terminal state within the five-minute watchdog budget is
+  // surfaced as a timed-out state with a retry, never an infinite
+  // "Illustrating" spinner. The budget lives in the pure module so tests and
+  // the reader can never drift apart.
   const [pollTimedOut, setPollTimedOut] = useState(false);
   const pollStartedRef = useRef<number | null>(null);
-  const POLL_BUDGET_MS = 5 * 60 * 1000;
 
   const load = useCallback(async () => {
     if (!storybookId) return;
@@ -112,17 +123,22 @@ export default function StorybookReaderScreen() {
       const data = await getStorybook(storybookId);
       setBook(data);
       setError(null);
-      if (data.status === "draft" || data.status === "failed" || data.status === "finalized") {
+      // Issue 191: first successful story read = the native "first-read"
+      // milestone (dev-only breadcrumb; no-op in production).
+      recordStartup("first-read");
+      // Issue 187 — polling stops the moment the server reports a terminal
+      // status (draft/failed/finalized); the reader never polls a finished book.
+      if (isTerminalStatus(data.status)) {
         setPollTimedOut(false);
         pollStartedRef.current = null;
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not load Storybook";
-      if (message.includes("Unauthorized")) {
+      const failure = classifyGenerationError(e);
+      if (failure.kind === "sign-in") {
         router.replace("/sign-in");
         return;
       }
-      setError(message);
+      setError(failure);
     } finally {
       setLoading(false);
     }
@@ -133,16 +149,22 @@ export default function StorybookReaderScreen() {
   }, [load]);
 
   useEffect(() => {
-    if (!book || book.status === "draft" || book.status === "failed" || book.status === "finalized") return;
+    if (!book || isTerminalStatus(book.status)) return;
     if (pollStartedRef.current === null) pollStartedRef.current = Date.now();
     const timer = setInterval(() => {
-      if (pollStartedRef.current !== null && Date.now() - pollStartedRef.current > POLL_BUDGET_MS) {
+      if (
+        isPollBudgetExhausted(
+          pollStartedRef.current,
+          Date.now(),
+          READER_POLL_BUDGET_MS
+        )
+      ) {
         setPollTimedOut(true);
         clearInterval(timer);
         return;
       }
       load();
-    }, 2500);
+    }, READER_POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [book?.status, load]);
 
@@ -161,7 +183,7 @@ export default function StorybookReaderScreen() {
         router.replace("/sign-in");
         return;
       }
-      setError(message);
+      setError(classifyGenerationError(e));
     } finally {
       setActionBusy(false);
     }
@@ -187,7 +209,7 @@ export default function StorybookReaderScreen() {
         router.replace("/sign-in");
         return;
       }
-      setError(message);
+      setError(classifyGenerationError(e));
     } finally {
       setActionBusy(false);
     }
@@ -214,7 +236,7 @@ export default function StorybookReaderScreen() {
         router.replace("/sign-in");
         return;
       }
-      setError(message);
+      setError(classifyGenerationError(e));
     } finally {
       setExporting(false);
     }
@@ -232,7 +254,7 @@ export default function StorybookReaderScreen() {
         router.replace("/sign-in");
         return;
       }
-      setError(message);
+      setError(classifyGenerationError(e));
     } finally {
       setActionBusy(false);
     }
@@ -259,8 +281,13 @@ export default function StorybookReaderScreen() {
     return (
       <Screen>
         <Card style={st.errorCard}>
-          <Text style={st.errorText}>{error ?? "We couldn't find this Storybook."}</Text>
-          <GhostButton title="← Back to the library" onPress={() => router.back()} />
+          {/* Issue 187 — typed copy only: a raw error string never renders.
+              Every failure carries a retry (or the Back support action). */}
+          <Text style={st.errorText}>{error ? error.message : "We couldn't find this Storybook."}</Text>
+          <View style={st.errorActions}>
+            {error?.retryable ? <GhostButton title="↻ Try again" onPress={load} /> : null}
+            <GhostButton title="← Back to the library" onPress={() => router.back()} />
+          </View>
         </Card>
       </Screen>
     );
@@ -287,7 +314,7 @@ export default function StorybookReaderScreen() {
           <PageTitle>{book.theme.slice(0, 48)}{book.theme.length > 48 ? "…" : ""}</PageTitle>
           <Lead>
             {generating
-              ? "Illustrating your pages — this usually takes a minute."
+              ? generationProgressCopy(book.progress)
               : `${TYPE_LABEL[book.storyType] ?? "Story"} · ${STATUS_LABEL[book.status] ?? book.status}`}
           </Lead>
         </View>
@@ -295,7 +322,15 @@ export default function StorybookReaderScreen() {
 
       {error ? (
         <Card style={st.errorCard}>
-          <Text style={st.errorText}>{error}</Text>
+          <Text style={st.errorText}>{error.message}</Text>
+          {/* Issue 187 — every displayed failure has a typed action: a
+              retryable failure re-loads; non-retryable failures show copy
+              only (support/navigation handled at their own sites). */}
+          {error.retryable ? (
+            <View style={st.errorActions}>
+              <GhostButton title="↻ Try again" onPress={load} />
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
@@ -326,17 +361,51 @@ export default function StorybookReaderScreen() {
       ) : null}
 
       {generating && !pollTimedOut ? (
-        <Card>
-          <View style={st.generatingRow}>
-            <Twinkle>
-              <Text style={{ fontSize: 26 }}>✨</Text>
-            </Twinkle>
-            <Text style={st.copy}>
-              Painting page {pages.filter((p) => p.generationStatus === "ready").length + 1} of your book…
-            </Text>
-          </View>
-          <Skeleton width="100%" height={140} radius={18} />
-        </Card>
+        <>
+          {/* Issue 187 — server-derived progress: phase copy + ready/total
+              counts come from GET /api/storybooks/:id progress, never from
+              client guessing. */}
+          <Card>
+            <View style={st.generatingRow}>
+              <Twinkle>
+                <Text style={{ fontSize: 26 }}>✨</Text>
+              </Twinkle>
+              <Text style={st.copy}>{generationProgressCopy(book.progress)}</Text>
+            </View>
+          </Card>
+          {page ? (
+            <>
+              {/* Progressive reader: Story text + the server-derived Page
+                  count render as soon as the Page exists, long before every
+                  Page is terminal. */}
+              <PageTurn pageKey={pageIndex}>
+                <Card>
+                  <Text style={st.pageLabel}>
+                    Page {page.index + 1} of {book.progress.pagesTotal}
+                  </Text>
+                  <PageIllustration page={page} />
+                  <Text style={st.pageText}>{page.text || "…"}</Text>
+                </Card>
+              </PageTurn>
+              <View style={st.navRow}>
+                <GhostButton
+                  title="← Prev"
+                  disabled={pageIndex === 0}
+                  onPress={() => setPageIndex((i) => Math.max(0, i - 1))}
+                />
+                <GhostButton
+                  title="Next →"
+                  disabled={pageIndex >= pages.length - 1}
+                  onPress={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))}
+                />
+              </View>
+            </>
+          ) : (
+            <Card>
+              <Skeleton width="100%" height={140} radius={18} />
+            </Card>
+          )}
+        </>
       ) : page ? (
         <>
           <PageTurn pageKey={pageIndex}>
@@ -484,6 +553,7 @@ const st = StyleSheet.create({
   },
   candidateText: { fontFamily: F.bodyBold, color: C.primary, fontSize: 13 },
   errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
+  errorActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 14 },
   finalizeCard: { borderColor: C.borderSoft, backgroundColor: C.surfaceAlt },
   finalizeRow: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 14 },
   errorText: { color: C.danger, fontFamily: F.bodyBold },

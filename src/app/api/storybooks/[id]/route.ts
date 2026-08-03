@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveRequestAuth } from "@/lib/request-auth";
+import { deriveStorybookProgress } from "@/lib/storybook-progress";
 
 /**
  * Live-progress polling for Brief composer / reader: status plus per-Page
@@ -27,7 +28,8 @@ export async function GET(
   if (!book) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  const pages = ctx.store.getPagesForStorybook(book.id).map((p) => ({
+  const pages = ctx.store.getPagesForStorybook(book.id);
+  const pageWire = pages.map((p) => ({
     id: p.id,
     index: p.index,
     text: p.text,
@@ -42,6 +44,15 @@ export async function GET(
       selected: c.selected,
     })),
   }));
+  // Issue 187 — server-derived progress: phase + ready/planned Page counts
+  // drive the reader while `generating`, so it never guesses from client
+  // state and stops polling on terminal phases.
+  const progress = deriveStorybookProgress({
+    status: book.status,
+    brief: book.brief,
+    pages,
+    hasPersistedText: Boolean(ctx.store.getPersistedGeneration(book.id)),
+  });
   return NextResponse.json({
     id: book.id,
     status: book.status,
@@ -49,6 +60,7 @@ export async function GET(
     storyType: book.brief.storyType,
     rerollBudgetRemaining: book.rerollBudgetRemaining,
     rerollCredits: book.rerollCredits,
-    pages,
+    progress,
+    pages: pageWire,
   });
 }
