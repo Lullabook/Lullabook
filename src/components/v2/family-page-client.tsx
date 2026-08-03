@@ -10,6 +10,7 @@ import {
   familyMemberStatus,
 } from "@/lib/v2-theme";
 import { V2_COLORS, V2_GRADIENT, V2_RADIUS, V2_SHADOW } from "@/components/v2/tokens";
+import type { PersonaStatus } from "@/domain/types";
 
 export interface FamilyMemberViewData {
   id: string;
@@ -21,7 +22,7 @@ export interface FamilyMemberViewData {
   avBg: string;
   headerBg: string;
   photoCount: number;
-  personaStatus: "training" | "ready" | "failed";
+  personaStatus: PersonaStatus;
   avatarKey: string | null;
   kind: "baby" | "adult";
   voiceClips: { label: string; durationSecs: number; transcript: string }[];
@@ -582,7 +583,7 @@ function UpdateReferencePhotos({
 }: {
   personaId: string;
   photoCount: number;
-  personaStatus: "training" | "ready" | "failed";
+  personaStatus: PersonaStatus;
   kind: "baby" | "adult";
 }) {
   const inputRef = useRef<HTMLInputElement>(null);

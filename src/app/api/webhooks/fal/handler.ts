@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import type { BlobStore } from "@/adapters/types";
+import type { BlobStore, FalAdapter } from "@/adapters/types";
 import {
   createFalWebhookVerifier,
   type FalWebhookHeaders,
   type FalWebhookPublicKey,
 } from "@/adapters/fal-webhook";
 import { createFalArtifactDownloader, type ArtifactDownloader } from "@/services/fal-lora-training";
-import { FalTrainingWebhookService } from "@/services/fal-training-webhook";
+import { FalReviewSampleGenerator, FalTrainingWebhookService } from "@/services/fal-training-webhook";
 import type { DataStore } from "@/db/store";
 import type { FalTrainingLifecycleRepository } from "@/db/fal-training-lifecycle";
 
@@ -16,6 +16,8 @@ export interface FalWebhookRouteDependencies {
   resolvePublicKeys: () => Promise<FalWebhookPublicKey[]>;
   downloadArtifact?: ArtifactDownloader;
   now?: () => number;
+  /** Real fal adapter used to generate Family-owned likeness-review samples (ticket 188). */
+  fal?: FalAdapter;
 }
 
 export function createFalWebhookPost(dependencies: FalWebhookRouteDependencies) {
@@ -41,6 +43,9 @@ export function createFalWebhookPost(dependencies: FalWebhookRouteDependencies) 
         dependencies.createBlobStore(),
         verifier,
         () => new Date(now() * 1000),
+        dependencies.fal
+          ? new FalReviewSampleGenerator(dependencies.fal, dependencies.createBlobStore())
+          : undefined,
       );
       const result = await service.handle(
         headers,

@@ -14,6 +14,7 @@ const AnimatedPressable = createAnimatedComponent(Pressable);
 /** Parent-facing likeness-training labels — raw enums never reach the screen. */
 const STATUS_LABEL: Record<PersonaStatus, string> = {
   training: "✨ Learning their look…",
+  review: "👀 Reviewing their likeness",
   ready: "Ready to star",
   failed: "Training needs a retry",
 };
@@ -21,6 +22,7 @@ const STATUS_LABEL: Record<PersonaStatus, string> = {
 /** Status dot colors mirror the web roster row's status indicator (v2-theme's familyMemberStatus). */
 const STATUS_DOT: Record<PersonaStatus, string> = {
   training: C.accent,
+  review: C.accent,
   ready: C.green,
   failed: C.soft,
 };

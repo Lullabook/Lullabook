@@ -33,6 +33,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     noticeVersion: "us-coppa-v1",
     residencyRegion: "us-east-1",
     enabled: true,
+    requiresLiveness: true,
   },
   US_IOS: {
     code: "US_IOS",
@@ -42,6 +43,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     noticeVersion: "us-coppa-v1",
     residencyRegion: "us-east-1",
     enabled: true,
+    requiresLiveness: true,
   },
   IN: {
     code: "IN",
@@ -51,6 +53,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     noticeVersion: "in-dpdp-v1",
     residencyRegion: "ap-south-1",
     enabled: true,
+    requiresLiveness: true,
   },
   KR: {
     code: "KR",
@@ -60,6 +63,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     noticeVersion: "kr-pipa-v1",
     residencyRegion: "ap-northeast-2",
     enabled: false,
+    requiresLiveness: true,
   },
   SG: {
     code: "SG",
@@ -69,6 +73,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     noticeVersion: "sg-pdpa-v1",
     residencyRegion: "ap-southeast-1",
     enabled: false,
+    requiresLiveness: true,
   },
   JP: {
     code: "JP",
@@ -78,6 +83,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     noticeVersion: "jp-appi-v1",
     residencyRegion: "ap-northeast-1",
     enabled: false,
+    requiresLiveness: true,
   },
   STRICT: {
     code: "STRICT",
@@ -87,6 +93,7 @@ const JURISDICTIONS: Record<string, JurisdictionConfig> = {
     noticeVersion: "strict-v1",
     residencyRegion: "us-east-1",
     enabled: true,
+    requiresLiveness: true,
   },
 };
 

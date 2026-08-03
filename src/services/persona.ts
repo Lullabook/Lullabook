@@ -583,7 +583,9 @@ export class PersonaService {
 
   getLikenessSamples(personaId: string, actorMemberId: string): string[] {
     const persona = this.store.getPersona(personaId, actorMemberId);
-    if (!persona || persona.status !== "ready") return [];
+    // Samples are served while the Persona is in `review` (ticket 188) and after
+    // likeness is confirmed (`ready`); never for training/failed Personas.
+    if (!persona || (persona.status !== "ready" && persona.status !== "review")) return [];
     return (persona.reviewSampleKeys ?? []).map(
       (key) =>
         `/api/personas/${encodeURIComponent(persona.id)}/likeness-samples?key=${encodeURIComponent(key)}`
@@ -593,7 +595,10 @@ export class PersonaService {
   acceptLikeness(personaId: string, actorMemberId: string): Persona {
     const persona = this.store.getPersona(personaId, actorMemberId);
     if (!persona) throw new Error("Persona not found");
-    if (persona.status !== "ready") {
+    // Ticket 188: the canonical post-training state before likeness acceptance
+    // is `review`; legacy `ready`-but-unconfirmed rows are still accepted here.
+    // `training` and terminal `failed` are spend-blocked and cannot be accepted.
+    if (persona.status !== "ready" && persona.status !== "review") {
       throw new Error("Cannot confirm likeness for a persona that is not ready");
     }
     const member = this.store.members.get(actorMemberId);
@@ -621,8 +626,97 @@ export class PersonaService {
       );
     }
     // Issue 125: flip the gate so book generation is unlocked for this persona.
+    // Ticket 188: `review -> likeness-confirmed -> Story-ready` persists as
+    // status `ready` + likeness_confirmed true (the Story-ready mapping).
     persona.likenessConfirmed = true;
+    if (persona.status === "review") persona.status = "ready";
     this.store.savePersona(persona);
     return persona;
   }
+
+  /**
+   * Ticket 188 — durable retrain of a Persona in likeness review. Runs the
+   * byte-level gates (liveness, moderation, preflight) and the in-memory
+   * authority/state checks before the route persists the transition through
+   * the authoritative SQL RPC and submits a replacement training job. The
+   * in-memory transition is compensated by the route when the RPC rejects.
+   */
+  async retrainForReview(input: {
+    personaId: string;
+    memberId: string;
+    photos: Buffer[];
+    selfie?: Buffer;
+  }): Promise<Persona> {
+    const persona = this.store.getPersona(input.personaId, input.memberId);
+    if (!persona) throw new Error("Persona not found");
+    if (persona.status !== "review") {
+      throw new Error("Only a Persona in likeness review may be retrained");
+    }
+    const member = this.store.members.get(input.memberId);
+    if (!member) throw new Error("Member not found");
+
+    const subjectMember = [...this.store.members.values()].find(
+      (m) => m.selfPersonaId === persona.id
+    );
+    const authorized =
+      persona.kind === "baby"
+        ? member?.role === "guardian"
+        : subjectMember
+          ? member?.id === subjectMember.id
+          : member?.id === persona.createdByMemberId;
+    if (!authorized) {
+      throw new Error(
+        persona.kind === "baby"
+          ? "Only Guardians may retrain a Baby Persona"
+          : "Only the Adult subject may retrain their own likeness"
+      );
+    }
+
+    if (persona.kind === "adult") {
+      if (!input.selfie) throw new Error("Selfie required for adult persona");
+      const liveness = await this.liveness.verifySelfie(input.photos, input.selfie);
+      if (!liveness.matched) throw new Error("Selfie does not match uploaded photos");
+    }
+    for (const photo of input.photos) {
+      await this.childSafety.checkUpload(
+        photo,
+        `persona-retrain-${persona.id}`,
+        member.familyId
+      );
+    }
+    const preflight = runPreflightChecks(input.photos);
+    if (!preflight.passed) {
+      throw new Error(`Pre-flight failed: ${preflight.reasons.join(", ")}`);
+    }
+
+    // Clear the stale likeness surface; the replacement training's signed
+    // callback regenerates samples and moves the Persona back to `review`.
+    persona.status = "training";
+    persona.likenessConfirmed = false;
+    persona.reviewSampleKeys = [];
+    persona.failureReason = undefined;
+    this.store.savePersona(persona);
+    return persona;
+  }
+}
+
+/**
+ * Ticket 188 — the persisted Story-ready mapping. Legacy `ready` maps to
+ * Story-ready ONLY when likeness is confirmed; `failed` is terminal; `review`
+ * and `training` are spend-blocked. Mirrors the personas.story_ready generated
+ * column read by the production API.
+ */
+export function personaStoryReadiness(
+  persona: Pick<Persona, "status" | "likenessConfirmed">
+): { storyReady: boolean; reason: string } {
+  if (persona.status === "failed") {
+    return { storyReady: false, reason: "failed-persona-terminal" };
+  }
+  if (persona.status !== "ready") {
+    return { storyReady: false, reason: `${persona.status}-spend-blocked` };
+  }
+  if (persona.likenessConfirmed !== true) {
+    return { storyReady: false, reason: "likeness-not-confirmed" };
+  }
+  return { storyReady: true, reason: "story-ready" };
 }
