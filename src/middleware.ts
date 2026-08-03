@@ -17,6 +17,11 @@ export async function middleware(request: NextRequest) {
 
   let response = NextResponse.next({ request });
 
+  // Issue 191: time the Supabase session refresh and surface it as a
+  // Server-Timing header — deterministic request instrumentation, numbers
+  // only (never session content).
+  const started = performance.now();
+
   const supabase = createServerClient(url, anon, {
     cookies: {
       getAll() {
@@ -36,6 +41,8 @@ export async function middleware(request: NextRequest) {
 
   // Touching getUser() triggers a token refresh and the setAll cookie write.
   await supabase.auth.getUser();
+
+  response.headers.set("Server-Timing", `session-refresh;dur=${(performance.now() - started).toFixed(2)}`);
 
   return response;
 }

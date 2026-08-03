@@ -16,6 +16,7 @@
     "test:e2e:ui": "playwright test --ui",
     "db:migrate": "tsx tools/print-db-migrate.ts",
     "check:runbook": "node scripts/check-hitl-runbook.mjs",
+    "check:perf": "tsx scripts/check-perf-baseline.ts",
     "smoke:provider-bakeoff": "tsx tools/provider-bakeoff.ts",
     "smoke:r1-provider-e2e": "tsx tools/r1-provider-e2e.ts",
     "verify": "node scripts/verify.mjs",

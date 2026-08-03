@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { BearerAuthError, requireBearerMember } from "@/lib/bearer-auth";
+import { BearerAuthError, requireBearerMember, type JwtVerifier } from "@/lib/bearer-auth";
 import { createRequestContext, type RequestContext } from "@/lib/context";
+import { RequestRecorder } from "@/lib/request-timing";
 import { createSupabaseJwtVerifier } from "@/lib/supabase-jwt";
 import type { Member } from "@/domain/types";
 
@@ -8,19 +9,49 @@ export async function withBearerAuth(
   request: Request,
   handler: (ctx: RequestContext, member: Member) => Promise<NextResponse>
 ): Promise<NextResponse> {
+  // Issue 191: deterministic request timing. `auth` = JWT verify duration,
+  // `hydrate` = family hydration after the context is built, `total` = whole
+  // request, `db` = Supabase query/wave counts. Numbers only — never request
+  // content, so no secret or personal data can enter the header.
+  const timing = new RequestRecorder();
   try {
+    const baseVerifier = createSupabaseJwtVerifier();
+    const verifier: JwtVerifier = {
+      async verify(token: string) {
+        const t0 = performance.now();
+        try {
+          return await baseVerifier.verify(token);
+        } finally {
+          timing.markMs("auth", performance.now() - t0);
+        }
+      },
+    };
     const { ctx, member } = await requireBearerMember(
       request,
-      createSupabaseJwtVerifier(),
-      createRequestContext
+      verifier,
+      () => createRequestContext(timing)
     );
-    return await handler(ctx, member);
+    timing.markHydrate();
+    const response = await handler(ctx, member);
+    timing.mark("total");
+    return withServerTiming(response, timing);
   } catch (err) {
     if (err instanceof BearerAuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
     throw err;
   }
+}
+
+/** Attach the recorder's Server-Timing header onto an API response. */
+export function withServerTiming<T extends NextResponse>(
+  response: T,
+  timing?: RequestRecorder
+): T {
+  if (timing && response instanceof NextResponse) {
+    response.headers.set("Server-Timing", timing.toServerTiming());
+  }
+  return response;
 }
 
 export function jsonOk<T>(data: T, status = 200): NextResponse {

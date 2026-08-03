@@ -15,6 +15,7 @@ import { PdfLibAdapter } from "@/adapters/pdf";
 import { RealStripeAdapter } from "@/adapters/stripe";
 import { RealRevenueCatPurchaseAdapter } from "@/adapters/revenuecat-purchase";
 import { SupabaseDataStore } from "@/db/supabase-store";
+import { instrumentClient, RequestRecorder } from "@/lib/request-timing";
 import { createServiceClient } from "@/lib/supabase";
 import { BabyService } from "@/services/baby";
 import { CharacterService } from "@/services/character";
@@ -52,8 +53,12 @@ export type RequestContext = ReturnType<typeof createRequestContext>;
  * responding (which also flushes any Inngest event sends buffered by
  * `enqueue`).
  */
-export function createRequestContext() {
-  const store = new SupabaseDataStore(createServiceClient());
+export function createRequestContext(timing = new RequestRecorder()) {
+  // Issue 191: the client wrapper counts every awaited Supabase query and
+  // detects sequential waves on the recorder, so `ctx.timing` exposes
+  // request-level query/wave instrumentation at the composition seam without
+  // touching the store's business logic.
+  const store = new SupabaseDataStore(instrumentClient(createServiceClient(), timing));
 
   const anthropic = new RealAnthropicAdapter();
   const classicCatalog = new CuratedClassicCatalog();
@@ -149,10 +154,14 @@ export function createRequestContext() {
   const onboarding = new OnboardingService(store);
   const roster = new PersonaRosterService(store);
   const textStories = new TextStoryService(store, anthropic, childSafety);
+  // Issue 191: mark when the composition root finished building so auth seams
+  // can time the hydration phase (hydration runs right after this returns).
+  timing.mark("ctx");
   const homeDashboard = new HomeDashboardService(store, moments, storybooks);
 
   return {
     store,
+    timing,
     workflow,
     blobs,
     notifications,
