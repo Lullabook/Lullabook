@@ -1,6 +1,9 @@
 import { EVENTS, InngestWorkflowAdapter, inngest, type DurableStepTools } from "@/adapters/inngest";
 import type { BlobStore, PersonaCreatePayload, WorkflowAdapter, WorkflowJobPayload } from "@/adapters/types";
-import { FAL_NANO_BANANA_2_EDIT_ENDPOINT } from "@/adapters/fal";
+import {
+  FAL_FLUX_2_TRAINER_ENDPOINT,
+  FAL_NANO_BANANA_2_EDIT_ENDPOINT,
+} from "@/adapters/fal";
 import { getProductionStoryModel } from "@/adapters/anthropic";
 import {
   PersonaCreationOutboxConsumer,
@@ -13,7 +16,7 @@ import {
 import { createServiceClient } from "@/lib/supabase";
 import { createRequestContext } from "@/lib/context";
 import { createBlobStore } from "@/lib/create-blob-store";
-import { estimateProviderCostUsd, TEXT_WORST_CASE_UNITS } from "@/lib/provider-prices";
+import { TEXT_WORST_CASE_UNITS } from "@/lib/provider-prices";
 import {
   CostThreshold,
   ProviderCostMeteringService,
@@ -55,25 +58,24 @@ export interface PayableRunAuthorization {
  */
 export function authorizePayableRun(
   costMeter: ProviderCostMeteringService,
-  input: { familyId: string; route: SpendRoute; units: Record<string, number> }
-): PayableRunAuthorization {
-  if (!input.route.endpoint) {
-    throw new Error("authorizePayableRun requires an endpoint on the payable route");
+  input: {
+    familyId: string;
+    route: SpendRoute;
+    units: Record<string, number>;
+    attemptKey?: string;
   }
-  const price = estimateProviderCostUsd({
-    provider: input.route.provider,
-    endpoint: input.route.endpoint,
-    model: input.route.model,
-    units: input.units,
-  });
-  const threshold = costMeter.authorizeSpend({
+): PayableRunAuthorization {
+  const authorization = costMeter.authorizePayableAttempt({
     provider: input.route.provider,
     endpoint: input.route.endpoint,
     model: input.route.model,
     familyId: input.familyId,
-    marginEvidence: costMeter.deriveMarginEvidence(input.familyId) ?? undefined,
+    units: input.units,
+    attemptKey:
+      input.attemptKey ??
+      `${input.familyId}/${input.route.provider}/${input.route.endpoint}/${input.route.model}`,
   });
-  return { threshold, pricingVersion: price.pricingVersion, estimatedCostUsd: price.estimatedCostUsd };
+  return authorization;
 }
 
 export const storybookGenerate = inngest.createFunction(
@@ -102,6 +104,7 @@ export const storybookGenerate = inngest.createFunction(
             model: getProductionStoryModel(),
           },
           units: { ...TEXT_WORST_CASE_UNITS },
+          attemptKey: `${storybookId}/story`,
         });
       }
       await ctx.workflow.runWithStepContext(step as DurableStepTools, () =>
@@ -118,7 +121,9 @@ export const storybookGenerate = inngest.createFunction(
         // Issue 190: when the spend gate blocked the run, runGenerationBody
         // never ran, so its release seam did not fire. The stranded reservation
         // must not hold the Family allowance slot (release is idempotent).
-        if (err instanceof SpendBlockedError) ctx.storyCap.release(storybookId);
+        if (err instanceof SpendBlockedError) {
+          await ctx.storyCap.releaseDurably(storybookId, book.familyId);
+        }
         book.status = "failed";
         ctx.store.storybooks.set(book.id, book);
       }
@@ -161,8 +166,9 @@ export const pageRecover = inngest.createFunction(
             endpoint: FAL_NANO_BANANA_2_EDIT_ENDPOINT,
             // Matches StorybookService's canonical cheap repair route.
             model: "Nano Banana 2 Edit",
-          },
-          units: { images: 1 },
+            },
+            units: { images: 1 },
+          attemptKey: `${book.id}/${page?.id ?? pageId}/repair-${attempt}`,
         });
       }
       await ctx.workflow.runWithStepContext(step as DurableStepTools, () =>
@@ -233,6 +239,23 @@ export const personaCreationFinalized = inngest.createFunction(
         personaId: creation.personaId,
         reservationId: creation.id,
       }, creation.photoKeys);
+    });
+    const persona = ctx.store.personas.get(payload.personaId);
+    if (!persona || persona.familyId !== payload.familyId) {
+      throw new Error("Finalized Persona training is not available to the workflow");
+    }
+    // The consumer body is the production training boundary owned by the
+    // Persona lifecycle lane. Keep that body unchanged, but authorize the
+    // exact versioned training price immediately before it can submit fal work.
+    authorizePayableRun(new ProviderCostMeteringService(ctx.store), {
+      familyId: payload.familyId,
+      route: {
+        provider: "fal.ai",
+        endpoint: FAL_FLUX_2_TRAINER_ENDPOINT,
+        model: "flux-2-lora-v2",
+      },
+      units: { trainings: 1 },
+      attemptKey: `persona-creation-training:${payload.eventId}`,
     });
     await ctx.workflow.runWithStepContext(step as DurableStepTools, () =>
       consumer.consume(payload.eventId),

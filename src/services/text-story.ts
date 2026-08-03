@@ -3,9 +3,10 @@ import { getProductionStoryModel } from "@/adapters/anthropic";
 import type { AnthropicAdapter } from "@/adapters/types";
 import type { DataStore } from "@/db/store";
 import type { TextStory, TextStoryBrief } from "@/domain/types";
-import { estimateProviderCostUsd, TEXT_WORST_CASE_UNITS } from "@/lib/provider-prices";
+import { TEXT_WORST_CASE_UNITS } from "@/lib/provider-prices";
 import { ChildSafetyService } from "@/services/child-safety";
 import {
+  type PayableAttemptAuthorization,
   ProviderCostMeteringService,
   type MarginEvidence,
 } from "@/services/provider-cost-metering";
@@ -37,15 +38,60 @@ export class TextStoryService {
       throw new Error("At least one Character required");
     }
 
-    if (brief.note) {
-      await this.childSafety.checkText(brief.note, `text-story-brief-${memberId}`, member.familyId);
-    }
-
     const characters = brief.starringCharacterIds.map((id) => {
       const character = this.store.getCharacter(id, memberId);
       if (!character) throw new Error(`Character ${id} not found`);
       return character;
     });
+
+    const operationKey = `text-story/${member.familyId}/${uuid()}`;
+    const marginEvidence =
+      this.marginEvidence ?? this.costMeter.deriveMarginEvidence(member.familyId) ?? undefined;
+
+    // Text moderation is a payable provider boundary too. It must be priced
+    // and authorized before the classifier receives the Brief note.
+    const moderationRoute = {
+      provider: "sightengine",
+      endpoint: "https://api.sightengine.com/1.0/check.json",
+      model: "image-and-text",
+    } as const;
+    if (brief.note) {
+      const moderationAuthorization = this.costMeter.authorizePayableAttempt({
+        familyId: member.familyId,
+        ...moderationRoute,
+        units: { checks: 1 },
+        attemptKey: `${operationKey}/moderation`,
+        marginEvidence,
+      });
+      const moderationStartedAt = Date.now();
+      try {
+        await this.childSafety.checkText(brief.note, `text-story-${member.id}`, member.familyId);
+        this.costMeter.recordAttempt({
+          ...moderationRoute,
+          pricingVersion: moderationAuthorization.pricingVersion,
+          units: { checks: 1 },
+          estimatedCostUsd: moderationAuthorization.estimatedCostUsd,
+          latencyMs: Math.max(0, Date.now() - moderationStartedAt),
+          requestId: moderationAuthorization.attemptKey,
+          owningEntityIds: { familyId: member.familyId },
+          attemptType: "moderation",
+          outcome: "succeeded",
+        });
+      } catch (error) {
+        this.costMeter.recordAttempt({
+          ...moderationRoute,
+          pricingVersion: moderationAuthorization.pricingVersion,
+          units: { checks: 1 },
+          estimatedCostUsd: moderationAuthorization.estimatedCostUsd,
+          latencyMs: Math.max(0, Date.now() - moderationStartedAt),
+          requestId: moderationAuthorization.attemptKey,
+          owningEntityIds: { familyId: member.familyId },
+          attemptType: "moderation",
+          outcome: "failed",
+        });
+        throw error;
+      }
+    }
 
     // Issue 190: authorize payable text spend immediately before the provider
     // boundary. A blocked attempt records nothing and never reaches the
@@ -55,16 +101,13 @@ export class TextStoryService {
       endpoint: "messages.create" as const,
       model: getProductionStoryModel(),
     };
-    const price = estimateProviderCostUsd({ ...route, units: TEXT_WORST_CASE_UNITS });
-    if (this.marginEvidence) {
-      this.costMeter.authorizeSpend({
-        familyId: member.familyId,
-        ...route,
-        marginEvidence: this.marginEvidence,
-      });
-    } else {
-      this.costMeter.assertSpendAllowed({ familyId: member.familyId, ...route });
-    }
+    const authorization = this.costMeter.authorizePayableAttempt({
+      familyId: member.familyId,
+      ...route,
+      units: { ...TEXT_WORST_CASE_UNITS },
+      attemptKey: `${operationKey}/anthropic`,
+      marginEvidence,
+    });
 
     const startedAt = Date.now();
     let text: string;
@@ -79,10 +122,10 @@ export class TextStoryService {
         })),
       }));
     } catch (error) {
-      this.recordTextAttempt(member.familyId, route, price, startedAt, "failed");
+      this.recordTextAttempt(member.familyId, route, authorization, startedAt, "failed");
       throw error;
     }
-    this.recordTextAttempt(member.familyId, route, price, startedAt, "succeeded");
+    this.recordTextAttempt(member.familyId, route, authorization, startedAt, "succeeded");
 
     const story: TextStory = {
       id: uuid(),
@@ -100,17 +143,17 @@ export class TextStoryService {
   private recordTextAttempt(
     familyId: string,
     route: { provider: "anthropic"; endpoint: "messages.create"; model: string },
-    price: { pricingVersion: string; estimatedCostUsd: number },
+    authorization: PayableAttemptAuthorization,
     startedAt: number,
     outcome: "succeeded" | "failed"
   ): void {
     this.costMeter.recordAttempt({
       ...route,
-      pricingVersion: price.pricingVersion,
+      pricingVersion: authorization.pricingVersion,
       units: { ...TEXT_WORST_CASE_UNITS },
-      estimatedCostUsd: price.estimatedCostUsd,
+      estimatedCostUsd: authorization.estimatedCostUsd,
       latencyMs: Math.max(0, Date.now() - startedAt),
-      requestId: uuid(),
+      requestId: authorization.attemptKey,
       owningEntityIds: { familyId },
       attemptType: "text",
       outcome,

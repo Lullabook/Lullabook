@@ -27,6 +27,7 @@ import {
   subscribedGuardian,
   withActiveSubscription,
 } from "@/test/fixtures";
+import { withIsolatedPostgres } from "@/../tests/support/postgres/rls-harness";
 
 /**
  * Issue 190 — atomic allowance and payable spend authorization.
@@ -42,6 +43,91 @@ import {
  */
 describe("190 — atomic allowance and payable spend authorization", () => {
   describe("atomic Family-shared Story allowance", () => {
+    it("the production RPC serializes cap-minus-one reservations across real concurrent transactions", async () => {
+      await withIsolatedPostgres(async ({ asService, asServiceConcurrent, fixture }) => {
+        await asService(
+          "insert into subscriptions (family_id, status) values ($1, 'active')",
+          [fixture.familyA.familyId]
+        );
+
+        const existingBooks = [
+          "00000000-0000-0000-0000-000000001901",
+          "00000000-0000-0000-0000-000000001902",
+          "00000000-0000-0000-0000-000000001903",
+        ];
+        for (const [index, storybookId] of existingBooks.entries()) {
+          await asService(
+            `insert into storybooks (id, family_id, created_by_member_id, status, brief, created_at)
+             values ($1, $2, $3, 'generating', '{}'::jsonb, date_trunc('month', now()) + ($4 || ' minutes')::interval)`,
+            [storybookId, fixture.familyA.familyId, fixture.familyA.memberId, index]
+          );
+          await asService(
+            "insert into story_allowance_reservations (storybook_id, family_id, status) values ($1, $2, 'reserved')",
+            [storybookId, fixture.familyA.familyId]
+          );
+        }
+
+        const candidateBooks = [
+          "00000000-0000-0000-0000-000000001904",
+          "00000000-0000-0000-0000-000000001905",
+        ];
+        const results = await Promise.all(
+          candidateBooks.map((storybookId) =>
+            asServiceConcurrent(
+              "select * from app_reserve_story_allowance($1, $2, $3)",
+              [storybookId, fixture.familyA.familyId, fixture.familyA.memberId]
+            )
+          )
+        );
+
+        expect(results.map((result) => result.rows[0]?.reserved).sort()).toEqual([false, true]);
+        expect(results.find((result) => result.rows[0]?.reserved === false)?.rows[0]).toMatchObject({
+          error_code: "story_cap_reached",
+          count: 4,
+          cap: 4,
+        });
+        const rows = await asService<{ count: string }>(
+          "select count(*)::text as count from story_allowance_reservations where family_id = $1 and status = 'reserved'",
+          [fixture.familyA.familyId]
+        );
+        expect(rows.rows[0]?.count).toBe("4");
+      });
+    });
+
+    it("releases a durable reservation once and leaves the terminal audit row", async () => {
+      await withIsolatedPostgres(async ({ asService, fixture }) => {
+        await asService(
+          "insert into subscriptions (family_id, status) values ($1, 'active')",
+          [fixture.familyA.familyId]
+        );
+        const storybookId = "00000000-0000-0000-0000-000000001906";
+        const reserved = await asService(
+          "select * from app_reserve_story_allowance($1, $2, $3)",
+          [storybookId, fixture.familyA.familyId, fixture.familyA.memberId]
+        );
+        expect(reserved.rows[0]?.reserved).toBe(true);
+
+        const firstRelease = await asService<{ released: boolean }>(
+          "select app_release_story_allowance($1, $2) as released",
+          [storybookId, fixture.familyA.familyId]
+        );
+        const replayRelease = await asService<{ released: boolean }>(
+          "select app_release_story_allowance($1, $2) as released",
+          [storybookId, fixture.familyA.familyId]
+        );
+        expect(firstRelease.rows[0]?.released).toBe(true);
+        expect(replayRelease.rows[0]?.released).toBe(false);
+        const audit = await asService<{ status: string; release_reason: string }>(
+          "select status, release_reason from story_allowance_reservations where storybook_id = $1",
+          [storybookId]
+        );
+        expect(audit.rows[0]).toEqual({
+          status: "released",
+          release_reason: "story_text_generation_failed",
+        });
+      });
+    });
+
     it("at cap-minus-one exactly one of two reservation attempts wins; the loser gets typed story_cap_reached", () => {
       const ctx = createTestContext();
       const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-190-cap", "cap@example.com");
@@ -291,6 +377,68 @@ describe("190 — atomic allowance and payable spend authorization", () => {
   });
 
   describe("margin and authorization gate", () => {
+    it("authorizes an exact non-zero price and makes the attempt ledger replay-idempotent", () => {
+      const store = new DataStore();
+      const meter = new ProviderCostMeteringService(store);
+      const route = {
+        familyId: "family-190-exact",
+        provider: "fal.ai",
+        endpoint: FAL_FLUX_1_LORA_ENDPOINT,
+        model: FAL_FLUX_1_LORA_MODEL,
+      };
+      const authorization = meter.authorizePayableAttempt({
+        ...route,
+        units: { images: 1 },
+        attemptKey: "book-190/page-1/attempt-0",
+        marginEvidence: { netSubscriptionRevenueUsd: 100, attributableCogsUsd: 20 },
+      });
+      expect(authorization.estimatedCostUsd).toBeGreaterThan(0);
+      expect(() =>
+        meter.authorizePayableAttempt({
+          ...route,
+          units: { images: 0 },
+          attemptKey: "book-190/page-1/attempt-zero",
+          marginEvidence: { netSubscriptionRevenueUsd: 100, attributableCogsUsd: 20 },
+        })
+      ).toThrow();
+      expect(() =>
+        meter.authorizePayableAttempt({
+          ...route,
+          endpoint: "unpriced-route",
+          units: { images: 1 },
+          attemptKey: "book-190/page-1/attempt-unknown",
+          marginEvidence: { netSubscriptionRevenueUsd: 100, attributableCogsUsd: 20 },
+        })
+      ).toThrow();
+
+      const first = meter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { images: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        latencyMs: 0,
+        requestId: "book-190/page-1/attempt-0",
+        owningEntityIds: { familyId: route.familyId, storybookId: "book-190", pageId: "page-1" },
+        attemptType: "image",
+        outcome: "succeeded",
+      });
+      const replay = meter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { images: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        actualCostUsd: authorization.estimatedCostUsd,
+        latencyMs: 0,
+        requestId: "book-190/page-1/attempt-0",
+        owningEntityIds: { familyId: route.familyId, storybookId: "book-190", pageId: "page-1" },
+        attemptType: "image",
+        outcome: "succeeded",
+      });
+      expect(replay.id).toBe(first.id);
+      expect(replay.actualCostUsd).toBeGreaterThan(0);
+      expect(store.providerCostLedgerEntries.size).toBe(1);
+    });
+
     it("computes margin as (net subscription revenue - attributable COGS) / net subscription revenue * 100", () => {
       expect(computeMarginPercent(100, 25)).toBeCloseTo(75, 5);
       expect(computeMarginPercent(100, 0)).toBe(100);
@@ -435,6 +583,18 @@ describe("190 — atomic allowance and payable spend authorization", () => {
           starringCharacterIds: [character.id],
           storyType: "bedtime",
           theme: "blocked free story",
+        })
+      ).rejects.toThrow(SpendBlockedError);
+      expect(ctx.anthropic.textStoryCalls).toHaveLength(0);
+    });
+
+    it("the default TextStory composition fails closed without margin evidence", async () => {
+      const { ctx, guardian, character, service } = await textStoryFixture();
+      await expect(
+        service.generate(guardian.id, {
+          starringCharacterIds: [character.id],
+          storyType: "bedtime",
+          theme: "no default bypass",
         })
       ).rejects.toThrow(SpendBlockedError);
       expect(ctx.anthropic.textStoryCalls).toHaveLength(0);

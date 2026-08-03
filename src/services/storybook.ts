@@ -31,7 +31,11 @@ import { StoryCapService } from "@/services/story-cap";
 import { isR1AudioEnabled } from "@/lib/r1-config";
 import { R1_PLAN_DEFINITION } from "@/domain/plan";
 import { getProductionStoryModel, validateGeneratedStoryContract } from "@/adapters/anthropic";
-import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
+import {
+  ProviderCostMeteringService,
+  type PayableAttemptAuthorization,
+  type SpendRoute,
+} from "@/services/provider-cost-metering";
 import { optionalEnv } from "@/adapters/env";
 import {
   renderDeterministicRerollArtPng,
@@ -220,12 +224,13 @@ export class StorybookService {
     pastStorySummary: PastStorySummaryService | null = null,
     entitlements: EntitlementService | null = null,
     generationConfig: StorybookGenerationConfig = {},
-    private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store)
+    private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store),
+    storyCap: StoryCapService | null = null
   ) {
     this.autoContext = new AutoContextService(store);
     this.pastStorySummary = pastStorySummary ?? new PastStorySummaryService(store);
     this.entitlements = entitlements ?? new EntitlementServiceImpl(store, subscriptions);
-    this.storyCap = new StoryCapService(store, this.entitlements);
+    this.storyCap = storyCap ?? new StoryCapService(store, this.entitlements);
     this.contextSelector =
       contextSelector ??
       new StoryContextSelector(
@@ -257,6 +262,208 @@ export class StorybookService {
   }
 
   private readonly generationConfig: Required<StorybookGenerationConfig>;
+
+  private authorizeAttempt(
+    storybook: Storybook,
+    route: SpendRoute,
+    units: Record<string, number>,
+    attemptKey: string
+  ): PayableAttemptAuthorization {
+    return this.costMeter.authorizePayableAttempt({
+      ...route,
+      familyId: storybook.familyId,
+      units,
+      attemptKey,
+    });
+  }
+
+  private async putCostedBlob(
+    storybook: Storybook,
+    key: string,
+    bytes: Buffer,
+    attemptKey: string
+  ): Promise<void> {
+    const route = {
+      provider: "cloudflare",
+      endpoint: "r2.put",
+      model: "object-storage",
+    } as const;
+    const authorization = this.authorizeAttempt(storybook, route, { objects: 1 }, attemptKey);
+    const startedAt = Date.now();
+    try {
+      await this.blobs.put(key, bytes);
+      this.costMeter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { objects: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: authorization.attemptKey,
+        owningEntityIds: { familyId: storybook.familyId, storybookId: storybook.id },
+        attemptType: "storage",
+        outcome: "succeeded",
+      });
+    } catch (error) {
+      this.costMeter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { objects: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: authorization.attemptKey,
+        owningEntityIds: { familyId: storybook.familyId, storybookId: storybook.id },
+        attemptType: "storage",
+        outcome: "failed",
+      });
+      throw error;
+    }
+  }
+
+  private async moderateTextWithCost(
+    familyId: string,
+    text: string,
+    resourceId: string,
+    attemptKey: string,
+    owningEntityIds: { storybookId?: string } = {}
+  ): Promise<void> {
+    const route = {
+      provider: "sightengine",
+      endpoint: "https://api.sightengine.com/1.0/check.json",
+      model: "image-and-text",
+    } as const;
+    const authorization = this.costMeter.authorizePayableAttempt({
+      familyId,
+      ...route,
+      units: { checks: 1 },
+      attemptKey,
+    });
+    const startedAt = Date.now();
+    try {
+      await this.childSafety.checkText(text, resourceId, familyId);
+      this.costMeter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { checks: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: authorization.attemptKey,
+        owningEntityIds: { familyId, ...owningEntityIds },
+        attemptType: "moderation",
+        outcome: "succeeded",
+      });
+    } catch (error) {
+      this.costMeter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { checks: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: authorization.attemptKey,
+        owningEntityIds: { familyId, ...owningEntityIds },
+        attemptType: "moderation",
+        outcome: "failed",
+      });
+      throw error;
+    }
+  }
+
+  private async moderateUploadWithCost(
+    storybook: Storybook,
+    bytes: Buffer,
+    resourceId: string,
+    attemptKey: string,
+    pageId?: string
+  ): Promise<void> {
+    const route = {
+      provider: "sightengine",
+      endpoint: "https://api.sightengine.com/1.0/check.json",
+      model: "image-and-text",
+    } as const;
+    const authorization = this.authorizeAttempt(storybook, route, { checks: 1 }, attemptKey);
+    const startedAt = Date.now();
+    try {
+      await this.childSafety.checkUpload(bytes, resourceId, storybook.familyId);
+      this.costMeter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { checks: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: authorization.attemptKey,
+        owningEntityIds: {
+          familyId: storybook.familyId,
+          storybookId: storybook.id,
+          ...(pageId ? { pageId } : {}),
+        },
+        attemptType: "moderation",
+        outcome: "succeeded",
+      });
+    } catch (error) {
+      this.costMeter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { checks: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: authorization.attemptKey,
+        owningEntityIds: {
+          familyId: storybook.familyId,
+          storybookId: storybook.id,
+          ...(pageId ? { pageId } : {}),
+        },
+        attemptType: "moderation",
+        outcome: "failed",
+      });
+      throw error;
+    }
+  }
+
+  private enqueueCosted(
+    storybook: Storybook,
+    attemptKey: string,
+    name: string,
+    work: () => Promise<void>,
+    payload: Parameters<WorkflowAdapter["enqueue"]>[2]
+  ): void {
+    const route = {
+      provider: "inngest",
+      endpoint: "events.send",
+      model: "durable-workflow",
+    } as const;
+    const authorization = this.authorizeAttempt(storybook, route, { events: 1 }, attemptKey);
+    const startedAt = Date.now();
+    try {
+      this.workflow.enqueue(
+        name,
+        work,
+        payload
+      );
+      this.costMeter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { events: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: authorization.attemptKey,
+        owningEntityIds: { familyId: storybook.familyId, storybookId: storybook.id },
+        attemptType: "queue",
+        outcome: "succeeded",
+      });
+    } catch (error) {
+      this.costMeter.recordAttempt({
+        ...route,
+        pricingVersion: authorization.pricingVersion,
+        units: { events: 1 },
+        estimatedCostUsd: authorization.estimatedCostUsd,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+        requestId: authorization.attemptKey,
+        owningEntityIds: { familyId: storybook.familyId, storybookId: storybook.id },
+        attemptType: "queue",
+        outcome: "failed",
+      });
+      throw error;
+    }
+  }
 
   private normalizeBrief(memberId: string, brief: Brief): Brief {
     const member = this.store.members.get(memberId);
@@ -325,7 +532,14 @@ export class StorybookService {
     }
 
     const note = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
-    if (note) await this.childSafety.checkText(note, `brief-${memberId}`, member.familyId);
+    if (note) {
+      await this.moderateTextWithCost(
+        member.familyId,
+        note,
+        `brief-${memberId}`,
+        `storybook-request/${member.familyId}/${uuid()}/moderation`
+      );
+    }
 
     const normalized = this.normalizeBrief(memberId, brief);
 
@@ -357,12 +571,19 @@ export class StorybookService {
       createdAt: new Date(),
       finalizedAt: null,
     };
-    this.storyCap.reserve(member.familyId, memberId, storybook.id);
-    this.store.saveStorybook(storybook);
+    await this.storyCap.reserveDurably(member.familyId, memberId, storybook.id);
+    try {
+      this.store.saveStorybook(storybook);
 
-    // Cold-start resume persists the Storybook + claim pointer before it asks
-    // the queue to accept work. Ordinary create routes keep immediate enqueue.
-    if (!options?.deferEnqueue) this.enqueueGeneration(memberId, storybook.id);
+      // Cold-start resume persists the Storybook + claim pointer before it asks
+      // the queue to accept work. Ordinary create routes keep immediate enqueue.
+      if (!options?.deferEnqueue) this.enqueueGeneration(memberId, storybook.id);
+    } catch (error) {
+      await this.storyCap.releaseDurably(storybook.id, member.familyId);
+      storybook.status = "failed";
+      this.store.saveStorybook(storybook);
+      throw error;
+    }
 
     return storybook;
   }
@@ -379,7 +600,9 @@ export class StorybookService {
       throw new Error("Storybook generation failed and requires explicit recovery");
     }
     if (storybook.status !== "generating") return;
-    this.workflow.enqueue(
+    this.enqueueCosted(
+      storybook,
+      `${storybook.id}/queue/story`,
       `storybook-${storybook.id}`,
       async () => this.runGenerationBody(memberId, storybook.id),
       { type: "storybook-generate", storybookId: storybook.id, memberId }
@@ -409,7 +632,14 @@ export class StorybookService {
     }
 
     const twist = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
-    if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`, member.familyId);
+    if (twist) {
+      await this.moderateTextWithCost(
+        member.familyId,
+        twist,
+        `classic-twist-${memberId}`,
+        `classic-request/${member.familyId}/${uuid()}/moderation`
+      );
+    }
 
     if (isR1OnePlan() && resolvePageCount(brief) !== 12) {
       throw new Error("R1 Storybooks must contain exactly 12 Pages");
@@ -450,10 +680,16 @@ export class StorybookService {
       createdAt: new Date(),
       finalizedAt: null,
     };
-    this.storyCap.reserve(member.familyId, memberId, storybook.id);
-    this.store.saveStorybook(storybook);
-
-    this.enqueueGeneration(memberId, storybook.id);
+    await this.storyCap.reserveDurably(member.familyId, memberId, storybook.id);
+    try {
+      this.store.saveStorybook(storybook);
+      this.enqueueGeneration(memberId, storybook.id);
+    } catch (error) {
+      await this.storyCap.releaseDurably(storybook.id, member.familyId);
+      storybook.status = "failed";
+      this.store.saveStorybook(storybook);
+      throw error;
+    }
 
     return storybook;
   }
@@ -475,16 +711,16 @@ export class StorybookService {
     try {
       await this.runGenerationBodyInner(memberId, storybookId);
     } catch (err) {
-      this.markFailedIfGenerating(storybookId);
+      await this.markFailedIfGenerating(storybookId);
       throw err;
     }
   }
 
   /** Forces a still-`generating` book to `failed`; leaves already-terminal books untouched. */
-  private markFailedIfGenerating(storybookId: string): void {
+  private async markFailedIfGenerating(storybookId: string): Promise<void> {
     const storybook = this.store.storybooks.get(storybookId);
     if (storybook && storybook.status === "generating") {
-      this.storyCap.release(storybookId);
+      await this.storyCap.releaseDurably(storybookId, storybook.familyId);
       storybook.status = "failed";
       this.store.saveStorybook(storybook);
     }
@@ -626,7 +862,9 @@ export class StorybookService {
     }
     const recoverAttempt = priorPageAttempts + 1;
 
-    this.workflow.enqueue(
+    this.enqueueCosted(
+      book,
+      `${book.id}/${pageId}/queue/repair-${recoverAttempt}`,
       `recover-${pageId}`,
       async () => this.runRecoveryBody(memberId, pageId, recoverAttempt),
       { type: "page-recover", pageId, memberId, attempt: recoverAttempt }
@@ -665,7 +903,9 @@ export class StorybookService {
   private recordAnthropicAttempt(
     storybook: Storybook,
     startedAt: number,
-    fallbackOutcome: "succeeded" | "failed"
+    fallbackOutcome: "succeeded" | "failed",
+    attemptKey = `${storybook.id}/story`,
+    authorization?: PayableAttemptAuthorization
   ): void {
     const evidence = (this.anthropic as AnthropicAdapter & {
       lastGenerationEvidence?: {
@@ -687,21 +927,29 @@ export class StorybookService {
     // Issue 190: every payable attempt records a NON-ZERO versioned estimate.
     // If token evidence is missing, price the worst case so the row is never
     // silently free (the table's wildcard covers unknown models on this route).
+    // The authorized production route is the source of truth. Provider
+    // telemetry may omit or mislabel a model; never reconcile that observation
+    // against a different price than the one authorized before the call.
+    const model = getProductionStoryModel();
     const price = estimateProviderCostUsd({
       provider: "anthropic",
       endpoint: "messages.create",
-      model: evidence?.model ?? "unknown-anthropic-model",
+      model,
       units: evidenceUnits.input_tokens > 0 || evidenceUnits.output_tokens > 0 ? evidenceUnits : TEXT_WORST_CASE_UNITS,
     });
     this.costMeter.recordAttempt({
       provider: "anthropic",
       endpoint: "messages.create",
-      model: evidence?.model ?? "unknown-anthropic-model",
-      pricingVersion: price.pricingVersion,
+      model,
+      pricingVersion: authorization?.pricingVersion ?? price.pricingVersion,
       units: recordedUnits,
-      estimatedCostUsd: price.estimatedCostUsd,
+      estimatedCostUsd: authorization?.estimatedCostUsd ?? price.estimatedCostUsd,
+      ...(evidenceUnits.input_tokens > 0 || evidenceUnits.output_tokens > 0
+        ? { actualCostUsd: price.estimatedCostUsd }
+        : {}),
       latencyMs: Math.max(0, Date.now() - startedAt),
-      requestId: evidence?.providerRequestId ?? `${storybook.id}/story`,
+      requestId: attemptKey,
+      ...(evidence?.providerRequestId ? { providerRequestId: evidence.providerRequestId } : {}),
       owningEntityIds: { familyId: storybook.familyId, storybookId: storybook.id },
       attemptType: "text",
       outcome: evidence?.outcome === "success" ? "succeeded" : fallbackOutcome,
@@ -714,7 +962,9 @@ export class StorybookService {
     attempt: number,
     startedAt: number,
     outcome: "succeeded" | "failed",
-    route = attempt > 0 ? this.generationConfig.repair.cheap : this.generationConfig.defaultRoute
+    route = attempt > 0 ? this.generationConfig.repair.cheap : this.generationConfig.defaultRoute,
+    authorization?: PayableAttemptAuthorization,
+    attemptKey = `${storybook.id}/${pageId}/attempt-${attempt}/${route.endpoint}`
   ): void {
     // Issue 190: non-zero versioned estimate per image/repair attempt; an
     // unpriced route throws (fails closed) so provider work is never free.
@@ -728,11 +978,11 @@ export class StorybookService {
       provider: route.provider,
       endpoint: route.endpoint,
       model: route.model,
-      pricingVersion: price.pricingVersion,
+      pricingVersion: authorization?.pricingVersion ?? price.pricingVersion,
       units: { images: 1 },
-      estimatedCostUsd: price.estimatedCostUsd,
+      estimatedCostUsd: authorization?.estimatedCostUsd ?? price.estimatedCostUsd,
       latencyMs: Math.max(0, Date.now() - startedAt),
-      requestId: `${storybook.id}/${pageId}/attempt-${attempt}`,
+      requestId: attemptKey,
       owningEntityIds: {
         familyId: storybook.familyId,
         storybookId: storybook.id,
@@ -783,17 +1033,26 @@ export class StorybookService {
         idempotencyKey: `${storybookId}/story`,
         run: async () => {
           const startedAt = Date.now();
-          try {
-            // This is immediately adjacent to the payable provider invocation,
-            // rather than the earlier allowance reservation/enqueue boundary.
-            this.costMeter.assertSpendAllowed({
-              familyId: storybook.familyId,
+          const textAttemptKey = `${storybookId}/story`;
+          const textAuthorization = this.authorizeAttempt(
+            storybook,
+            {
               provider: "anthropic",
               model: getProductionStoryModel(),
               endpoint: "messages.create",
-            });
+            },
+            { ...TEXT_WORST_CASE_UNITS },
+            textAttemptKey
+          );
+          try {
             const generated = await generateStory();
-            this.recordAnthropicAttempt(storybook, startedAt, "succeeded");
+            this.recordAnthropicAttempt(
+              storybook,
+              startedAt,
+              "succeeded",
+              textAttemptKey,
+              textAuthorization
+            );
             try {
               validateGeneratedStoryContract(generated, resolvePageCount(brief), brief.starringPersonaIds);
             } catch {
@@ -815,7 +1074,13 @@ export class StorybookService {
             storybook.styleBible = generated.styleBible;
             this.store.saveStorybook(storybook);
           } catch (error) {
-            this.recordAnthropicAttempt(storybook, startedAt, "failed");
+            this.recordAnthropicAttempt(
+              storybook,
+              startedAt,
+              "failed",
+              textAttemptKey,
+              textAuthorization
+            );
             throw error;
           }
         },
@@ -838,7 +1103,7 @@ export class StorybookService {
     // and only persisted state survives the step boundary (PRD v2).
     const persisted = this.store.getPersistedGeneration(storybookId);
     if (!textIsValid || !persisted?.story.pages?.length || !persisted.story.scenes?.length) {
-      this.storyCap.release(storybookId);
+      await this.storyCap.releaseDurably(storybookId, storybook.familyId);
       storybook.status = "failed";
       this.store.saveStorybook(storybook);
       return;
@@ -887,7 +1152,14 @@ export class StorybookService {
         storybookId: storybook.id,
         pageIndex: pageData.index,
       });
-      await this.blobs.put(blobKey, bytes);
+      if (!(await this.blobs.get(blobKey))) {
+        await this.putCostedBlob(
+          storybook,
+          blobKey,
+          bytes,
+          `${storybook.id}/${pageData.index}/placeholder/storage`
+        );
+      }
       this.store.savePage({
         id: `${storybook.id}-page-${pageData.index}`,
         storybookId: storybook.id,
@@ -1000,43 +1272,89 @@ export class StorybookService {
           idempotencyKey: routeIndex === 0 ? baseRequest.idempotencyKey : `${baseRequest.idempotencyKey}/pro`,
         };
         const startedAt = Date.now();
+        const authorization = this.authorizeAttempt(
+          storybook,
+          { provider: request.provider, endpoint: request.endpoint, model: request.model },
+          { images: 1 },
+          request.idempotencyKey
+        );
         try {
-          this.costMeter.assertSpendAllowed({
-            familyId: storybook.familyId,
-            provider: request.provider,
-            model: request.model,
-            endpoint: request.endpoint,
-          });
           const result = await this.fal.repairPageImage(request);
-          this.recordFalAttempt(storybook, `${storybook.id}-page-${pageIndex}`, attempt, startedAt, "succeeded", route);
+          this.recordFalAttempt(
+            storybook,
+            `${storybook.id}-page-${pageIndex}`,
+            attempt,
+            startedAt,
+            "succeeded",
+            route,
+            authorization,
+            request.idempotencyKey
+          );
           return result;
         } catch (error) {
-          this.recordFalAttempt(storybook, `${storybook.id}-page-${pageIndex}`, attempt, startedAt, "failed", route);
+          this.recordFalAttempt(
+            storybook,
+            `${storybook.id}-page-${pageIndex}`,
+            attempt,
+            startedAt,
+            "failed",
+            route,
+            authorization,
+            request.idempotencyKey
+          );
           lastError = error;
         }
       }
       throw lastError instanceof Error ? lastError : new Error("Page repair failed");
     }
 
-    this.costMeter.assertSpendAllowed({
-      familyId: storybook.familyId,
-      provider: baseRequest.provider,
-      model: baseRequest.model,
-      endpoint: baseRequest.endpoint,
-    });
-    if (this.fal.generatePageImage) {
-      return this.fal.generatePageImage(baseRequest);
-    }
-
     // Compatibility for adapters that predate the structured Page seam. This
     // branch is only for single-Persona/legacy fakes; current adapters implement
     // generatePageImage and never collapse multi-Persona input to one face.
-    if (personaIds.length > 1) {
+    if (!this.fal.generatePageImage && personaIds.length > 1) {
       throw new Error("Multi-Persona Page adapter is not configured");
     }
-    return this.fal.generateImage(basePrompt, loras[0]?.path ?? "lora/default", {
-      idempotencyKey: baseRequest.idempotencyKey,
-    });
+    const startedAt = Date.now();
+    const authorization = this.authorizeAttempt(
+      storybook,
+      {
+        provider: baseRequest.provider,
+        endpoint: baseRequest.endpoint,
+        model: baseRequest.model,
+      },
+      { images: 1 },
+      baseRequest.idempotencyKey
+    );
+    try {
+      const result = this.fal.generatePageImage
+        ? await this.fal.generatePageImage(baseRequest)
+        : await this.fal.generateImage(basePrompt, loras[0]?.path ?? "lora/default", {
+            idempotencyKey: baseRequest.idempotencyKey,
+          });
+      this.recordFalAttempt(
+        storybook,
+        `${storybook.id}-page-${pageIndex}`,
+        attempt,
+        startedAt,
+        "succeeded",
+        this.generationConfig.defaultRoute,
+        authorization,
+        baseRequest.idempotencyKey
+      );
+      return result;
+    } catch (error) {
+      this.recordFalAttempt(
+        storybook,
+        `${storybook.id}-page-${pageIndex}`,
+        attempt,
+        startedAt,
+        "failed",
+        this.generationConfig.defaultRoute,
+        authorization,
+        baseRequest.idempotencyKey
+      );
+      throw error;
+    }
   }
 
   private buildPageWorkflowSteps(
@@ -1060,13 +1378,10 @@ export class StorybookService {
         name: `fal-gen-${pageIndex}`,
         idempotencyKey: `${prefix}/generate`,
         run: async () => {
-          const startedAt = Date.now();
-          let imageGenerationStarted = false;
           try {
             const existing = await this.blobs.get(rawKey);
             if (existing) return;
 
-            imageGenerationStarted = true;
             const imageResult = await this.generatePageImageForAttempt(
               storybook,
               pageIndex,
@@ -1076,27 +1391,28 @@ export class StorybookService {
               attempt,
               prefix
             );
-            if (attempt === 0) {
-              this.recordFalAttempt(storybook, pageId, attempt, startedAt, "succeeded");
-            }
 
             const bytes =
               imageResult.bytes ?? Buffer.from(`fetched:${imageResult.imageUrl}`);
-            await this.blobs.put(rawKey, bytes);
+            await this.putCostedBlob(storybook, rawKey, bytes, `${prefix}/storage-raw`);
           } catch (err) {
-            if (imageGenerationStarted && attempt === 0) {
-              this.recordFalAttempt(storybook, pageId, attempt, startedAt, "failed");
-            }
             // Issue 122: surface the upstream fal error (status/body) for
             // diagnosis instead of collapsing it to an opaque "failed". The
             // page still lands `failed` (a re-rollable hole) and the book
             // degrades to a text-viewable draft (issue 102); this `.error`
             // blob parallels the `.raw` key and is the diagnostic record only
             // — it is never read by the page state machine.
-            await this.blobs.put(moderationKey, Buffer.from("failed"));
-            await this.blobs.put(
+            await this.putCostedBlob(
+              storybook,
+              moderationKey,
+              Buffer.from("failed"),
+              `${prefix}/storage-moderation-failed`
+            );
+            await this.putCostedBlob(
+              storybook,
               `${blobKey}.attempt-${attempt}.error`,
-              Buffer.from(err instanceof Error ? err.message : String(err))
+              Buffer.from(err instanceof Error ? err.message : String(err)),
+              `${prefix}/storage-error`
             );
           }
         },
@@ -1110,23 +1426,81 @@ export class StorybookService {
 
           const bytes = await this.blobs.get(rawKey);
           if (!bytes) {
-            await this.blobs.put(moderationKey, Buffer.from("failed"));
+            await this.putCostedBlob(
+              storybook,
+              moderationKey,
+              Buffer.from("failed"),
+              `${prefix}/storage-moderation-missing`
+            );
             return;
           }
 
+          const moderationRoute = {
+            provider: "sightengine",
+            endpoint: "https://api.sightengine.com/1.0/check.json",
+            model: "image-and-text",
+          } as const;
+          const moderationAuthorization = this.authorizeAttempt(
+            storybook,
+            moderationRoute,
+            { checks: 1 },
+            `${prefix}/moderation`
+          );
+          const startedAt = Date.now();
+          let mod: "allowed" | "quarantined";
           try {
-            const mod = await this.childSafety.checkGeneratedImageBytes(
+            mod = await this.childSafety.checkGeneratedImageBytes(
               bytes,
               `${storybook.id}/page-${pageIndex}`,
               storybook.familyId
             );
-            await this.blobs.put(
-              moderationKey,
-              Buffer.from(mod === "quarantined" ? "quarantined" : "allowed")
-            );
+            this.costMeter.recordAttempt({
+              ...moderationRoute,
+              pricingVersion: moderationAuthorization.pricingVersion,
+              units: { checks: 1 },
+              estimatedCostUsd: moderationAuthorization.estimatedCostUsd,
+              latencyMs: Math.max(0, Date.now() - startedAt),
+              requestId: moderationAuthorization.attemptKey,
+              owningEntityIds: {
+                familyId: storybook.familyId,
+                storybookId: storybook.id,
+                pageId,
+              },
+              attemptType: "moderation",
+              outcome: "succeeded",
+            });
           } catch {
-            await this.blobs.put(moderationKey, Buffer.from("failed"));
+            this.costMeter.recordAttempt({
+              ...moderationRoute,
+              pricingVersion: moderationAuthorization.pricingVersion,
+              units: { checks: 1 },
+              estimatedCostUsd: moderationAuthorization.estimatedCostUsd,
+              latencyMs: Math.max(0, Date.now() - startedAt),
+              requestId: moderationAuthorization.attemptKey,
+              owningEntityIds: {
+                familyId: storybook.familyId,
+                storybookId: storybook.id,
+                pageId,
+              },
+              attemptType: "moderation",
+              outcome: "failed",
+            });
+            await this.putCostedBlob(
+              storybook,
+              moderationKey,
+              Buffer.from("failed"),
+              `${prefix}/storage-moderation-failed`
+            );
+            return;
           }
+          // Storage is a separate payable boundary. A blocked/failed storage
+          // write must not rewrite the already-recorded moderation outcome.
+          await this.putCostedBlob(
+            storybook,
+            moderationKey,
+            Buffer.from(mod === "quarantined" ? "quarantined" : "allowed"),
+            `${prefix}/storage-moderation`
+          );
         },
       },
       {
@@ -1139,10 +1513,14 @@ export class StorybookService {
           const bytes = await this.blobs.get(rawKey);
           if (!bytes) return;
 
-          await this.blobs.put(blobKey, bytes);
+          if (await this.blobs.get(blobKey)) return;
+          await this.putCostedBlob(storybook, blobKey, bytes, `${prefix}/storage-final`);
         },
       },
-      ...(this.video
+      // R1 video is disabled by the plan contract. Do not even construct a
+      // workflow step for an injected adapter: an unpriced provider boundary
+      // must fail closed rather than becoming an accidental paid path.
+      ...(this.video && R1_PLAN_DEFINITION.capabilities.canVideo
         ? [
             {
               name: `video-${pageIndex}`,
@@ -1163,7 +1541,7 @@ export class StorybookService {
                 });
                 const bytes =
                   result.bytes ?? Buffer.from(`fetched:${result.videoUrl}`);
-                await this.blobs.put(videoKey, bytes);
+                await this.putCostedBlob(storybook, videoKey, bytes, `${prefix}/storage-video`);
               },
             } satisfies WorkflowStep,
           ]
@@ -1358,8 +1736,19 @@ export class StorybookService {
       const res = await fetch(candidate.content);
       if (!res.ok) throw new Error("Failed to fetch illustration candidate");
       const bytes = Buffer.from(await res.arrayBuffer());
-      await this.childSafety.checkUpload(bytes, `candidate-${candidateId}`, book.familyId);
-      await this.blobs.put(blobKey, bytes);
+      await this.moderateUploadWithCost(
+        book,
+        bytes,
+        `candidate-${candidateId}`,
+        `${book.id}/${page.id}/candidate-${candidateId}/moderation`,
+        page.id
+      );
+      await this.putCostedBlob(
+        book,
+        blobKey,
+        bytes,
+        `${book.id}/${page.id}/candidate-${candidateId}/storage`
+      );
 
       for (const c of this.store.getCandidatesForPage(candidate.pageId)) {
         c.selected = c.id === candidateId;

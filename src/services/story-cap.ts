@@ -50,6 +50,25 @@ export interface StoryCapUsage {
   remaining: number;
 }
 
+export interface DurableStoryAllowanceReservation {
+  reserve(input: {
+    storybookId: string;
+    familyId: string;
+    actorMemberId: string;
+  }): Promise<{
+    reserved: boolean;
+    count: number;
+    cap: number;
+    errorCode?: string | null;
+    resetDate: string;
+    createdAt?: Date;
+  }>;
+  release?(input: {
+    storybookId: string;
+    familyId: string;
+  }): Promise<void>;
+}
+
 /** Per-Household monthly period key (YYYY-MM). */
 function periodKey(date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -64,7 +83,8 @@ function nextResetDate(date = new Date()): string {
 export class StoryCapService {
   constructor(
     private readonly store: DataStore,
-    private readonly entitlements: EntitlementService
+    private readonly entitlements: EntitlementService,
+    private readonly durableReservation?: DurableStoryAllowanceReservation
   ) {}
 
   /** The Household's current monthly Story usage, including in-flight reservations. */
@@ -95,6 +115,47 @@ export class StoryCapService {
     });
   }
 
+  /**
+   * Production reservation seam. The durable implementation performs the
+   * count, Family lock, Storybook FK insert, and allowance insert in one
+   * PostgreSQL transaction. In-memory callers retain the synchronous seam used
+   * by deterministic tests.
+   */
+  async reserveDurably(
+    familyId: string,
+    actorMemberId: string,
+    storybookId: string
+  ): Promise<void> {
+    if (!this.durableReservation) {
+      this.reserve(familyId, actorMemberId, storybookId);
+      return;
+    }
+
+    const result = await this.durableReservation.reserve({
+      storybookId,
+      familyId,
+      actorMemberId,
+    });
+    if (!result.reserved) {
+      if (result.errorCode === "story_cap_reached") {
+        throw new StoryCapError(result.count, result.cap, result.resetDate);
+      }
+      if (result.errorCode === "not_entitled") {
+        throw new Error("An active subscription is required");
+      }
+      throw new Error(result.errorCode ?? "Story allowance reservation failed");
+    }
+
+    if (!this.store.storyAllowanceReservations.has(storybookId)) {
+      this.store.storyAllowanceReservations.set(storybookId, {
+        storybookId,
+        familyId,
+        status: "reserved",
+        createdAt: result.createdAt ?? new Date(),
+      });
+    }
+  }
+
   /** Commit only after the text provider returns a valid Story. */
   commit(storybookId: string): void {
     const reservation = this.store.storyAllowanceReservations.get(storybookId);
@@ -115,6 +176,21 @@ export class StoryCapService {
       reservation.releaseReason = "story_text_generation_failed";
       this.store.storyAllowanceReservations.set(storybookId, reservation);
     }
+  }
+
+  /**
+   * Release a durable reservation before surfacing a post-reservation failure.
+   * The database transition is idempotent and runs before the local mirror is
+   * changed, so a failed release cannot falsely report that the slot returned.
+   */
+  async releaseDurably(storybookId: string, familyId?: string): Promise<void> {
+    const reservation = this.store.storyAllowanceReservations.get(storybookId);
+    if (reservation?.status !== "reserved") return;
+    if (this.durableReservation?.release) {
+      if (!familyId) throw new Error("familyId is required for a durable allowance release");
+      await this.durableReservation.release({ storybookId, familyId });
+    }
+    this.release(storybookId);
   }
 
   getReservation(storybookId: string) {

@@ -1,6 +1,7 @@
 import { v4 as uuid } from "uuid";
 import type { DataStore } from "@/db/store";
 import { R1_MARGIN_THRESHOLDS, R1_PLAN_DEFINITION } from "@/domain/plan";
+import { estimateProviderCostUsd } from "@/lib/provider-prices";
 
 export type ProviderAttemptType =
   | "text"
@@ -140,6 +141,21 @@ export interface SpendRoute {
   endpoint?: string;
 }
 
+export interface PayableAttemptInput extends SpendAuthorizationInput {
+  /** Exact billable units used to price this attempt before the boundary. */
+  units: Record<string, number>;
+  /** Stable operation key. It is persisted as request_id for DB uniqueness. */
+  attemptKey: string;
+}
+
+export interface PayableAttemptAuthorization {
+  threshold: CostThreshold;
+  pricingVersion: string;
+  estimatedCostUsd: number;
+  attemptKey: string;
+  units: Record<string, number>;
+}
+
 export class SpendBlockedError extends Error {
   readonly status = 503;
   readonly code = "provider_spend_disabled";
@@ -175,12 +191,21 @@ function assertFiniteNonNegative(value: number, field: string): void {
   }
 }
 
+function assertFinitePositive(value: number, field: string): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${field} must be a finite positive number`);
+  }
+}
+
 function assertUnits(units: Record<string, number>): Record<string, number> {
   const safeUnits: Record<string, number> = {};
   for (const [key, value] of Object.entries(units)) {
     if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(key)) throw new Error("Invalid unit name");
     assertFiniteNonNegative(value, `units.${key}`);
     safeUnits[key] = value;
+  }
+  if (Object.values(safeUnits).every((value) => value === 0)) {
+    throw new Error("A payable attempt must carry a non-zero unit count");
   }
   return safeUnits;
 }
@@ -230,9 +255,67 @@ export class ProviderCostMeteringService {
     ].includes(input.outcome)) {
       throw new Error("Invalid provider attempt outcome");
     }
-    assertFiniteNonNegative(input.estimatedCostUsd, "estimatedCostUsd");
-    if (input.actualCostUsd !== undefined) assertFiniteNonNegative(input.actualCostUsd, "actualCostUsd");
+    const units = assertUnits(input.units);
+    let estimatedCostUsd = input.estimatedCostUsd;
+    let pricingVersion = input.pricingVersion;
+    if (estimatedCostUsd === 0) {
+      // A few legacy callers still pass a placeholder zero. Do not persist it:
+      // recover the exact non-zero versioned estimate from the route and units;
+      // unknown routes or zero units throw before a row can be written.
+      // Their training seam reports the number of moderated source images, but
+      // the provider bills one training job. Price that legacy shape as one
+      // job while retaining the observed units in the ledger for auditability.
+      const pricingUnits =
+        input.attemptType === "training" &&
+        ((units.training_images ?? 0) > 0 || (units.training_steps ?? 0) > 0)
+          ? { trainings: 1 }
+          : units;
+      const price = estimateProviderCostUsd({
+        provider: input.provider,
+        endpoint: input.endpoint,
+        model: input.model,
+        units: pricingUnits,
+      });
+      estimatedCostUsd = price.estimatedCostUsd;
+      pricingVersion = price.pricingVersion;
+    } else {
+      assertFinitePositive(estimatedCostUsd, "estimatedCostUsd");
+    }
+    if (input.actualCostUsd !== undefined) assertFinitePositive(input.actualCostUsd, "actualCostUsd");
     assertFiniteNonNegative(input.latencyMs, "latencyMs");
+
+    const providerRequestId = input.providerRequestId ?? requestId;
+    if (!providerRequestId) throw new Error("providerRequestId must be non-empty");
+
+    // The operation key is the idempotency boundary, not the random ledger row
+    // id. A replay returns the existing row and may only fill in reconciliation
+    // data that was unavailable on the first terminal observation.
+    const existing = [...this.store.providerCostLedgerEntries.values()].find(
+      (entry) =>
+        entry.owningEntityIds.familyId === input.owningEntityIds.familyId &&
+        entry.requestId === requestId
+    );
+    if (existing) {
+      if (
+        existing.provider !== input.provider ||
+        existing.endpoint !== input.endpoint ||
+        existing.model !== input.model ||
+        existing.attemptType !== input.attemptType ||
+        existing.outcome !== input.outcome ||
+        JSON.stringify(existing.owningEntityIds) !== JSON.stringify(input.owningEntityIds)
+      ) {
+        throw new Error("Attempt key was reused for a different payable operation");
+      }
+      if (input.actualCostUsd !== undefined) {
+        existing.actualCostUsd ??= input.actualCostUsd;
+        if (existing.actualCostUsd !== input.actualCostUsd) {
+          throw new Error("Attempt reconciliation reported conflicting actual cost");
+        }
+      }
+      if (input.providerRequestId) existing.providerRequestId = input.providerRequestId;
+      this.store.providerCostLedgerEntries.set(existing.id, existing);
+      return existing;
+    }
 
     // Construct from an allow-list. In particular, never spread input: callers
     // may have accidentally supplied prompts, photo bytes, or credentials.
@@ -241,13 +324,13 @@ export class ProviderCostMeteringService {
       provider: input.provider,
       endpoint: input.endpoint,
       model: input.model,
-      pricingVersion: input.pricingVersion,
-      units: assertUnits(input.units),
-      estimatedCostUsd: input.estimatedCostUsd,
+      pricingVersion,
+      units,
+      estimatedCostUsd,
       actualCostUsd: input.actualCostUsd ?? null,
       latencyMs: input.latencyMs,
       requestId,
-      providerRequestId: requestId,
+      providerRequestId,
       owningEntityIds: {
         familyId: input.owningEntityIds.familyId,
         ...(input.owningEntityIds.personaId ? { personaId: input.owningEntityIds.personaId } : {}),
@@ -266,7 +349,7 @@ export class ProviderCostMeteringService {
   }
 
   recordTrainingAmortization(input: TrainingAmortizationInput): ProviderCostLedgerEntry {
-    assertFiniteNonNegative(input.costUsd, "costUsd");
+    assertFinitePositive(input.costUsd, "costUsd");
     const entry = this.recordAttempt({
       ...input,
       estimatedCostUsd: input.costUsd,
@@ -471,6 +554,36 @@ export class ProviderCostMeteringService {
     return CostThreshold.GREEN;
   }
 
+  /**
+   * Full payable-boundary gate. The caller cannot authorize a provider/storage
+   * operation without a known route, non-zero exact units, stable attempt key,
+   * kill-switch clearance, and margin evidence.
+   */
+  authorizePayableAttempt(input: PayableAttemptInput): PayableAttemptAuthorization {
+    if (!input.attemptKey.trim()) throw new Error("attemptKey must be non-empty");
+    if (!input.endpoint) throw new Error("A payable route requires an endpoint");
+    const units = assertUnits(input.units);
+    const price = estimateProviderCostUsd({
+      provider: input.provider,
+      endpoint: input.endpoint,
+      model: input.model,
+      units,
+    });
+    const threshold = this.authorizeSpend({
+      ...input,
+      marginEvidence:
+        input.marginEvidence ??
+        (input.familyId ? this.deriveMarginEvidence(input.familyId) ?? undefined : undefined),
+    });
+    return {
+      threshold,
+      pricingVersion: price.pricingVersion,
+      estimatedCostUsd: price.estimatedCostUsd,
+      attemptKey: input.attemptKey,
+      units,
+    };
+  }
+
   private resolveMarginPercent(input: SpendAuthorizationInput): number {
     if (input.p95FullCapMarginPercent !== undefined) {
       if (
@@ -527,7 +640,18 @@ export class ProviderCostMeteringService {
       : pricing.monthly;
     const attributableCogsUsd = [...this.store.providerCostLedgerEntries.values()]
       .filter((entry) => entry.owningEntityIds.familyId === familyId)
-      .reduce((sum, entry) => sum + (entry.actualCostUsd ?? entry.estimatedCostUsd), 0);
+      .reduce((sum, entry) => {
+        const cost = entry.actualCostUsd ?? entry.estimatedCostUsd;
+        // Persona training is a reusable Family asset, not a per-Story charge.
+        // Attribute one monthly Story-cap share at each payable Story boundary;
+        // retain the full non-zero amount in the ledger and in Persona cost
+        // reports. This keeps margin evidence attributable without charging the
+        // same one-time training run four times in a single monthly cohort.
+        if (entry.attemptType === "training" && !entry.owningEntityIds.storybookId) {
+          return sum + cost / R1_PLAN_DEFINITION.limits.storybooksPerMonth;
+        }
+        return sum + cost;
+      }, 0);
     return { netSubscriptionRevenueUsd, attributableCogsUsd };
   }
 
