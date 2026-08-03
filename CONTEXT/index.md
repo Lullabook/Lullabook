@@ -39,7 +39,7 @@
 - [[docs/adr/apple-app-review-packet.md|Apple App Review Packet — Lullabook]] — Lullabook lets a parent generate illustrated AI bedtime storybooks starring their own baby and family.
 - [[docs/adr/r1-market-legal-review-checklist.md|R1 Market Legal-Review Checklist]] — For each market (US, IN, …), confirm and record the reviewer + date:
 
-## Planning (PRDs, stack, scope) (28)
+## Planning (PRDs, stack, scope) (29)
 
 - [[planning/onboarding-and-personas.md|Onboarding & Persona Creation Flow]] [superseded in part — the original web funnel (sign up → pay → consent) is] — replaced on iOS by the Email-Plus VPC flow (PRD v3/v14), decoupled from payment.
 - [[planning/prd-v1.md|PRD — Lullabook v1 (Text + Illustration Storybook)]] [superseded. domain model (family/persona) superseded by prd v5] — (Household/Baby/World/Family-roster/Character); platform (web) superseded by PRD v3 (native iOS).
@@ -56,6 +56,7 @@
 - [[planning/prd-v2-generation-pipeline.md|PRD v2 — Productionized generation pipeline + Character (free text) tier + Personalized Classics]] [shipped — foundational architecture, still in force.] — Still-binding rules: starts generating, flips to draft once every Page is terminal, failed if the text pass fails or too few Pages succeed.
 - [[planning/prd-v20-monetization-r1.md|PRD v20 — Working monetization: R1 entry gates (fake-first purchase + consent)]] — R1's premise (a solo parent pays to put their baby in illustrated stories) has two gates, and both are stubbed or missing:
 - [[planning/prd-v21-r1-family-persona-story-economics.md|PRD v21 — R1 Family, Persona, Story Context, provider, and unit-economics spine]] — R1 currently treats “solo” as one Guardian and one Baby in several places, even though the product promise is a Guardian creating Stories about…
+- [[planning/prd-v22-reachable-app-release-readiness.md|PRD v22 — Reachable app release readiness]] — A production-ready reachable iOS app in which an ordinary Guardian can use the app without provider credentials, pass the server-authoritative…
 - [[planning/prd-v3-native-ios.md|PRD v3 — Native iOS app (Expo / React Native) over the existing backend]] [shipped — ios (`mobile/`) is now the shipping platform (adr-0018); web] — stays backend-only.
 - [[planning/prd-v4-production-persistence.md|PRD v4 — Production persistence for `push_subscriptions` + `email_plus_vpc_requests`]] [shipped (migration `003`).] — Still-binding rules: manages only their own device tokens); email_plus_vpc_requests visible within the Family, Guardian-only writes; the…
 - [[planning/prd-v5-maya-world-revamp.md|PRD v5 — "Maya's World" Revamp]] [shipped — this is the current domain model (full glossary in context.md).] — Still-binding decisions: Household has one or more; R1 restricts to one).
