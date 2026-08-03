@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { resolveRequestAuth } from "@/lib/request-auth";
 
+function isSafeBlobKey(key: string): boolean {
+  return (
+    !key.includes("\\") &&
+    !key.includes("..") &&
+    !/[\u0000-\u001f\u007f]/.test(key) &&
+    key.split("/").every((segment) => segment.length > 0 && segment !== ".")
+  );
+}
+
 /**
  * Signed-URL resolver: Pages store Family-scoped blob keys, never provider
  * URLs (PRD v2). The key's `books/{familyId}/` prefix must match the
@@ -24,7 +33,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!authed) {
     return privateCache(NextResponse.json({ error: "Unauthorized" }, { status: 401 }));
   }
-  if (!key.startsWith(`books/${authed.member.familyId}/`)) {
+  if (!isSafeBlobKey(key) || !key.startsWith(`books/${authed.member.familyId}/`)) {
     return privateCache(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
   }
   // Issue 122 (red-team BUG 5): only serve actual illustration/video page blobs.
@@ -35,6 +44,10 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!isServableBlob) {
     return privateCache(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
   }
-  const url = await authed.ctx.blobs.signedUrl(key);
-  return privateCache(NextResponse.redirect(url, 307));
+  try {
+    const url = await authed.ctx.blobs.signedUrl(key);
+    return privateCache(NextResponse.redirect(url, 307));
+  } catch {
+    return privateCache(NextResponse.json({ error: "Image unavailable" }, { status: 404 }));
+  }
 }

@@ -2,8 +2,31 @@ import { getAuthedContext, type AuthedContext } from "@/lib/auth";
 import { BearerAuthError, requireBearerMember, type JwtVerifier } from "@/lib/bearer-auth";
 import { createRequestContext } from "@/lib/context";
 import { RequestRecorder } from "@/lib/request-timing";
+import { createAuthClient } from "@/lib/supabase";
 import { createSupabaseJwtVerifier } from "@/lib/supabase-jwt";
 import type { HydrationProfile } from "@/db/store";
+
+async function resolveCookieAuth(profile?: HydrationProfile): Promise<AuthedContext | null> {
+  if (profile === undefined) return getAuthedContext();
+
+  const supabase = await createAuthClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const ctx = createRequestContext();
+  let member = await ctx.store.hydrateByAuthUser(user.id, profile);
+  if (!member) {
+    member = ctx.onboarding.ensureFamilyForNewUser(
+      user.id,
+      user.email ?? "",
+      (user.user_metadata?.jurisdiction as string | undefined) ?? "US"
+    );
+    await ctx.persist();
+  }
+  return { ctx, member };
+}
 
 /**
  * Cookie session (web) or Bearer JWT (native) — whichever the request
@@ -47,7 +70,7 @@ export async function resolveRequestAuth(
       throw err;
     }
   }
-  const authed = await getAuthedContext();
+  const authed = await resolveCookieAuth(profile);
   if (authed) {
     authed.ctx.timing?.mark("total");
   }

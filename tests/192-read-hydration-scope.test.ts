@@ -547,6 +547,33 @@ describe("192 — read-profile hydration scope", () => {
     expect(store.getPersistedGeneration("book-1")).toBeDefined();
   });
 
+  it("upgrades a read-hydrated Family before a full-profile write/delete operation", async () => {
+    const rec: Recorder = { tables: seam.fixtureTables(), queries: [], waves: 0 };
+    const store = new SupabaseDataStore(recordingClient(rec));
+
+    await store.hydrateByAuthUser("auth-1", "read");
+    await store.hydrateFamily("fam-1", "full");
+
+    expect(store.storyAllowanceReservations.get("book-1")?.status).toBe("committed");
+    expect(store.providerCostLedgerEntries.has("cost-1")).toBe(true);
+    expect(rec.queries).toContain("story_allowance_reservations");
+    expect(rec.queries).toContain("provider_cost_ledger");
+  });
+
+  it("can hydrate the read profile again after a process restart", async () => {
+    const tables = seam.fixtureTables();
+    const first = new SupabaseDataStore(recordingClient({ tables, queries: [], waves: 0 }));
+    await first.hydrateByAuthUser("auth-1", "read");
+
+    const second = new SupabaseDataStore(recordingClient({ tables, queries: [], waves: 0 }));
+    const member = await second.hydrateByAuthUser("auth-1", "read");
+
+    expect(member?.familyId).toBe("fam-1");
+    expect(second.getStorybook("book-1", "mem-1")?.status).toBe("finalized");
+    expect(second.getPagesForStorybook("book-1")).toHaveLength(1);
+    expect(second.getPersistedGeneration("book-1")).toBeDefined();
+  });
+
   it("image/avatar routes use a minimal authenticated Family lookup (member row only)", async () => {
     const rec: Recorder = { tables: seam.fixtureTables(), queries: [], waves: 0 };
     const store = new SupabaseDataStore(recordingClient(rec));

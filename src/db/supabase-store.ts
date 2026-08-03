@@ -46,10 +46,17 @@ import type {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
+const HYDRATION_PROFILE_RANK: Record<HydrationProfile, number> = {
+  minimal: 0,
+  read: 1,
+  full: 2,
+};
+
 export class SupabaseDataStore extends DataStore {
   /** (table, id) pairs that existed at hydration time, for delete detection. */
   private snapshot = new Map<string, Set<string>>();
-  private hydratedFamilyIds = new Set<string>();
+  private hydratedFamilyProfiles = new Map<string, HydrationProfile>();
+  private hydratingFamilies = new Map<string, Promise<void>>();
 
   constructor(private readonly client: SupabaseClient) {
     super();
@@ -152,6 +159,22 @@ export class SupabaseDataStore extends DataStore {
     budgetMs: number,
     limit = 25
   ): Promise<number> {
+    // A normal read-profile request has already loaded the Family's current
+    // Storybook statuses. If no loaded Storybook is stale and generating, the
+    // route's watchdog call cannot change this response and would create a
+    // third serialized DB wave after the two-wave read hydration. Keep the
+    // full-profile worker/write path unchanged; a stale read still uses the
+    // durable claim below.
+    if (
+      [...this.hydratedFamilyProfiles.values()].some((profile) => profile === "read") &&
+      ![...this.storybooks.values()].some(
+        (storybook) =>
+          storybook.status === "generating" &&
+          now.getTime() - storybook.createdAt.getTime() > budgetMs
+      )
+    ) {
+      return 0;
+    }
     const { data, error } = await this.client.rpc("app_reap_stranded_storybook_generations", {
       p_now: now.toISOString(),
       p_budget_ms: budgetMs,
@@ -225,8 +248,36 @@ export class SupabaseDataStore extends DataStore {
   }
 
   async hydrateFamily(familyId: string, profile: HydrationProfile = "full"): Promise<void> {
-    if (this.hydratedFamilyIds.has(familyId)) return;
-    this.hydratedFamilyIds.add(familyId);
+    const hydratedProfile = this.hydratedFamilyProfiles.get(familyId);
+    if (
+      hydratedProfile !== undefined &&
+      HYDRATION_PROFILE_RANK[hydratedProfile] >= HYDRATION_PROFILE_RANK[profile]
+    ) {
+      return;
+    }
+
+    const inFlight = this.hydratingFamilies.get(familyId);
+    if (inFlight) {
+      await inFlight;
+      return this.hydrateFamily(familyId, profile);
+    }
+
+    const hydration = this.hydrateFamilyBody(familyId, profile);
+    this.hydratingFamilies.set(familyId, hydration);
+    try {
+      await hydration;
+      this.hydratedFamilyProfiles.set(familyId, profile);
+    } finally {
+      if (this.hydratingFamilies.get(familyId) === hydration) {
+        this.hydratingFamilies.delete(familyId);
+      }
+    }
+  }
+
+  private async hydrateFamilyBody(
+    familyId: string,
+    profile: HydrationProfile
+  ): Promise<void> {
     if (profile === "read") {
       await this.hydrateFamilyRead(familyId);
       return;

@@ -112,6 +112,51 @@ describe("192 — blob serving: Cache-Control private, never public", () => {
     }
   });
 
+  it("AC-4: image keys cannot escape the authenticated Family prefix", async () => {
+    const ctx = createTestContext();
+    const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-img-escape", "escape@example.com");
+    const signedUrl = vi.spyOn(ctx.blobs, "signedUrl");
+    const spy = await stubAuthSeam();
+    try {
+      const { GET } = await import("@/app/api/images/route");
+      const res = await GET(
+        authedReq(
+          ctx,
+          ctx.store.members.get(guardian.id)!,
+          `/api/images?key=${encodeURIComponent(`books/${guardian.familyId}/../other-family/page-0.png`)}`
+        )
+      );
+      expect(res.status).toBe(403);
+      expect(res.headers.get("Cache-Control")).toContain("private");
+      expect(signedUrl).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("AC-4: an unavailable image is a private 404 rather than a storage error", async () => {
+    const ctx = createTestContext();
+    const guardian = ctx.onboarding.ensureFamilyForNewUser("auth-img-missing", "missing@example.com");
+    ctx.blobs.signedUrl = async () => {
+      throw new Error("storage unavailable");
+    };
+    const spy = await stubAuthSeam();
+    try {
+      const { GET } = await import("@/app/api/images/route");
+      const res = await GET(
+        authedReq(
+          ctx,
+          ctx.store.members.get(guardian.id)!,
+          `/api/images?key=${encodeURIComponent(`books/${guardian.familyId}/book-1/page-0.png`)}`
+        )
+      );
+      expect(res.status).toBe(404);
+      expect(res.headers.get("Cache-Control")).toContain("private");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("AC-4: the avatars route sets Cache-Control: private on a served redirect and on a forbidden cross-family key", async () => {
     const { ctx, member, persona } = await householdAvatar();
     const spy = await stubAuthSeam();
@@ -133,6 +178,27 @@ describe("192 — blob serving: Cache-Control private, never public", () => {
       const forbiddenCache = forbidden.headers.get("Cache-Control") ?? "";
       expect(forbiddenCache).toContain("private");
       expect(forbiddenCache).not.toContain("public");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("AC-4: avatar keys cannot escape the authenticated Family prefix", async () => {
+    const { ctx, member } = await householdAvatar();
+    const signedUrl = vi.spyOn(ctx.blobs, "signedUrl");
+    const spy = await stubAuthSeam();
+    try {
+      const { GET } = await import("@/app/api/avatars/route");
+      const res = await GET(
+        authedReq(
+          ctx,
+          member,
+          `/api/avatars?key=${encodeURIComponent(`avatars/${member.familyId}/../other-family/persona.png`)}`
+        )
+      );
+      expect(res.status).toBe(403);
+      expect(res.headers.get("Cache-Control")).toContain("private");
+      expect(signedUrl).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
     }
@@ -163,6 +229,29 @@ describe("192 — blob serving: Cache-Control private, never public", () => {
       spy.mockRestore();
     }
   });
+
+  it("AC-5: an unavailable avatar adapter is also a private 404", async () => {
+    const { ctx, member, persona } = await householdAvatar();
+    const blobs = ctx.blobs as unknown as {
+      signedUrl?: (key: string) => Promise<string>;
+    };
+    blobs.signedUrl = undefined;
+    const spy = await stubAuthSeam();
+    try {
+      const { GET } = await import("@/app/api/avatars/route");
+      const res = await GET(
+        authedReq(
+          ctx,
+          member,
+          `/api/avatars?key=${encodeURIComponent(persona.avatarKey!)}`
+        )
+      );
+      expect(res.status).toBe(404);
+      expect(res.headers.get("Cache-Control")).toContain("private");
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -171,6 +260,8 @@ describe("192 — blob serving: Cache-Control private, never public", () => {
 // ---------------------------------------------------------------------------
 
 const bearerSeam = vi.hoisted(() => {
+  const state = { cookieUser: false, queries: [] as string[] };
+
   function minimalClient() {
     const MEMBER_ROW: Record<string, unknown> = {
       id: "mem-1",
@@ -204,6 +295,7 @@ const bearerSeam = vi.hoisted(() => {
           onFulfilled?: (v: { data: unknown; error: null }) => unknown,
           onRejected?: (e: unknown) => unknown
         ) {
+          state.queries.push(table);
           let rows = table === "members" ? [MEMBER_ROW] : [];
           for (const f of filters) {
             rows = rows.filter((r) => r[f.column] === f.value);
@@ -219,13 +311,22 @@ const bearerSeam = vi.hoisted(() => {
       rpc: async () => ({ data: [], error: null }),
     } as unknown as import("@supabase/supabase-js").SupabaseClient;
   }
-  return { minimalClient };
+  return { minimalClient, state };
 });
 
 vi.mock("@/lib/supabase", () => ({
   createServiceClient: () => bearerSeam.minimalClient(),
   createAuthClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: null }, error: null }) },
+    auth: {
+      getUser: async () => ({
+        data: {
+          user: bearerSeam.state.cookieUser
+            ? { id: "auth-1", email: "g@example.com", user_metadata: { jurisdiction: "US" } }
+            : null,
+        },
+        error: null,
+      }),
+    },
   }),
 }));
 
@@ -253,5 +354,24 @@ describe("192 — roster avatar bearer serving", () => {
     // The minimal lookup hydrates the member without the full Family graph.
     expect(authed!.ctx.store.personas.size).toBe(0);
     expect(authed!.ctx.store.families.size).toBe(0);
+  });
+
+  it("threads an explicit minimal profile through cookie auth too", async () => {
+    bearerSeam.state.cookieUser = true;
+    bearerSeam.state.queries = [];
+    try {
+      const request = new Request("http://localhost/api/avatars?key=x", {
+        headers: { cookie: "session=test" },
+      });
+      const authed = await resolveRequestAuth(request, "minimal");
+
+      expect(authed).not.toBeNull();
+      expect(authed!.member.id).toBe("mem-1");
+      expect(authed!.ctx.store.personas.size).toBe(0);
+      expect(authed!.ctx.store.families.size).toBe(0);
+      expect(bearerSeam.state.queries).toEqual(["members"]);
+    } finally {
+      bearerSeam.state.cookieUser = false;
+    }
   });
 });
