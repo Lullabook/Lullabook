@@ -20,6 +20,15 @@ function nowMs(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
+function finiteNonNegativeMs(value: number): number {
+  return Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+/** Format a duration for a Server-Timing `dur` parameter. */
+export function formatTimingDurationMs(value: number): string {
+  return finiteNonNegativeMs(value).toFixed(2);
+}
+
 export class RequestRecorder {
   readonly start = nowMs();
 
@@ -30,13 +39,13 @@ export class RequestRecorder {
 
   /** Milliseconds since the recorder was created. */
   elapsed(): number {
-    return nowMs() - this.start;
+    return finiteNonNegativeMs(nowMs() - this.start);
   }
 
   /** Record an explicit elapsed-duration mark (name must be a safe header token). */
   markMs(name: string, ms: number): void {
-    if (!SAFE_NAME.test(name)) throw new Error(`Unsafe timing mark name: ${name}`);
-    this.marks[name] = Math.max(0, ms);
+    if (!SAFE_NAME.test(name)) throw new Error("Unsafe timing mark name");
+    this.marks[name] = finiteNonNegativeMs(ms);
   }
 
   /** Record a mark at the current elapsed time. */
@@ -66,7 +75,7 @@ export class RequestRecorder {
 
   /** Snapshot of named marks (auth/hydrate/…), in ms since start. */
   get marksSnapshot(): Readonly<Record<string, number>> {
-    return this.marks;
+    return { ...this.marks };
   }
 
   /**
@@ -84,7 +93,7 @@ export class RequestRecorder {
     const parts: string[] = [];
     for (const name of ["auth", "hydrate", "total"]) {
       const ms = this.marks[name];
-      if (ms !== undefined) parts.push(`${name};dur=${ms.toFixed(2)}`);
+      if (ms !== undefined) parts.push(`${name};dur=${formatTimingDurationMs(ms)}`);
     }
     parts.push(`db;queries=${this.query};waves=${this.waves}`);
     return parts.join(", ");
@@ -92,31 +101,50 @@ export class RequestRecorder {
 
   /** Serializable state for breadcrumbs — numbers only, by construction. */
   toJSON(): Record<string, number> {
-    return { ...this.marks, queryCount: this.query, waveCount: this.waves, totalMs: this.elapsed() };
+    return {
+      ...this.marks,
+      queryCount: this.query,
+      waveCount: this.waves,
+      totalMs: this.elapsed(),
+    };
   }
 }
 
 /**
- * Wrap a Supabase client so every `.from()` query execution is counted on the
- * recorder. Query builders are thenables — intercepting `then` counts exactly
- * the queries that are actually awaited (never the builder constructions) and
- * tracks in-flight queries for wave detection. The wrapped result resolves the
- * identical data; the only added cost is one `.finally` tick per query.
+ * Wrap a Supabase client so every `.from()` or `.rpc()` query execution is
+ * counted on the recorder. Query builders are thenables — intercepting `then`
+ * counts exactly the queries that are actually awaited (never builder
+ * constructions) and tracks in-flight queries for wave detection. The wrapped
+ * result resolves the identical data; the only added cost is one `.finally`
+ * tick per query.
  */
-export function instrumentClient<T extends { from?: (table: string) => unknown }>(
-  client: T,
-  recorder: RequestRecorder
-): T {
-  const from = client.from;
-  if (typeof from !== "function") return client;
+export function instrumentClient<T extends object>(client: T, recorder: RequestRecorder): T {
+  const hasFrom = typeof Reflect.get(client, "from") === "function";
+  const hasRpc = typeof Reflect.get(client, "rpc") === "function";
+  if (!hasFrom && !hasRpc) return client;
+
   return new Proxy(client, {
     get(target, prop, receiver) {
-      if (prop === "from") {
-        return (table: string) => wrapBuilder(from.call(target, table), recorder);
+      const value = Reflect.get(target, prop, receiver);
+      if (prop === "from" && typeof value === "function") {
+        return (...args: unknown[]) => wrapBuilder(Reflect.apply(value, target, args), recorder);
       }
-      return Reflect.get(target, prop, receiver);
+      if (prop === "rpc" && typeof value === "function") {
+        return (...args: unknown[]) => wrapRpc(Reflect.apply(value, target, args), recorder);
+      }
+      return value;
     },
   });
+}
+
+function wrapRpc(result: unknown, recorder: RequestRecorder): unknown {
+  recorder.queryStarted();
+  try {
+    return Promise.resolve(result).finally(() => recorder.querySettled());
+  } catch (error) {
+    recorder.querySettled();
+    throw error;
+  }
 }
 
 function wrapBuilder(builder: unknown, recorder: RequestRecorder): unknown {
@@ -137,8 +165,13 @@ function wrapBuilder(builder: unknown, recorder: RequestRecorder): unknown {
         ) => unknown;
         return (onFulfilled?: unknown, onRejected?: unknown) => {
           recorder.queryStarted();
-          const result = originalThen.call(obj, onFulfilled, onRejected);
-          return Promise.resolve(result).finally(() => recorder.querySettled());
+          try {
+            const result = originalThen.call(obj, onFulfilled, onRejected);
+            return Promise.resolve(result).finally(() => recorder.querySettled());
+          } catch (error) {
+            recorder.querySettled();
+            throw error;
+          }
         };
       }
       return Reflect.get(obj, prop);

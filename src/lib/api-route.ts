@@ -48,7 +48,10 @@ export function withServerTiming<T extends NextResponse>(
   response: T,
   timing?: RequestRecorder
 ): T {
-  if (timing && response instanceof NextResponse) {
+  // The route seam already guarantees a NextResponse. Avoid an instanceof
+  // guard here: responses can cross an Edge/Node realm boundary while still
+  // carrying the standard Headers interface.
+  if (timing) {
     response.headers.set("Server-Timing", timing.toServerTiming());
   }
   return response;

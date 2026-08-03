@@ -10,33 +10,51 @@
 
 declare const __DEV__: boolean | undefined;
 
+export type StartupMilestoneName = "process-start" | "interactive" | "first-read";
+const STARTUP_MILESTONES: readonly StartupMilestoneName[] = [
+  "process-start",
+  "interactive",
+  "first-read",
+];
+
 /**
  * Whether startup timing is active. Dev-only by design: `__DEV__` on native,
- * anything-but-production on web/test.
+ * or an explicit development/test environment on web/test.
  */
 export function startupTimingEnabled(
   dev: boolean | undefined = typeof __DEV__ === "boolean" ? __DEV__ : undefined,
   env: string | undefined = process.env.NODE_ENV
 ): boolean {
-  return typeof dev === "boolean" ? dev : env !== "production";
+  return typeof dev === "boolean" ? dev : env === "development" || env === "test";
 }
 
 export interface StartupMilestone {
-  name: string;
+  name: StartupMilestoneName;
   ms: number;
 }
 
 const ENABLED = startupTimingEnabled();
-const START = Date.now();
+const START = typeof performance !== "undefined" ? performance.now() : Date.now();
 const milestones: StartupMilestone[] = [];
+const recorded = new Set<StartupMilestoneName>();
+
+function elapsedSinceStart(): number {
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const elapsed = now - START;
+  return Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : 0;
+}
 
 /** Record a startup milestone (dev only — no-op in production bundles). */
 export function recordStartup(name: string): void {
   if (!ENABLED) return;
-  milestones.push({ name, ms: Date.now() - START });
+  if (!STARTUP_MILESTONES.includes(name as StartupMilestoneName)) return;
+  const milestone = name as StartupMilestoneName;
+  if (recorded.has(milestone)) return;
+  recorded.add(milestone);
+  milestones.push({ name: milestone, ms: elapsedSinceStart() });
 }
 
 /** Milestones recorded so far, for the dev overlay / breadcrumb. */
 export function getStartupMilestones(): readonly StartupMilestone[] {
-  return milestones;
+  return milestones.map((milestone) => Object.freeze({ ...milestone }));
 }

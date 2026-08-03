@@ -116,7 +116,7 @@ import {
   getStartupMilestones,
   startupTimingEnabled,
 } from "../mobile/lib/startup-timing";
-import { checkBaseline, percentile } from "../scripts/check-perf-baseline";
+import { checkBaseline, GATES, percentile } from "../scripts/check-perf-baseline";
 import baseline from "../perf-baseline.json";
 
 function bearerRequest(token = "good"): Request {
@@ -256,6 +256,54 @@ describe("191 — request context query + wave recording", () => {
     const result = await (wrapped.from("t") as unknown as Promise<{ data: { id: string }; error: null }>);
     expect(result).toEqual({ data: { id: "x" }, error: null });
   });
+
+  it("does not add a proxy when a client has no query execution seam", () => {
+    const client = { healthcheck: () => "ok" };
+    expect(instrumentClient(client, new RequestRecorder())).toBe(client);
+  });
+
+  it("counts RPC round-trips and recovers wave state when a thenable throws synchronously", async () => {
+    const recorder = new RequestRecorder();
+    const wrapped = instrumentClient(
+      {
+        rpc: async () => ({ data: null, error: null }),
+        from: () => ({
+          then() {
+            throw new Error("query failed");
+          },
+        }),
+      },
+      recorder
+    ) as unknown as {
+      rpc: () => Promise<{ data: null; error: null }>;
+      from: (table: string) => { then: () => never };
+    };
+
+    await wrapped.rpc();
+    expect(recorder.queryCount).toBe(1);
+    expect(recorder.waveCount).toBe(1);
+
+    expect(() => wrapped.from("broken").then()).toThrow("query failed");
+    // A synchronous provider failure must settle the recorder; otherwise every
+    // later query is incorrectly folded into the stranded first wave.
+    await wrapped.rpc();
+    expect(recorder.queryCount).toBe(3);
+    expect(recorder.waveCount).toBe(3);
+  });
+
+  it("keeps Server-Timing and breadcrumb serialization finite for adversarial durations", () => {
+    const recorder = new RequestRecorder();
+    recorder.markMs("auth", Number.NaN);
+    recorder.markMs("hydrate", Number.POSITIVE_INFINITY);
+    recorder.markMs("total", -10);
+
+    const header = recorder.toServerTiming();
+    expect(header).not.toMatch(/NaN|Infinity/);
+    expect(header).toMatch(
+      /^auth;dur=\d+(\.\d+)?, hydrate;dur=\d+(\.\d+)?, total;dur=\d+(\.\d+)?, db;queries=0;waves=0$/
+    );
+    expect(Object.values(recorder.toJSON()).every(Number.isFinite)).toBe(true);
+  });
 });
 
 describe("191 — request auth timing (native bearer path)", () => {
@@ -275,11 +323,14 @@ describe("191 — native startup timing (dev-only breadcrumb)", () => {
     // NODE_ENV=test is a non-production env → recording active (same as __DEV__).
     expect(startupTimingEnabled(undefined, "test")).toBe(true);
     expect(startupTimingEnabled(undefined, "production")).toBe(false);
+    expect(startupTimingEnabled(undefined, "")).toBe(false);
     expect(startupTimingEnabled(true, "production")).toBe(true);
 
     recordStartup("process-start");
     recordStartup("interactive");
     recordStartup("first-read");
+    recordStartup("process-start");
+    recordStartup("email=guardian@example.com");
     const milestones = getStartupMilestones();
     expect(milestones.map((m) => m.name)).toEqual(["process-start", "interactive", "first-read"]);
     for (const m of milestones) {
@@ -287,6 +338,10 @@ describe("191 — native startup timing (dev-only breadcrumb)", () => {
       expect(m.ms).toBeGreaterThanOrEqual(0);
       expect(m.name).toMatch(/^[a-z][a-z0-9-]*$/);
     }
+
+    const snapshot = [...milestones];
+    snapshot.pop();
+    expect(getStartupMilestones()).toHaveLength(3);
   });
 });
 
@@ -416,5 +471,31 @@ describe("191 — checked-in performance baseline", () => {
     ).toBeGreaterThanOrEqual(3000);
     // Every other gate stays green — a threshold miss is a per-path failure.
     expect(results.filter((r) => !r.pass).map((r) => r.path)).toEqual(["cold-start"]);
+  });
+
+  it("fails closed for missing/invalid profiles and malformed sample records", () => {
+    const missing = checkBaseline({} as typeof baseline);
+    expect(missing.map((r) => r.path)).toEqual(Object.keys(GATES));
+    expect(missing.every((r) => !r.pass)).toBe(true);
+
+    const invalidProfile = structuredClone(baseline);
+    invalidProfile.profile.name = "";
+    invalidProfile.profile.method = "";
+    expect(checkBaseline(invalidProfile).every((r) => !r.pass)).toBe(true);
+
+    const invalidSamples = structuredClone(baseline);
+    invalidSamples.paths["story-text"].samples[0] = Number.NaN;
+    invalidSamples.paths["story-text"].sampleCount = 19;
+    invalidSamples.paths["story-text"].result = "FAIL";
+    expect(checkBaseline(invalidSamples).find((r) => r.path === "story-text")!.pass).toBe(false);
+
+    const missingRecordedPath = structuredClone(baseline);
+    delete (missingRecordedPath.paths as Record<string, unknown>)["home"];
+    expect(checkBaseline(missingRecordedPath).every((r) => !r.pass)).toBe(true);
+  });
+
+  it("returns a finite nearest-rank result for an invalid percentile request", () => {
+    expect(percentile([100, 200], Number.NaN)).toBe(100);
+    expect(percentile([], 95)).toBe(0);
   });
 });

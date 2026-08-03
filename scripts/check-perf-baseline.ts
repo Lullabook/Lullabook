@@ -41,11 +41,12 @@ export interface PathCheck {
 /** Nearest-rank percentile of a sorted sample array (deterministic). */
 export function percentile(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
+  const safePercentile = Number.isFinite(p) ? Math.min(100, Math.max(0, p)) : 0;
   const idx = Math.min(
     sorted.length - 1,
-    Math.max(0, Math.ceil((p / 100) * sorted.length) - 1)
+    Math.max(0, Math.ceil((safePercentile / 100) * sorted.length) - 1)
   );
-  return sorted[idx];
+  return Number.isFinite(sorted[idx]) ? sorted[idx] : 0;
 }
 
 /** The six gated paths from the ticket. Home/story-list are recorded, not gated. */
@@ -58,17 +59,79 @@ export const GATES: Record<string, { thresholdMs?: number; limitBytes?: number }
   "story-detail": { limitBytes: 512000 },
 };
 
+const RECORDED_PATHS = [
+  "cold-start",
+  "create-response",
+  "home",
+  "story-list",
+  "story-detail",
+] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isValidProfile(value: unknown): boolean {
+  if (!isRecord(value) || !isNonEmptyString(value.name) || !isNonEmptyString(value.method)) {
+    return false;
+  }
+  return ["os", "node", "capturedAt"].every(
+    (key) => value[key] === undefined || typeof value[key] === "string"
+  );
+}
+
+function isFiniteSample(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isValidPathRecord(value: unknown): boolean {
+  if (!isRecord(value) || !Array.isArray(value.samples)) return false;
+  return (
+    value.samples.length >= 20 &&
+    value.samples.every(isFiniteSample) &&
+    isNonEmptyString(value.method) &&
+    isNonEmptyString(value.fixtureSize) &&
+    value.result === "PASS" &&
+    Number.isInteger(value.sampleCount) &&
+    value.sampleCount === value.samples.length
+  );
+}
+
 export function checkBaseline(data: PerfBaseline): PathCheck[] {
+  const root: Record<string, unknown> = isRecord(data) ? data : {};
+  const paths = isRecord(root["paths"]) ? root["paths"] : {};
+  const profileValid = isValidProfile(root["profile"]);
+  const recordedPathsValid = RECORDED_PATHS.every((name) => isValidPathRecord(paths[name]));
+
   return Object.entries(GATES).map(([name, gate]) => {
-    const rec = data.paths[name];
-    const sorted = [...(rec?.samples ?? [])].sort((a, b) => a - b);
-    const p95 = rec && sorted.length > 0 ? percentile(sorted, 95) : null;
+    const raw = paths[name];
+    const rec = isRecord(raw) ? raw : null;
+    const rawSamples = rec?.samples;
+    const samplesValid =
+      Array.isArray(rawSamples) && rawSamples.length > 0 && rawSamples.every(isFiniteSample);
+    const samples = samplesValid ? (rawSamples as number[]) : [];
+    const sorted = [...samples].sort((a, b) => a - b);
+    const p95 = samplesValid ? percentile(sorted, 95) : null;
+    const metadataValid =
+      rec !== null &&
+      isNonEmptyString(rec.method) &&
+      isNonEmptyString(rec.fixtureSize) &&
+      rec.result === "PASS" &&
+      Number.isInteger(rec.sampleCount) &&
+      rec.sampleCount === samples.length;
     const limit = gate.limitBytes ?? gate.thresholdMs ?? null;
     const pass =
-      rec !== undefined &&
+      profileValid &&
+      recordedPathsValid &&
+      metadataValid &&
       sorted.length >= 20 &&
       p95 !== null &&
       limit !== null &&
+      Number.isFinite(p95) &&
       p95 < limit;
     return { path: name, p95, limit, pass };
   });
