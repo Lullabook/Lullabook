@@ -2,6 +2,8 @@ import { Image, Text, View, type ViewStyle } from "react-native";
 import { BrandGradient } from "@/components/maya-ui";
 import { C, F } from "@/constants/theme";
 import { getApiUrl } from "@/lib/env";
+import { getAccessToken } from "@/lib/supabase";
+import { useEffect, useState } from "react";
 import type { PersonaStatus } from "@domain/types";
 
 // Canonical AVATAR_GRADIENTS (src/components/v2/tokens.ts) — all five cast
@@ -33,7 +35,12 @@ export function RosterAvatar({
   size?: number;
   style?: ViewStyle;
 }) {
-  const showImage = status === "ready" && !!avatarKey;
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (status !== "ready" || !avatarKey) return;
+    getAccessToken().then(setToken).catch(() => setToken(null));
+  }, [avatarKey, status]);
+  const showImage = status === "ready" && !!avatarKey && !!token;
   const gradient = GRADIENTS[(initial.charCodeAt(0) || 0) % GRADIENTS.length]!;
 
   return (
@@ -50,7 +57,13 @@ export function RosterAvatar({
       accessibilityLabel={`${name} avatar`}
     >
       {showImage ? (
-        <Image source={{ uri: avatarUrl(avatarKey) }} style={{ width: size, height: size }} accessibilityLabel={`${name} roster avatar`} />
+        <Image
+          source={{ uri: avatarUrl(avatarKey), headers: { Authorization: `Bearer ${token}` } }}
+          style={{ width: size, height: size }}
+          accessibilityLabel={`${name} roster avatar`}
+          alt={`${name} roster avatar`}
+          onError={() => setToken(null)}
+        />
       ) : (
         <BrandGradient
           colors={gradient}

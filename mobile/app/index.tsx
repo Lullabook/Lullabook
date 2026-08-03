@@ -3,7 +3,8 @@ import { Redirect, type Href } from "expo-router";
 
 import { getAccessToken } from "@/lib/supabase";
 import { DEMO_STORY, isRenderableDemoStory } from "@/lib/demo-story";
-import { resolveFirstOpenRoute, type FirstOpenRoute } from "@/lib/first-open";
+import { resolveFirstOpenStartup } from "@/lib/auth-startup";
+import type { FirstOpenRoute } from "@/lib/first-open";
 import { hasSeenDemo } from "@/lib/first-open-state";
 
 /**
@@ -17,23 +18,20 @@ export default function Index() {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
-      let hasSession = false;
-      try {
-        hasSession = (await getAccessToken()) !== null;
-      } catch {
-        // Auth storage unavailable → treat as signed out; funnel still works.
-      }
-      const seen = await hasSeenDemo();
-      if (!alive) return;
-      setRoute(
-        resolveFirstOpenRoute({
-          hasSession,
-          hasSeenDemo: seen,
-          demoRenderable: isRenderableDemoStory(DEMO_STORY),
-        })
-      );
-    })();
+    resolveFirstOpenStartup({
+      getSession: async () => {
+        try {
+          return (await getAccessToken()) !== null;
+        } catch {
+          // Auth storage unavailable → treat as signed out; funnel still works.
+          return false;
+        }
+      },
+      hasSeenDemo,
+      demoRenderable: isRenderableDemoStory(DEMO_STORY),
+    }).then((nextRoute) => {
+      if (alive) setRoute(nextRoute);
+    });
     return () => {
       alive = false;
     };

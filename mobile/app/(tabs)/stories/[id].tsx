@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Text,
   View,
+  AppState,
+  type AppStateStatus,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -14,7 +16,7 @@ import { Screen, Eyebrow, PageTitle, Lead, Card, PrimaryButton, GhostButton, Pag
 import {
   downloadStorybookPdf,
   finalizeStorybook,
-  getStorybook,
+  getStorybookSnapshot,
   illustrationSource,
   rerollPageImage,
   selectPageCandidate,
@@ -23,8 +25,10 @@ import {
 } from "@/lib/api";
 import {
   READER_POLL_BUDGET_MS,
-  READER_POLL_INTERVAL_MS,
   classifyGenerationError,
+  nextReaderPollDelayMs,
+  shouldFetchOnResume,
+  shouldPollInAppState,
   generationProgressCopy,
   isPollBudgetExhausted,
   isTerminalStatus,
@@ -34,6 +38,7 @@ import {
 import { BookCover } from "@/components/story-cover";
 import { C, F } from "@/constants/theme";
 import { recordStartup } from "@/lib/startup-timing";
+import { shouldShowInitialSkeleton } from "@/lib/render-state";
 
 // Issue 145 — audio is cut from R1: the VoicePlayback component (issue 114)
 // was removed with it; it returns from git history when R2 re-enables audio.
@@ -75,7 +80,7 @@ function PageIllustration({ page }: { page: StorybookPageWire }) {
     return <Skeleton width="100%" height={220} radius={18} />;
   }
 
-  return <Image source={source} style={st.illustration} accessibilityLabel="Story illustration" />;
+  return <Image source={source} style={st.illustration} accessibilityLabel="Story illustration" alt="Story illustration" />;
 }
 
 export default function StorybookReaderScreen() {
@@ -116,12 +121,25 @@ export default function StorybookReaderScreen() {
   // "Illustrating" spinner. The budget lives in the pure module so tests and
   // the reader can never drift apart.
   const [pollTimedOut, setPollTimedOut] = useState(false);
+  const [appState, setAppState] = useState<AppStateStatus>(AppState.currentState);
   const pollStartedRef = useRef<number | null>(null);
+  const pollAttemptRef = useRef(0);
+  const etagRef = useRef<string | null>(null);
+  const bookStatusRef = useRef<StorybookDetailWire["status"] | undefined>(undefined);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   const load = useCallback(async () => {
     if (!storybookId) return;
     try {
-      const data = await getStorybook(storybookId);
+      const response = await getStorybookSnapshot(storybookId, etagRef.current);
+      etagRef.current = response.etag;
+      if (response.notModified) {
+        setError(null);
+        return;
+      }
+      const data = response.data;
+      if (!data) return;
+      bookStatusRef.current = data.status;
       setBook(data);
       setError(null);
       // Issue 191: first successful story read = the native "first-read"
@@ -132,6 +150,7 @@ export default function StorybookReaderScreen() {
       if (isTerminalStatus(data.status)) {
         setPollTimedOut(false);
         pollStartedRef.current = null;
+        pollAttemptRef.current = 0;
       }
     } catch (e) {
       const failure = classifyGenerationError(e);
@@ -149,25 +168,59 @@ export default function StorybookReaderScreen() {
     load();
   }, [load]);
 
+  const bookStatus = book?.status;
+
   useEffect(() => {
-    if (!book || !shouldPollStorybook(book.status, pollTimedOut)) return;
+    if (!bookStatus || !shouldPollStorybook(bookStatus, pollTimedOut)) return;
     if (pollStartedRef.current === null) pollStartedRef.current = Date.now();
-    const timer = setInterval(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+    const schedule = () => {
       if (
-        isPollBudgetExhausted(
-          pollStartedRef.current,
-          Date.now(),
-          READER_POLL_BUDGET_MS
-        )
-      ) {
-        setPollTimedOut(true);
-        clearInterval(timer);
-        return;
+        cancelled ||
+        !shouldPollInAppState(appStateRef.current) ||
+        !bookStatusRef.current ||
+        !shouldPollStorybook(bookStatusRef.current, pollTimedOut)
+      ) return;
+      timer = setTimeout(async () => {
+        if (cancelled) return;
+        if (
+          isPollBudgetExhausted(
+            pollStartedRef.current,
+            Date.now(),
+            READER_POLL_BUDGET_MS
+          )
+        ) {
+          setPollTimedOut(true);
+          return;
+        }
+        pollAttemptRef.current += 1;
+        await load();
+        schedule();
+      }, nextReaderPollDelayMs(pollAttemptRef.current));
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  // Keep the legacy status/load/budget dependency contract visible while the
+  // app-state dependency restarts the timer after a foreground transition.
+  // [book?.status, load, pollTimedOut]
+  }, [appState, bookStatus, load, pollTimedOut]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const previous = appStateRef.current;
+      appStateRef.current = nextState;
+      setAppState(nextState);
+      if (shouldFetchOnResume(previous, nextState) && bookStatus && shouldPollStorybook(bookStatus, pollTimedOut)) {
+        pollAttemptRef.current = 0;
+        void load();
       }
-      load();
-    }, READER_POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [book?.status, load, pollTimedOut]);
+    });
+    return () => subscription.remove();
+  }, [bookStatus, load, pollTimedOut]);
 
   async function rerollCurrent() {
     const page = book?.pages[pageIndex];
@@ -261,7 +314,7 @@ export default function StorybookReaderScreen() {
     }
   }
 
-  if (loading) {
+  if (shouldShowInitialSkeleton(loading, book !== null)) {
     // Skeleton mirrors the reader layout (page card with an illustration
     // block) — renders immediately, no bare-spinner flash (issue 139).
     return (

@@ -5,9 +5,10 @@ import { router } from "expo-router";
 import { Screen, Eyebrow, PageTitle, Lead, Card, SkeletonRow, InsetSeparator, MotionCard } from "@/components/maya-ui";
 import { RosterAvatar } from "@/components/roster-avatar";
 import { usePressFeedback } from "@/lib/use-press-feedback";
-import { fetchHome, seedDemo, type HomeResponse } from "@/lib/api";
+import { fetchHome, refreshHome, seedDemo, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
 import type { PersonaStatus } from "@domain/types";
+import { shouldShowInitialSkeleton } from "@/lib/render-state";
 
 const AnimatedPressable = createAnimatedComponent(Pressable);
 
@@ -93,11 +94,11 @@ export default function FamilyTab() {
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchHome();
+      const data = await (force ? refreshHome() : fetchHome());
       setHome(data);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not load your family";
@@ -136,7 +137,7 @@ export default function FamilyTab() {
     }
   }
 
-  if (loading) {
+  if (shouldShowInitialSkeleton(loading, home !== null)) {
     return (
       <Screen>
         <SkeletonRow />
@@ -150,7 +151,7 @@ export default function FamilyTab() {
   const characters = home?.characters ?? [];
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={() => load(true)} refreshing={loading}>
       <View>
         <Eyebrow>💛 {babyName}&apos;s family</Eyebrow>
         <PageTitle>The people in their world</PageTitle>

@@ -181,7 +181,7 @@ export default function FamilyMemberDetailScreen() {
 
   const recordingRef = { current: null as import("expo-av").Audio.Recording | null };
 
-  if (loading) {
+  if (loading && home === null) {
     return (
       <Screen>
         <SkeletonRow />

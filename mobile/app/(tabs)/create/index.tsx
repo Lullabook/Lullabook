@@ -126,7 +126,7 @@ export default function NewStorybookScreen() {
     }
   }
 
-  if (loading) {
+  if (loading && home === null) {
     return (
       <Screen>
         <SkeletonCard lines={2} />

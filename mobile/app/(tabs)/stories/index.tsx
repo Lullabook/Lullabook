@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
 import {
-  Screen,
   Eyebrow,
   PageTitle,
   Lead,
@@ -19,6 +18,7 @@ import { usePressFeedback } from "@/lib/use-press-feedback";
 import { BookCover, bookPalette } from "@/components/story-cover";
 import { listStorybooks, type StorybookSummary } from "@/lib/api";
 import { C, F } from "@/constants/theme";
+import { shouldShowInitialSkeleton } from "@/lib/render-state";
 
 const AnimatedPressable = createAnimatedComponent(Pressable);
 
@@ -107,6 +107,7 @@ export default function StorybookLibraryScreen() {
   const [books, setBooks] = useState<StorybookSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,6 +123,7 @@ export default function StorybookLibraryScreen() {
       }
       setError(message);
     } finally {
+      setHasLoaded(true);
       setLoading(false);
     }
   }, []);
@@ -130,13 +132,14 @@ export default function StorybookLibraryScreen() {
     load();
   }, [load]);
 
-  if (loading) {
+  if (shouldShowInitialSkeleton(loading, hasLoaded)) {
     return (
-      <Screen>
-        <SkeletonRow />
-        <SkeletonRow />
-        <SkeletonRow />
-      </Screen>
+      <ListScreen
+        data={[]}
+        keyExtractor={() => "loading"}
+        renderItem={() => null}
+        ListHeaderComponent={<><SkeletonRow /><SkeletonRow /><SkeletonRow /></>}
+      />
     );
   }
 

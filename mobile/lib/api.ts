@@ -1,5 +1,6 @@
 import { getApiUrl } from "@/lib/env";
 import { getAccessToken } from "@/lib/supabase";
+import { createSharedRequestCache, registerPrivateCache } from "@/lib/private-cache";
 import {
   ApiSignInRequiredError,
   ApiStatusError,
@@ -13,12 +14,15 @@ import {
 import type { Character, Persona, StoryType } from "@domain/types";
 
 const apiBase = getApiUrl();
+const homeCache = createSharedRequestCache<HomeResponse>();
+registerPrivateCache(() => homeCache.clear());
 
 async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
   timeoutMs?: number
 ): Promise<T> {
+  if (init.method && init.method.toUpperCase() !== "GET") homeCache.clear();
   const token = await getAccessToken();
   // Issue 187 — a bounded request is the only thing that keeps a slow create
   // from freezing the Generate control. Abort on the budget; the caller gets
@@ -33,6 +37,7 @@ async function apiFetch<T>(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init.headers ?? {}),
       },
+      cache: "no-store",
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -62,6 +67,7 @@ async function apiFetch<T>(
 }
 
 export async function apiFormData<T>(path: string, body: FormData): Promise<T> {
+  homeCache.clear();
   const token = await getAccessToken();
   return new Promise<T>((resolve, reject) => {
     // Issue 163: Expo SDK 56's "winter" fetch polyfill throws
@@ -137,7 +143,11 @@ export interface HomeResponse {
 }
 
 export function fetchHome(): Promise<HomeResponse> {
-  return apiFetch("/api/home");
+  return homeCache.get(() => apiFetch("/api/home"));
+}
+
+export function refreshHome(): Promise<HomeResponse> {
+  return homeCache.refresh(() => apiFetch("/api/home"));
 }
 
 /** ADR-0028 — the paywall consumes the same canonical R1 plan as entitlement. */
@@ -333,8 +343,33 @@ export interface StorybookDetailWire {
   pages: StorybookPageWire[];
 }
 
-export function getStorybook(id: string): Promise<StorybookDetailWire> {
-  return apiFetch(`/api/storybooks/${encodeURIComponent(id)}`);
+export async function getStorybookSnapshot(
+  id: string,
+  etag?: string | null
+): Promise<{ data: StorybookDetailWire | null; etag: string | null; notModified: boolean }> {
+  const token = await getAccessToken();
+  const headers: Record<string, string> = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(etag ? { "If-None-Match": etag } : {}),
+  };
+  const res = await fetch(`${apiBase}/api/storybooks/${encodeURIComponent(id)}`, {
+    headers,
+    cache: "no-store",
+  });
+  const nextEtag = res.headers.get("ETag");
+  if (res.status === 304) return { data: null, etag: nextEtag ?? etag ?? null, notModified: true };
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    if (res.status === 401) throw new ApiSignInRequiredError();
+    throw new ApiStatusError(res.status, body.error ?? `Request failed (${res.status})`);
+  }
+  return { data: (await res.json()) as StorybookDetailWire, etag: nextEtag, notModified: false };
+}
+
+export async function getStorybook(id: string): Promise<StorybookDetailWire> {
+  const snapshot = await getStorybookSnapshot(id);
+  if (!snapshot.data) throw new Error("Storybook response was not modified without a previous snapshot");
+  return snapshot.data;
 }
 
 /**

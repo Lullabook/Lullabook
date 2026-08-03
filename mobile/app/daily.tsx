@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
 import {
-  Screen,
   Eyebrow,
   PageTitle,
   Lead,
@@ -20,12 +19,14 @@ import { usePressFeedback } from "@/lib/use-press-feedback";
 import {
   createMoment,
   fetchHome,
+  refreshHome,
   listMoments,
   type HomeResponse,
   type MomentWire,
 } from "@/lib/api";
 import { isR1JournalMachineryEnabled } from "@/lib/r1-flags";
 import { C, F } from "@/constants/theme";
+import { shouldShowInitialSkeleton } from "@/lib/render-state";
 import type { MomentType } from "@domain/daily-types";
 
 type Filter = "all" | "firsts";
@@ -110,11 +111,11 @@ export default function DailyScreen() {
   const babyId = home?.selectedBaby?.id ?? null;
   const babyName = home?.selectedBaby?.displayName ?? "your baby";
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchHome();
+      const data = await (force ? refreshHome() : fetchHome());
       setHome(data);
       const id = data.selectedBaby?.id;
       if (id) {
@@ -165,12 +166,14 @@ export default function DailyScreen() {
     filter === "firsts" ? m.momentType === "first" || m.momentType === "milestone" : true
   );
 
-  if (loading) {
+  if (shouldShowInitialSkeleton(loading, home !== null)) {
     return (
-      <Screen>
-        <SkeletonCard />
-        <SkeletonCard lines={2} />
-      </Screen>
+      <ListScreen
+        data={[]}
+        keyExtractor={() => "loading"}
+        renderItem={() => null}
+        ListHeaderComponent={<><SkeletonCard /><SkeletonCard lines={2} /></>}
+      />
     );
   }
 
@@ -265,7 +268,7 @@ export default function DailyScreen() {
         </BrandGradient>
       }
       ItemSeparatorComponent={() => <InsetSeparator indent={56} />}
-      onRefresh={load}
+      onRefresh={() => load(true)}
       refreshing={loading}
     />
   );

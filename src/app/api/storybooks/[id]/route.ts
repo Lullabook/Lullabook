@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { RlsViolationError } from "@/db/store";
 import { resolveRequestAuth } from "@/lib/request-auth";
 import { deriveStorybookProgress } from "@/lib/storybook-progress";
+import { matchesIfNoneMatch, storybookResponseEtag } from "@/lib/storybook-etag";
 import type { Storybook } from "@/domain/types";
 
 /**
@@ -64,7 +65,7 @@ export async function GET(
     pages,
     hasPersistedText: Boolean(ctx.store.getPersistedGeneration(book.id)),
   });
-  return NextResponse.json({
+  const payload = {
     id: book.id,
     status: book.status,
     theme: book.brief.theme,
@@ -73,5 +74,16 @@ export async function GET(
     rerollCredits: book.rerollCredits,
     progress,
     pages: pageWire,
-  });
+  };
+  const etag = storybookResponseEtag(payload);
+  if (matchesIfNoneMatch(request.headers.get("If-None-Match"), etag)) {
+    return new NextResponse(null, {
+      status: 304,
+      headers: { ETag: etag, "Cache-Control": "private, no-cache" },
+    });
+  }
+  const response = NextResponse.json(payload);
+  response.headers.set("ETag", etag);
+  response.headers.set("Cache-Control", "private, no-cache");
+  return response;
 }

@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { requireSupabaseConfig } from "@/lib/env";
 import { selectAuthStorage } from "@/lib/auth-storage";
+import { clearPrivateCaches } from "@/lib/private-cache";
 
 let client: SupabaseClient | undefined;
 
@@ -31,4 +32,11 @@ export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
 export async function getAccessToken(): Promise<string | null> {
   const { data } = await getClient().auth.getSession();
   return data.session?.access_token ?? null;
+}
+
+/** Sign out only after private memory is invalidated for the next Family. */
+export async function signOutAndClearPrivateCaches(): Promise<void> {
+  clearPrivateCaches();
+  const { error } = await getClient().auth.signOut();
+  if (error) throw error;
 }

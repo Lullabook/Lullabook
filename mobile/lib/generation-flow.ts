@@ -20,6 +20,36 @@ import { isConsentRequiredError, isEntitlementError } from "./entitlement-error"
 export const CREATE_REQUEST_TIMEOUT_MS = 20_000;
 export const READER_POLL_INTERVAL_MS = 2_500;
 export const READER_POLL_BUDGET_MS = 5 * 60 * 1000;
+export const READER_POLL_MAX_DELAY_MS = 30_000;
+
+/** Bounded exponential backoff: a five-minute run stays under 40 reads. */
+export function nextReaderPollDelayMs(attempt: number): number {
+  return Math.min(READER_POLL_MAX_DELAY_MS, READER_POLL_INTERVAL_MS * 2 ** attempt);
+}
+
+export function countReaderStatusRequests(durationMs: number): number {
+  if (durationMs <= 0) return 0;
+  let elapsed = 0;
+  let requests = 0;
+  let attempt = 0;
+  while (elapsed < durationMs) {
+    elapsed += nextReaderPollDelayMs(attempt++);
+    requests++;
+  }
+  return requests;
+}
+
+// React Native's AppStateStatus includes an "unknown" startup state. Treat it
+// as non-active so polling remains fail-closed until the app is foregrounded.
+export type ReaderAppState = "active" | "background" | "inactive" | "unknown";
+
+export function shouldPollInAppState(state: string): boolean {
+  return state === "active";
+}
+
+export function shouldFetchOnResume(previous: string, current: string): boolean {
+  return previous !== "active" && current === "active";
+}
 
 const TERMINAL_STATUSES: readonly StorybookStatus[] = ["draft", "failed", "finalized"];
 
