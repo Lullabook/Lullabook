@@ -19,6 +19,7 @@
     "check:perf": "tsx scripts/check-perf-baseline.ts",
     "smoke:provider-bakeoff": "tsx tools/provider-bakeoff.ts",
     "smoke:r1-provider-e2e": "tsx tools/r1-provider-e2e.ts",
+    "gate:release": "tsx tools/release-gate.ts",
     "verify": "node scripts/verify.mjs",
     "graph:index": "node scripts/build-graph-index.mjs",
     "super:run": "node scripts/super-engineering-launcher.mjs"
