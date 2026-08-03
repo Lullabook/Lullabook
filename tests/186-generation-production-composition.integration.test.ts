@@ -40,7 +40,7 @@ vi.mock("@/lib/supabase-jwt", () => ({
   }),
 }));
 
-import { POST } from "@/app/api/storybooks/route";
+import { GET, POST } from "@/app/api/storybooks/route";
 
 const KEY = "INNGEST_EVENT_KEY";
 
@@ -69,6 +69,13 @@ function bearerPost(): Request {
       Authorization: "Bearer good",
     },
     body: JSON.stringify({ starringPersonaIds: [], storyType: "bedtime", theme: "x" }),
+  });
+}
+
+function bearerGet(): Request {
+  return new Request("http://localhost/api/storybooks", {
+    method: "GET",
+    headers: { Authorization: "Bearer good" },
   });
 }
 
@@ -121,6 +128,21 @@ describe("186 — production composition of the generation queue", () => {
     expect(ctx.fal.imageCalls).toBe(0);
     expect(ctx.store.storybooks.size).toBe(0);
     expect(ctx.store.storyAllowanceReservations.size).toBe(0);
+  });
+
+  it("a production GET without durable dispatch also fails closed with the typed configuration error, not an unhandled crash", async () => {
+    harness.authSub = "guardian";
+    harness.ctxError = new WorkflowConfigurationError(
+      "Production Storybook generation requires a durable workflow dispatch (INNGEST_EVENT_KEY); refusing to run provider work inline in the request."
+    );
+    try {
+      const res = await GET(bearerGet());
+      expect(res.status).toBe(500);
+      const body = (await res.json()) as { code?: string };
+      expect(body.code).toBe("workflow_not_configured");
+    } finally {
+      harness.ctxError = null;
+    }
   });
 
   it("the durable event envelope carries only the job identity, never provider credentials", () => {

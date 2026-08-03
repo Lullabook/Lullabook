@@ -53,15 +53,27 @@ export async function POST(request: Request): Promise<NextResponse> {
 }
 
 export async function GET(request: Request): Promise<NextResponse> {
-  return withBearerAuth(request, async (ctx, member) => {
-    const babyId = new URL(request.url).searchParams.get("babyId");
-    try {
-      const books = babyId
-        ? ctx.store.listStorybooksForBaby(babyId, member.id)
-        : ctx.store.listStorybooksForFamily(member.familyId, member.id);
-      return jsonOk({ storybooks: books.map(serializeStorybook) });
-    } catch (err) {
-      return jsonError(err instanceof Error ? err.message : "Failed", 400);
+  try {
+    return await withBearerAuth(request, async (ctx, member) => {
+      const babyId = new URL(request.url).searchParams.get("babyId");
+      try {
+        const books = babyId
+          ? ctx.store.listStorybooksForBaby(babyId, member.id)
+          : ctx.store.listStorybooksForFamily(member.familyId, member.id);
+        return jsonOk({ storybooks: books.map(serializeStorybook) });
+      } catch (err) {
+        return jsonError(err instanceof Error ? err.message : "Failed", 400);
+      }
+    });
+  } catch (err) {
+    // Issue 186: the request composition root builds the durable workflow
+    // adapter for every authenticated request, not only generation-enqueue
+    // ones. A misconfigured production deploy must surface the same typed
+    // configuration failure here instead of an unhandled 500 — GET never ran
+    // any provider work either way.
+    if (err instanceof WorkflowConfigurationError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
-  });
+    throw err;
+  }
 }
