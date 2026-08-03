@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
 import type { DataStore } from "@/db/store";
+import { R1_MARGIN_THRESHOLDS, R1_PLAN_DEFINITION } from "@/domain/plan";
 
 export type ProviderAttemptType =
   | "text"
@@ -88,6 +89,32 @@ export interface ThresholdInput {
   actualCostUsd: number;
   /** P95 full-cap delivery margin, expressed as a percentage (e.g. 69.9). */
   p95FullCapMarginPercent?: number;
+}
+
+/**
+ * Margin evidence (COST-3): net subscription revenue and attributable COGS.
+ * Margin = (net subscription revenue − attributable COGS) / net subscription
+ * revenue × 100. Missing evidence fails closed at the authorization boundary.
+ */
+export interface MarginEvidence {
+  netSubscriptionRevenueUsd: number;
+  attributableCogsUsd: number;
+}
+
+/**
+ * Issue 190 — margin formula: (net subscription revenue − attributable COGS)
+ * / net subscription revenue × 100. Invalid revenue (missing evidence) or
+ * negative COGS throws: never divide by zero, never compute a fake margin.
+ */
+export function computeMarginPercent(
+  netSubscriptionRevenueUsd: number,
+  attributableCogsUsd: number
+): number {
+  if (!Number.isFinite(netSubscriptionRevenueUsd) || netSubscriptionRevenueUsd <= 0) {
+    throw new Error("netSubscriptionRevenueUsd must be a finite positive number");
+  }
+  assertFiniteNonNegative(attributableCogsUsd, "attributableCogsUsd");
+  return ((netSubscriptionRevenueUsd - attributableCogsUsd) / netSubscriptionRevenueUsd) * 100;
 }
 
 export type KillSwitchScope = "all" | "provider" | "model" | "endpoint" | "provider-model";
@@ -319,13 +346,20 @@ export class ProviderCostMeteringService {
     ) {
       throw new Error("p95FullCapMarginPercent must be a valid percentage");
     }
-    if (input.p95FullCapMarginPercent !== undefined && input.p95FullCapMarginPercent < 70) {
+    if (
+      input.p95FullCapMarginPercent !== undefined &&
+      input.p95FullCapMarginPercent < R1_MARGIN_THRESHOLDS.fullCapP95MarginFloorPercent
+    ) {
       return CostThreshold.RED;
     }
     const variance = Math.abs(input.actualCostUsd - input.budgetUsd) / input.budgetUsd;
     const epsilon = Number.EPSILON * 16;
-    if (variance <= 0.05 + epsilon) return CostThreshold.GREEN;
-    if (variance <= 0.1 + epsilon) return CostThreshold.AMBER;
+    if (variance <= R1_MARGIN_THRESHOLDS.greenVarianceMaxPercent / 100 + epsilon) {
+      return CostThreshold.GREEN;
+    }
+    if (variance <= R1_MARGIN_THRESHOLDS.amberVarianceMaxPercent / 100 + epsilon) {
+      return CostThreshold.AMBER;
+    }
     return CostThreshold.RED;
   }
 
@@ -389,33 +423,112 @@ export class ProviderCostMeteringService {
     if (killSwitch) throw new SpendBlockedError(killSwitch);
   }
 
-  /** Budget gate used immediately before a payable invocation, never merely enqueue. */
-  authorizeSpend(route: SpendRoute & ThresholdInput): CostThreshold {
-    this.assertSpendAllowed(route);
-    if (route.p95FullCapMarginPercent === undefined) {
+  /**
+   * Issue 190 — the pre-attempt authorization gate. Always enforces persisted
+   * kill switches; then requires margin evidence (P95 full-cap margin or
+   * net-revenue/COGS) and fails CLOSED when it is missing; then enforces the
+   * red variance band when budget evidence is supplied. Returns green/amber;
+   * any red condition throws {@link SpendBlockedError} before the caller can
+   * reach a provider boundary.
+   */
+  authorizeSpend(input: SpendAuthorizationInput): CostThreshold {
+    this.assertSpendAllowed(input);
+    const margin = this.resolveMarginPercent(input);
+    if (margin < R1_MARGIN_THRESHOLDS.fullCapP95MarginFloorPercent) {
       throw new SpendBlockedError({
-        id: "missing-p95-margin-evidence",
-        scope: "all",
-        threshold: CostThreshold.RED,
-        reason: "Missing P95 full-cap margin evidence",
-        createdAt: this.now(),
-        active: true,
-      });
-    }
-    const threshold = this.evaluateThreshold(route);
-    if (threshold === CostThreshold.RED) {
-      throw new SpendBlockedError({
-        id: "budget-threshold",
+        id: "margin-threshold",
         scope: "provider-model",
-        provider: route.provider,
-        model: route.model,
-        threshold,
-        reason: "Budget variance exceeded the red threshold",
+        provider: input.provider,
+        model: input.model,
+        threshold: CostThreshold.RED,
+        reason: `Full-cap/P95 delivery margin (${margin.toFixed(2)}%) is below the ${R1_MARGIN_THRESHOLDS.fullCapP95MarginFloorPercent}% floor`,
         createdAt: this.now(),
         active: true,
       });
     }
-    return threshold;
+    if (input.budgetUsd !== undefined || input.actualCostUsd !== undefined) {
+      if (input.budgetUsd === undefined || input.actualCostUsd === undefined) {
+        throw new Error("budgetUsd and actualCostUsd must be supplied together");
+      }
+      const threshold = this.evaluateThreshold({
+        budgetUsd: input.budgetUsd,
+        actualCostUsd: input.actualCostUsd,
+      });
+      if (threshold === CostThreshold.RED) {
+        throw new SpendBlockedError({
+          id: "budget-threshold",
+          scope: "provider-model",
+          provider: input.provider,
+          model: input.model,
+          threshold,
+          reason: "Budget variance exceeded the red threshold",
+          createdAt: this.now(),
+          active: true,
+        });
+      }
+      return threshold;
+    }
+    return CostThreshold.GREEN;
+  }
+
+  private resolveMarginPercent(input: SpendAuthorizationInput): number {
+    if (input.p95FullCapMarginPercent !== undefined) {
+      if (
+        !Number.isFinite(input.p95FullCapMarginPercent) ||
+        input.p95FullCapMarginPercent < 0
+      ) {
+        throw new Error("p95FullCapMarginPercent must be a valid percentage");
+      }
+      return input.p95FullCapMarginPercent;
+    }
+    if (input.marginEvidence) {
+      if (
+        !Number.isFinite(input.marginEvidence.netSubscriptionRevenueUsd) ||
+        input.marginEvidence.netSubscriptionRevenueUsd <= 0
+      ) {
+        throw new SpendBlockedError({
+          id: "missing-margin-evidence",
+          scope: "all",
+          threshold: CostThreshold.RED,
+          reason: "Missing net subscription revenue evidence",
+          createdAt: this.now(),
+          active: true,
+        });
+      }
+      return computeMarginPercent(
+        input.marginEvidence.netSubscriptionRevenueUsd,
+        input.marginEvidence.attributableCogsUsd
+      );
+    }
+    // Missing margin evidence fails closed: no P95 margin, no revenue/COGS.
+    throw new SpendBlockedError({
+      id: "missing-margin-evidence",
+      scope: "all",
+      threshold: CostThreshold.RED,
+      reason: "Missing margin evidence (P95 margin or revenue/COGS)",
+      createdAt: this.now(),
+      active: true,
+    });
+  }
+
+  /**
+   * Issue 190 — deterministic margin evidence derived from persisted state:
+   * the Family's subscription revenue (R1 plan, monthly-equivalent) and the
+   * attributable COGS recorded in the provider ledger. Returns null when the
+   * Family has no active subscription — upstream authorization fails closed
+   * rather than spending without revenue evidence.
+   */
+  deriveMarginEvidence(familyId: string): MarginEvidence | null {
+    const subscription = this.store.getSubscription(familyId);
+    if (!subscription || subscription.status !== "active") return null;
+    const pricing = R1_PLAN_DEFINITION.pricing;
+    const netSubscriptionRevenueUsd = pricing.annualDefault
+      ? pricing.annual / 12
+      : pricing.monthly;
+    const attributableCogsUsd = [...this.store.providerCostLedgerEntries.values()]
+      .filter((entry) => entry.owningEntityIds.familyId === familyId)
+      .reduce((sum, entry) => sum + (entry.actualCostUsd ?? entry.estimatedCostUsd), 0);
+    return { netSubscriptionRevenueUsd, attributableCogsUsd };
   }
 
   getControls(): { canCreateSpend: boolean; canViewDrafts: true; canHardDelete: true } {
@@ -431,6 +544,19 @@ export class ProviderCostMeteringService {
     this.store.providerCostLedgerEntries.clear();
     this.store.providerKillSwitches.clear();
   }
+}
+
+export interface SpendAuthorizationInput extends SpendRoute {
+  /**
+   * Budget variance evidence: cumulative spend vs the monthly budget. The
+   * variance band is enforced only when BOTH are supplied.
+   */
+  budgetUsd?: number;
+  actualCostUsd?: number;
+  /** P95 full-cap delivery margin, expressed as a percentage (e.g. 69.9). */
+  p95FullCapMarginPercent?: number;
+  /** Alternative margin evidence: net subscription revenue + attributable COGS. */
+  marginEvidence?: MarginEvidence;
 }
 
 /** Readable aliases for callers that describe this component as a ledger. */

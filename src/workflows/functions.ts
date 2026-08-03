@@ -1,5 +1,7 @@
 import { EVENTS, InngestWorkflowAdapter, inngest, type DurableStepTools } from "@/adapters/inngest";
 import type { BlobStore, PersonaCreatePayload, WorkflowAdapter, WorkflowJobPayload } from "@/adapters/types";
+import { FAL_NANO_BANANA_2_EDIT_ENDPOINT } from "@/adapters/fal";
+import { getProductionStoryModel } from "@/adapters/anthropic";
 import {
   PersonaCreationOutboxConsumer,
   PersonaCreationOutboxDispatcher,
@@ -11,6 +13,13 @@ import {
 import { createServiceClient } from "@/lib/supabase";
 import { createRequestContext } from "@/lib/context";
 import { createBlobStore } from "@/lib/create-blob-store";
+import { estimateProviderCostUsd, TEXT_WORST_CASE_UNITS } from "@/lib/provider-prices";
+import {
+  CostThreshold,
+  ProviderCostMeteringService,
+  SpendBlockedError,
+  type SpendRoute,
+} from "@/services/provider-cost-metering";
 import { runPersonaCreationFinalizedBody } from "@/workflows/persona-creation-finalized-body";
 import { runPersonaCreateBody } from "@/workflows/persona-create-body";
 
@@ -29,6 +38,44 @@ interface GeneratePayload {
   memberId: string;
 }
 
+export interface PayableRunAuthorization {
+  threshold: CostThreshold;
+  pricingVersion: string;
+  estimatedCostUsd: number;
+}
+
+/**
+ * Issue 190 — additive composition guard: authorize a payable run BEFORE it
+ * enters any provider boundary. Enforces persisted red kill switches
+ * (global/provider/model/endpoint) plus the full-cap/P95 margin floor, with
+ * margin evidence derived from the Family's subscription revenue and
+ * attributable ledger COGS. Missing margin evidence fails closed
+ * (SpendBlockedError). Returns the versioned worst-case price-table estimate
+ * for the run's first provider route.
+ */
+export function authorizePayableRun(
+  costMeter: ProviderCostMeteringService,
+  input: { familyId: string; route: SpendRoute; units: Record<string, number> }
+): PayableRunAuthorization {
+  if (!input.route.endpoint) {
+    throw new Error("authorizePayableRun requires an endpoint on the payable route");
+  }
+  const price = estimateProviderCostUsd({
+    provider: input.route.provider,
+    endpoint: input.route.endpoint,
+    model: input.route.model,
+    units: input.units,
+  });
+  const threshold = costMeter.authorizeSpend({
+    provider: input.route.provider,
+    endpoint: input.route.endpoint,
+    model: input.route.model,
+    familyId: input.familyId,
+    marginEvidence: costMeter.deriveMarginEvidence(input.familyId) ?? undefined,
+  });
+  return { threshold, pricingVersion: price.pricingVersion, estimatedCostUsd: price.estimatedCostUsd };
+}
+
 export const storybookGenerate = inngest.createFunction(
   {
     id: "storybook-generate",
@@ -42,6 +89,21 @@ export const storybookGenerate = inngest.createFunction(
     ctx.workflow.onStepCommitted = () => ctx.store.sync();
 
     try {
+      const book = ctx.store.storybooks.get(storybookId);
+      if (book) {
+        // Issue 190: the run's first payable boundary is the Anthropic text
+        // pass; everything downstream (image/moderation/storage/retry/repair)
+        // is authorized as part of this run gate.
+        authorizePayableRun(new ProviderCostMeteringService(ctx.store), {
+          familyId: book.familyId,
+          route: {
+            provider: "anthropic",
+            endpoint: "messages.create",
+            model: getProductionStoryModel(),
+          },
+          units: { ...TEXT_WORST_CASE_UNITS },
+        });
+      }
       await ctx.workflow.runWithStepContext(step as DurableStepTools, () =>
         ctx.storybooks.runGenerationBody(memberId, storybookId)
       );
@@ -53,6 +115,10 @@ export const storybookGenerate = inngest.createFunction(
       // so always sync before re-throwing.
       const book = ctx.store.storybooks.get(storybookId);
       if (book && book.status === "generating") {
+        // Issue 190: when the spend gate blocked the run, runGenerationBody
+        // never ran, so its release seam did not fire. The stranded reservation
+        // must not hold the Family allowance slot (release is idempotent).
+        if (err instanceof SpendBlockedError) ctx.storyCap.release(storybookId);
         book.status = "failed";
         ctx.store.storybooks.set(book.id, book);
       }
@@ -82,6 +148,23 @@ export const pageRecover = inngest.createFunction(
     ctx.workflow.onStepCommitted = () => ctx.store.sync();
 
     try {
+      const page = ctx.store.pages.get(pageId);
+      const book = page ? ctx.store.storybooks.get(page.storybookId) : undefined;
+      if (book) {
+        // Issue 190: page repair is payable fal spend; authorize before the
+        // run enters the repair route (the cheap edit route is the first
+        // attempt; escalation to the pro route re-checks inside the service).
+        authorizePayableRun(new ProviderCostMeteringService(ctx.store), {
+          familyId: book.familyId,
+          route: {
+            provider: "fal.ai",
+            endpoint: FAL_NANO_BANANA_2_EDIT_ENDPOINT,
+            // Matches StorybookService's canonical cheap repair route.
+            model: "Nano Banana 2 Edit",
+          },
+          units: { images: 1 },
+        });
+      }
       await ctx.workflow.runWithStepContext(step as DurableStepTools, () =>
         ctx.storybooks.runRecoveryBody(memberId, pageId, attempt)
       );
