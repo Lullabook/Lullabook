@@ -39,12 +39,44 @@ import { CreditLedgerService } from "@/services/credit-ledger";
 import { CustomStyleService } from "@/services/custom-style";
 import { HomeDashboardService } from "@/services/home-dashboard";
 import { WorldService } from "@/services/world";
+import {
+  ProviderCostMeteringService,
+  type MarginEvidence,
+} from "@/services/provider-cost-metering";
+
+/**
+ * Deterministic evidence for provider-spend test compositions. Production
+ * composition still derives this evidence from persisted subscription/COGS
+ * state and fails closed when it is absent or below the R1 floor.
+ */
+export const TEST_MARGIN_EVIDENCE: MarginEvidence = {
+  netSubscriptionRevenueUsd: 100,
+  attributableCogsUsd: 20,
+};
+
+class TestProviderCostMeteringService extends ProviderCostMeteringService {
+  constructor(
+    store: DataStore,
+    private readonly testMarginEvidence: MarginEvidence,
+  ) {
+    super(store);
+  }
+
+  override deriveMarginEvidence(_familyId: string): MarginEvidence {
+    return this.testMarginEvidence;
+  }
+}
 
 export function createTestContext<T extends FalAdapter = FakeFal>(options?: {
   fal?: T;
   store?: DataStore;
+  marginEvidence?: MarginEvidence;
 }) {
   const store = options?.store ?? new DataStore();
+  const costMeter = new TestProviderCostMeteringService(
+    store,
+    options?.marginEvidence ?? TEST_MARGIN_EVIDENCE,
+  );
   const anthropic = new FakeAnthropic();
   const classicCatalog = new FakeClassicCatalog();
   // Issue 123: an explicit fal override (e.g. DevFalFallbackAdapter) wires
@@ -79,7 +111,8 @@ export function createTestContext<T extends FalAdapter = FakeFal>(options?: {
     notifications,
     subscriptions,
     childSafety,
-    entitlements
+    entitlements,
+    costMeter,
   );
   // Issue 125: wrap the persona service so `createBaby`/`createAdult`/photo
   // replacement auto-confirm likeness for the test harness — every "ready"
@@ -131,7 +164,10 @@ export function createTestContext<T extends FalAdapter = FakeFal>(options?: {
     video,
     null,
     pastStorySummary,
-    entitlements
+    entitlements,
+    {},
+    costMeter,
+    storyCap,
   );
   const multiStorybooks = new StorybookService(
     store,
@@ -146,7 +182,10 @@ export function createTestContext<T extends FalAdapter = FakeFal>(options?: {
     video,
     null,
     pastStorySummary,
-    entitlements
+    entitlements,
+    {},
+    costMeter,
+    storyCap,
   );
   const sharing = new SharingService(store);
   const family = new FamilyService(store, notifications);
@@ -157,7 +196,7 @@ export function createTestContext<T extends FalAdapter = FakeFal>(options?: {
     dispatch: async () => workflow.flush(),
   });
   const onboarding = new OnboardingService(store);
-  const textStories = new TextStoryService(store, anthropic, childSafety);
+  const textStories = new TextStoryService(store, anthropic, childSafety, costMeter);
   const homeDashboard = new HomeDashboardService(store, moments, storybooks);
 
   return {
