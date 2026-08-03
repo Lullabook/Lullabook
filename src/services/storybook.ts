@@ -33,8 +33,53 @@ import { R1_PLAN_DEFINITION } from "@/domain/plan";
 import { getProductionStoryModel, validateGeneratedStoryContract } from "@/adapters/anthropic";
 import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
 import { optionalEnv } from "@/adapters/env";
+import { renderPlaceholderArtSvg, shouldUsePlaceholderArt } from "@/lib/placeholder-art";
+import { estimateProviderCostUsd, TEXT_WORST_CASE_UNITS } from "@/lib/provider-prices";
 
 const FREE_REROLL_BUDGET = 5;
+
+/**
+ * Issue 125 / PRD v22 (FAIL-5a) — a Brief selecting a Persona that cannot
+ * star (still training, in `review`, failed, or whose likeness was never
+ * confirmed) is rejected with this typed error BEFORE any text or image
+ * spend. It is never silently downgraded to placeholder art. Surfaced as a
+ * 400 by the create route; clients can discriminate on the class at the
+ * service seam.
+ */
+export class LikenessGateError extends Error {
+  readonly code = "likeness_gate";
+  constructor(personaId: string, detail: string) {
+    super(`Persona ${personaId} ${detail}`);
+    this.name = "LikenessGateError";
+  }
+}
+
+/**
+ * FAIL-4a — the Storybook re-roll budget is exhausted (free budget AND paid
+ * credits). Typed so the route/client can distinguish the cap from a generic
+ * failure; thrown before any provider work.
+ */
+export class RerollBudgetError extends Error {
+  readonly code = "reroll_budget_exhausted";
+  constructor() {
+    super("Re-roll budget exhausted; purchase credits");
+    this.name = "RerollBudgetError";
+  }
+}
+
+/**
+ * FAIL-4a — finalization requires exactly one selected candidate per Page.
+ * A Page with re-roll candidates but no single selection, or an unresolved
+ * illustration hole, rejects the whole book with this typed error; the draft
+ * is left untouched (E4).
+ */
+export class UnresolvedPageError extends Error {
+  readonly code = "unresolved_page";
+  constructor(storybookId: string, pageIndex: number, detail: string) {
+    super(`Storybook ${storybookId} cannot be finalized: Page ${pageIndex} ${detail}`);
+    this.name = "UnresolvedPageError";
+  }
+}
 
 export const DEFAULT_PAGE_CONCURRENCY = 4;
 
@@ -260,12 +305,16 @@ export class StorybookService {
 
     for (const id of normalized.starringPersonaIds) {
       const p = this.store.getPersona(id, memberId);
-      if (!p || p.status !== "ready") throw new Error(`Persona ${id} not ready`);
-      // Issue 125: likeness-confirmation gate — no book spend until the
-      // Guardian has reviewed samples + accepted the trained Persona. `!== true`
-      // (not `=== false`) so legacy/undefined rows also block until confirmed.
+      if (!p) throw new Error(`Persona ${id} not found`);
+      // Issue 125 / PRD v22: likeness gate — no book spend until the Persona
+      // is Story-ready AND the Guardian reviewed samples + accepted it.
+      // `status !== "ready"` covers `training`/`review`/`failed`;
+      // `likenessConfirmed !== true` (not `!== false`) also blocks legacy rows.
+      if (p.status !== "ready") {
+        throw new LikenessGateError(id, `not ready (status: ${p.status})`);
+      }
       if (p.likenessConfirmed !== true) {
-        throw new Error(`Persona ${id} likeness not confirmed`);
+        throw new LikenessGateError(id, "likeness not confirmed");
       }
     }
 
@@ -347,10 +396,13 @@ export class StorybookService {
 
     for (const id of brief.starringPersonaIds) {
       const p = this.store.getPersona(id, memberId);
-      if (!p || p.status !== "ready") throw new Error(`Persona ${id} not ready`);
-      // Issue 125: likeness-confirmation gate (`!== true`, same as generate path).
+      if (!p) throw new Error(`Persona ${id} not found`);
+      // Issue 125 / PRD v22: same typed likeness gate as the generate path.
+      if (p.status !== "ready") {
+        throw new LikenessGateError(id, `not ready (status: ${p.status})`);
+      }
       if (p.likenessConfirmed !== true) {
-        throw new Error(`Persona ${id} likeness not confirmed`);
+        throw new LikenessGateError(id, "likeness not confirmed");
       }
     }
 
@@ -604,16 +656,26 @@ export class StorybookService {
         outputTokens?: number;
       };
     }).lastGenerationEvidence;
+    const evidenceUnits = {
+      input_tokens: evidence?.inputTokens ?? 0,
+      output_tokens: evidence?.outputTokens ?? 0,
+    };
+    // Issue 190: every payable attempt records a NON-ZERO versioned estimate.
+    // If token evidence is missing, price the worst case so the row is never
+    // silently free (the table's wildcard covers unknown models on this route).
+    const price = estimateProviderCostUsd({
+      provider: "anthropic",
+      endpoint: "messages.create",
+      model: evidence?.model ?? "unknown-anthropic-model",
+      units: evidenceUnits.input_tokens > 0 || evidenceUnits.output_tokens > 0 ? evidenceUnits : TEXT_WORST_CASE_UNITS,
+    });
     this.costMeter.recordAttempt({
       provider: "anthropic",
       endpoint: "messages.create",
       model: evidence?.model ?? "unknown-anthropic-model",
-      pricingVersion: "r1-text-v1",
-      units: {
-        input_tokens: evidence?.inputTokens ?? 0,
-        output_tokens: evidence?.outputTokens ?? 0,
-      },
-      estimatedCostUsd: 0,
+      pricingVersion: price.pricingVersion,
+      units: evidenceUnits,
+      estimatedCostUsd: price.estimatedCostUsd,
       actualCostUsd: 0,
       latencyMs: Math.max(0, Date.now() - startedAt),
       requestId: evidence?.providerRequestId ?? `${storybook.id}/story`,
@@ -631,13 +693,21 @@ export class StorybookService {
     outcome: "succeeded" | "failed",
     route = attempt > 0 ? this.generationConfig.repair.cheap : this.generationConfig.defaultRoute
   ): void {
+    // Issue 190: non-zero versioned estimate per image/repair attempt; an
+    // unpriced route throws (fails closed) so provider work is never free.
+    const price = estimateProviderCostUsd({
+      provider: route.provider,
+      endpoint: route.endpoint,
+      model: route.model,
+      units: { images: 1 },
+    });
     this.costMeter.recordAttempt({
       provider: route.provider,
       endpoint: route.endpoint,
       model: route.model,
-      pricingVersion: "r1-image-v1",
+      pricingVersion: price.pricingVersion,
       units: { images: 1 },
-      estimatedCostUsd: 0,
+      estimatedCostUsd: price.estimatedCostUsd,
       latencyMs: Math.max(0, Date.now() - startedAt),
       requestId: `${storybook.id}/${pageId}/attempt-${attempt}`,
       owningEntityIds: {
@@ -755,16 +825,60 @@ export class StorybookService {
       personaIds: brief.starringPersonaIds,
     }));
 
-    await mapWithConcurrency(
-      persisted.story.pages,
-      this.generationConfig.pageConcurrency,
-      async (pageData) => {
-        const scene = scenes.find((s) => s.pageIndex === pageData.index)!;
-        await this.runPagePipeline(storybook, pageData, scene, personas, persisted.story, 0);
-      }
-    );
+    if (shouldUsePlaceholderArt(brief)) {
+      // FAIL-3 (PRD v22 decision 3): a Character-only Brief (no Persona, no
+      // trained likeness) gets deterministic local placeholder art with ZERO
+      // fal image calls — the free path must never spend a paid image call.
+      // The fal pipeline (generate → moderate → store) is skipped entirely:
+      // the bytes are generated locally and are not user/provider content, so
+      // no moderation boundary applies. `ponytail: if a future placeholder
+      // becomes user-customizable, route it through the moderation seam.`
+      await this.storePlaceholderPages(storybook, persisted.story.pages, resolvePageCount(brief));
+    } else {
+      await mapWithConcurrency(
+        persisted.story.pages,
+        this.generationConfig.pageConcurrency,
+        async (pageData) => {
+          const scene = scenes.find((s) => s.pageIndex === pageData.index)!;
+          await this.runPagePipeline(storybook, pageData, scene, personas, persisted.story, 0);
+        }
+      );
+    }
 
     await this.finalizeStorybookStatus(storybookId);
+  }
+
+  /**
+   * FAIL-3 — write deterministic local placeholder art + a ready Page for
+   * every page of a Character-only book. Deterministic per (storybookId,
+   * pageIndex); no provider call, no moderation, no raw likeness data.
+   */
+  private async storePlaceholderPages(
+    storybook: Storybook,
+    pages: { index: number; text: string }[],
+    pageCount: number
+  ): Promise<void> {
+    for (const pageData of pages) {
+      const blobKey = `books/${storybook.familyId}/${storybook.id}/page-${pageData.index}.png`;
+      const bytes = renderPlaceholderArtSvg({
+        storybookId: storybook.id,
+        pageIndex: pageData.index,
+      });
+      await this.blobs.put(blobKey, bytes);
+      this.store.savePage({
+        id: `${storybook.id}-page-${pageData.index}`,
+        storybookId: storybook.id,
+        index: pageData.index,
+        text: pageData.text,
+        illustrationUrl: null,
+        illustrationBlobKey: blobKey,
+        videoBlobKey: null,
+        videoUrl: null,
+        voiceClipId: this.getVoiceClipForPage(storybook.brief, pageData.index, pageCount),
+        generationStatus: "ready",
+        personaCount: 0,
+      });
+    }
   }
 
   private async runPagePipeline(
@@ -1204,6 +1318,63 @@ export class StorybookService {
     const book = this.store.getStorybook(storybookId, memberId);
     if (!book) throw new Error("Storybook not found");
     if (book.status !== "draft") throw new Error("Only drafts can be finalized");
+
+    // FAIL-4a: a finalized book persists exactly one selected candidate per
+    // Page. A Page carrying re-roll candidates must have exactly one selected
+    // (the selection itself is persisted by the selectCandidate seam, and the
+    // Page's illustration must be that candidate's stored blob); a Page with
+    // no candidates is resolved only when the pipeline produced a ready
+    // illustration. Anything else is an unresolved Page → typed rejection
+    // with the draft untouched (E4).
+    const pages = this.store
+      .getPagesForStorybook(storybookId)
+      .sort((a, b) => a.index - b.index);
+    for (const page of pages) {
+      const candidates = this.store.getCandidatesForPage(page.id);
+      const selected = candidates.filter((c) => c.selected);
+      if (candidates.length > 0) {
+        if (selected.length === 0) {
+          throw new UnresolvedPageError(
+            storybookId,
+            page.index,
+            "has re-roll candidates but none selected"
+          );
+        }
+        if (selected.length > 1) {
+          throw new UnresolvedPageError(
+            storybookId,
+            page.index,
+            "has multiple selected candidates"
+          );
+        }
+        const selectedCandidate = selected[0]!;
+        if (selectedCandidate.kind === "image") {
+          const expectedKey = `${book.id}/pages/${page.id}/selected-${selectedCandidate.id}.png`;
+          if (page.illustrationBlobKey !== expectedKey) {
+            throw new UnresolvedPageError(
+              storybookId,
+              page.index,
+              `selected candidate ${selectedCandidate.id} was never persisted as the Page illustration`
+            );
+          }
+        } else if (page.text !== selectedCandidate.content) {
+          throw new UnresolvedPageError(
+            storybookId,
+            page.index,
+            `selected text candidate ${selectedCandidate.id} was never persisted as the Page text`
+          );
+        }
+      } else if (!page.illustrationBlobKey) {
+        // A failed illustration hole with no re-roll attempt: the keepsake
+        // cannot ship an empty Page — repair or re-roll it first.
+        throw new UnresolvedPageError(
+          storybookId,
+          page.index,
+          "has no illustration (unresolved image hole)"
+        );
+      }
+    }
+
     book.status = "finalized";
     book.finalizedAt = new Date();
     this.store.saveStorybook(book);
@@ -1218,7 +1389,9 @@ export class StorybookService {
     } else if (book.rerollCredits > 0) {
       book.rerollCredits--;
     } else {
-      throw new Error("Re-roll budget exhausted; purchase credits");
+      // FAIL-4a: typed cap error, thrown before any provider work — an
+      // over-budget re-roll must never reach a provider call.
+      throw new RerollBudgetError();
     }
     this.store.saveStorybook(book);
   }
