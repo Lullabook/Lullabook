@@ -1,4 +1,5 @@
 import type { Member } from "@/domain/types";
+import type { HydrationProfile } from "@/db/store";
 import type { RequestContext } from "@/lib/context";
 
 export interface JwtClaims {
@@ -31,14 +32,15 @@ export class BearerAuthError extends Error {
 
 async function resolveMember(
   ctx: RequestContext,
-  claims: JwtClaims
+  claims: JwtClaims,
+  profile: HydrationProfile = "full"
 ): Promise<Member> {
   const store = ctx.store as RequestContext["store"] & {
-    hydrateByAuthUser?: (authUserId: string) => Promise<Member | undefined>;
+    hydrateByAuthUser?: (authUserId: string, profile?: HydrationProfile) => Promise<Member | undefined>;
   };
 
   if (store.hydrateByAuthUser) {
-    let member = await store.hydrateByAuthUser(claims.sub);
+    let member = await store.hydrateByAuthUser(claims.sub, profile);
     if (!member) {
       member = ctx.onboarding.ensureFamilyForNewUser(
         claims.sub,
@@ -65,7 +67,8 @@ async function resolveMember(
 export async function requireBearerMember(
   request: Request,
   verifier: JwtVerifier,
-  createCtx: () => RequestContext
+  createCtx: () => RequestContext,
+  profile?: HydrationProfile
 ): Promise<{ ctx: RequestContext; member: Member }> {
   const header = request.headers.get("authorization");
   if (!header?.startsWith("Bearer ")) {
@@ -85,6 +88,11 @@ export async function requireBearerMember(
   }
 
   const ctx = createCtx();
-  const member = await resolveMember(ctx, claims);
+  // Issue 192: ordinary authenticated reads (GET) hydrate with the read
+  // profile — append-only ledgers skipped, one flattened fan-out wave.
+  // Writes and explicit overrides (images/avatars → "minimal") keep the
+  // full/requested profile; RLS stays the hard boundary either way.
+  const hydrationProfile = profile ?? (request.method === "GET" ? "read" : "full");
+  const member = await resolveMember(ctx, claims, hydrationProfile);
   return { ctx, member };
 }

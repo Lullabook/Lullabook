@@ -36,6 +36,17 @@ export interface PendingBriefClaimResult {
   claimedNow: boolean;
 }
 
+/**
+ * Hydration scope for SupabaseDataStore (issue 192).
+ *  - `full` (default): every Family table, including append-only ledgers and
+ *    worker registers — required for write/RLS/Hard-delete paths.
+ *  - `read`: ordinary authenticated reads — no append-only ledgers, one
+ *    flattened parallel wave (≤2 sequential waves with the member lookup).
+ *  - `minimal`: the authenticated Member row only — image/avatar routes that
+ *    only need the Family boundary for a blob-key prefix check.
+ */
+export type HydrationProfile = "full" | "read" | "minimal";
+
 export class DataStore {
   families = new Map<string, Family>();
   members = new Map<string, Member>();

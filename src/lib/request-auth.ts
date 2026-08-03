@@ -3,9 +3,18 @@ import { BearerAuthError, requireBearerMember, type JwtVerifier } from "@/lib/be
 import { createRequestContext } from "@/lib/context";
 import { RequestRecorder } from "@/lib/request-timing";
 import { createSupabaseJwtVerifier } from "@/lib/supabase-jwt";
+import type { HydrationProfile } from "@/db/store";
 
-/** Cookie session (web) or Bearer JWT (native) — whichever the request carries. */
-export async function resolveRequestAuth(request: Request): Promise<AuthedContext | null> {
+/**
+ * Cookie session (web) or Bearer JWT (native) — whichever the request
+ * carries. `profile` lets read-only blob routes request the minimal
+ * authenticated Family lookup (issue 192); the bearer seam otherwise picks
+ * read for GET and full for writes.
+ */
+export async function resolveRequestAuth(
+  request: Request,
+  profile?: HydrationProfile
+): Promise<AuthedContext | null> {
   const header = request.headers.get("authorization");
   if (header?.startsWith("Bearer ")) {
     // Issue 191: record auth/hydrate/total on the request context's recorder
@@ -27,7 +36,8 @@ export async function resolveRequestAuth(request: Request): Promise<AuthedContex
       const { ctx, member } = await requireBearerMember(
         request,
         verifier,
-        () => createRequestContext(timing)
+        () => createRequestContext(timing),
+        profile
       );
       timing.markHydrate();
       timing.mark("total");

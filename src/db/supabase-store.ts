@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DataStore, type PendingBriefClaimResult } from "@/db/store";
+import { DataStore, type HydrationProfile, type PendingBriefClaimResult } from "@/db/store";
 import type {
   Character,
   ConsentReceipt,
@@ -64,7 +64,10 @@ export class SupabaseDataStore extends DataStore {
   // Hydration
   // -------------------------------------------------------------------------
 
-  async hydrateByAuthUser(authUserId: string): Promise<Member | undefined> {
+  async hydrateByAuthUser(
+    authUserId: string,
+    profile: HydrationProfile = "full"
+  ): Promise<Member | undefined> {
     const { data, error } = await this.client
       .from("members")
       .select("*")
@@ -72,7 +75,15 @@ export class SupabaseDataStore extends DataStore {
       .maybeSingle();
     if (error) throw new Error(`hydrateByAuthUser failed: ${error.message}`);
     if (!data) return undefined;
-    await this.hydrateFamily(data.family_id as string);
+    if (profile === "minimal") {
+      // Image/avatar routes only need the Member's Family boundary for the
+      // blob-key prefix check — no Family graph, one query.
+      const member = this.toMember(data as Row);
+      this.members.set(member.id, member);
+      this.snap("members", member.id);
+      return member;
+    }
+    await this.hydrateFamily(data.family_id as string, profile);
     return this.getMemberByAuthUserId(authUserId);
   }
 
@@ -213,9 +224,13 @@ export class SupabaseDataStore extends DataStore {
     return { pending, claimedNow: row.claimed_now === true };
   }
 
-  async hydrateFamily(familyId: string): Promise<void> {
+  async hydrateFamily(familyId: string, profile: HydrationProfile = "full"): Promise<void> {
     if (this.hydratedFamilyIds.has(familyId)) return;
     this.hydratedFamilyIds.add(familyId);
+    if (profile === "read") {
+      await this.hydrateFamilyRead(familyId);
+      return;
+    }
 
     const q = <T = Row>(table: string, column = "family_id") =>
       this.client.from(table).select("*").eq(column, familyId) as unknown as Promise<{
@@ -841,6 +856,391 @@ export class SupabaseDataStore extends DataStore {
         }
       }
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Read-profile hydration (issue 192)
+  //
+  // Ordinary authenticated reads (GET) hydrate a single flattened wave that
+  // skips append-only ledgers and worker registers; the book graph arrives
+  // embedded in one storybooks query. The full profile above stays the
+  // write/RLS/Hard-delete hydration that inventories every table.
+  // -------------------------------------------------------------------------
+
+  private async hydrateFamilyRead(familyId: string): Promise<void> {
+    const q = <T = Row>(table: string, column = "family_id") =>
+      this.client.from(table).select("*").eq(column, familyId) as unknown as Promise<{
+        data: T[] | null;
+        error: { message: string } | null;
+      }>;
+
+    const [
+      families,
+      members,
+      personas,
+      characters,
+      subscriptions,
+      consentReceipts,
+      lightReceipts,
+      storybooksRes,
+      babiesRes,
+      momentsRes,
+      emailPlusVpcRequestsRes,
+      falTrainingRequestsRes,
+    ] = await Promise.all([
+      this.client.from("families").select("*").eq("id", familyId),
+      q("members"),
+      q("personas"),
+      q("characters"),
+      q("subscriptions"),
+      q("consent_receipts"),
+      q("light_consent_receipts"),
+      // Book graph in ONE query: pages + page_candidates + persisted text.
+      this.client
+        .from("storybooks")
+        .select("*, pages(*, page_candidates(*)), persisted_generations(*)")
+        .eq("family_id", familyId),
+      this.client
+        .from("babies")
+        .select("*, baby_person_bonds(*)")
+        .eq("family_id", familyId),
+      this.client
+        .from("moments")
+        .select("*, moment_people(*)")
+        .eq("family_id", familyId),
+      q("email_plus_vpc_requests"),
+      q("fal_training_requests"),
+    ]);
+
+    for (const res of [
+      families,
+      members,
+      personas,
+      characters,
+      subscriptions,
+      consentReceipts,
+      lightReceipts,
+      storybooksRes,
+      babiesRes,
+      momentsRes,
+      emailPlusVpcRequestsRes,
+      falTrainingRequestsRes,
+    ]) {
+      if (res.error) {
+        const msg = res.error.message;
+        if (msg.includes("Could not find the table")) {
+          throw new Error(
+            `${msg} — your Supabase project is missing newer tables. Open Supabase Dashboard → SQL Editor, then paste and run the migrations in supabase/migrations/ that your project has not applied yet, in order. Then refresh.`
+          );
+        }
+        throw new Error(`hydrateFamily failed: ${msg}`);
+      }
+    }
+
+    for (const r of (families.data ?? []) as Row[]) {
+      const family: Family = { id: r.id, createdAt: new Date(r.created_at) };
+      this.families.set(family.id, family);
+      this.snap("families", family.id);
+    }
+    for (const r of (members.data ?? []) as Row[]) {
+      const member = this.toMember(r);
+      this.members.set(member.id, member);
+      this.snap("members", member.id);
+    }
+    for (const r of (personas.data ?? []) as Row[]) {
+      const persona = this.toPersona(r);
+      this.personas.set(persona.id, persona);
+      this.snap("personas", persona.id);
+    }
+    for (const r of (characters.data ?? []) as Row[]) {
+      const character = this.toCharacter(r);
+      this.characters.set(character.id, character);
+      this.snap("characters", character.id);
+    }
+    for (const r of (subscriptions.data ?? []) as Row[]) {
+      const sub = this.toSubscription(r);
+      this.subscriptions.set(sub.familyId, sub);
+      this.snap("subscriptions", sub.familyId);
+    }
+    for (const r of (consentReceipts.data ?? []) as Row[]) {
+      const receipt = this.toConsentReceipt(r);
+      this.consentReceipts.set(receipt.id, receipt);
+      this.snap("consent_receipts", receipt.id);
+    }
+    for (const r of (lightReceipts.data ?? []) as Row[]) {
+      const receipt = this.toLightConsentReceipt(r);
+      this.lightConsentReceipts.set(receipt.id, receipt);
+      this.snap("light_consent_receipts", receipt.id);
+    }
+    for (const r of (storybooksRes.data ?? []) as Row[]) {
+      const book = this.toStorybook(r);
+      this.storybooks.set(book.id, book);
+      this.snap("storybooks", book.id);
+      for (const pr of (r.pages ?? []) as Row[]) {
+        const page = this.toPage(pr);
+        this.pages.set(page.id, page);
+        this.snap("pages", page.id);
+        for (const cr of (pr.page_candidates ?? []) as Row[]) {
+          const candidate = this.toPageCandidate(cr);
+          this.pageCandidates.set(candidate.id, candidate);
+          this.snap("page_candidates", candidate.id);
+        }
+      }
+      for (const gr of (r.persisted_generations ?? []) as Row[]) {
+        const generation: PersistedGeneration = {
+          storybookId: gr.storybook_id,
+          story: gr.story,
+          persistedAt: new Date(gr.persisted_at),
+        };
+        this.persistedGenerations.set(generation.storybookId, generation);
+        this.snap("persisted_generations", generation.storybookId);
+      }
+    }
+    for (const r of (babiesRes.data ?? []) as Row[]) {
+      const baby = this.toBaby(r);
+      this.babies.set(baby.id, baby);
+      this.snap("babies", baby.id);
+      for (const br of (r.baby_person_bonds ?? []) as Row[]) {
+        const bond = this.toBond(br);
+        this.babyPersonBonds.set(bond.id, bond);
+        this.snap("baby_person_bonds", bond.id);
+      }
+    }
+    for (const r of (momentsRes.data ?? []) as Row[]) {
+      const moment = this.toMoment(r);
+      this.moments.set(moment.id, moment);
+      this.snap("moments", moment.id);
+      for (const lr of (r.moment_people ?? []) as Row[]) {
+        const link = this.toMomentPersonLink(lr);
+        this.momentPeople.set(link.id, link);
+        this.snap("moment_people", link.id);
+      }
+    }
+    for (const r of (emailPlusVpcRequestsRes.data ?? []) as Row[]) {
+      const request = this.toEmailPlusVpcRequest(r);
+      this.emailPlusVpcRequests.set(request.id, request);
+      this.snap("email_plus_vpc_requests", request.id);
+    }
+    for (const r of (falTrainingRequestsRes.data ?? []) as Row[]) {
+      const request = this.toFalTrainingRequest(r);
+      this.falTrainingRequests.set(request.requestId, request);
+      this.snap("fal_training_requests", request.requestId);
+    }
+  }
+
+  // Row → domain converters shared by the read profile and the minimal
+  // member lookup. The full profile keeps its inline mapping loops; these
+  // converters mirror the same column→field contract (issue 192).
+
+  private toMember(r: Row): Member {
+    return {
+      id: r.id,
+      authUserId: r.auth_user_id,
+      familyId: r.family_id,
+      email: r.email,
+      role: r.role,
+      selfPersonaId: r.self_persona_id,
+      selectedBabyId: r.selected_baby_id ?? null,
+      jurisdiction: r.jurisdiction,
+      createdAt: new Date(r.created_at),
+    };
+  }
+
+  private toPersona(r: Row): Persona {
+    return {
+      id: r.id,
+      familyId: r.family_id,
+      createdByMemberId: r.created_by_member_id,
+      kind: r.kind,
+      displayName: r.display_name,
+      status: r.status,
+      loraWeightKey: r.lora_weight_key,
+      avatarKey: r.avatar_key ?? null,
+      reviewSampleKeys: Array.isArray(r.review_sample_keys)
+        ? r.review_sample_keys.filter((key): key is string => typeof key === "string")
+        : [],
+      likenessConfirmed: r.likeness_confirmed ?? false,
+      promotedFromCharacterId: r.promoted_from_character_id ?? undefined,
+      questionnaire: r.questionnaire ?? undefined,
+      createdAt: new Date(r.created_at),
+    };
+  }
+
+  private toCharacter(r: Row): Character {
+    return {
+      id: r.id,
+      familyId: r.family_id,
+      createdByMemberId: r.created_by_member_id,
+      displayName: r.display_name,
+      description: r.description ?? "",
+      questionnaire: r.questionnaire,
+      promotedPersonaId: r.promoted_persona_id ?? undefined,
+      createdAt: new Date(r.created_at),
+    };
+  }
+
+  private toSubscription(r: Row): Subscription {
+    return {
+      familyId: r.family_id,
+      status: r.status,
+      stripeCustomerId: r.stripe_customer_id,
+      stripeSubscriptionId: r.stripe_subscription_id,
+      updatedAt: new Date(r.updated_at),
+    };
+  }
+
+  private toConsentReceipt(r: Row): ConsentReceipt {
+    return {
+      id: r.id,
+      familyId: r.family_id,
+      memberId: r.member_id,
+      jurisdiction: r.jurisdiction,
+      noticeVersion: r.notice_version,
+      method: r.method ?? undefined,
+      status: r.status ?? "verified",
+      expiresAt: r.expires_at ? new Date(r.expires_at) : null,
+      consentedAt: new Date(r.consented_at),
+    };
+  }
+
+  private toLightConsentReceipt(r: Row): LightConsentReceipt {
+    return {
+      id: r.id,
+      characterId: r.character_id,
+      familyId: r.family_id,
+      memberId: r.member_id,
+      jurisdiction: r.jurisdiction,
+      noticeVersion: r.notice_version,
+      attestation: r.attestation,
+      consentedAt: new Date(r.consented_at),
+    };
+  }
+
+  private toStorybook(r: Row): Storybook {
+    return {
+      id: r.id,
+      familyId: r.family_id,
+      babyId: r.baby_id ?? undefined,
+      createdByMemberId: r.created_by_member_id,
+      status: r.status,
+      brief: r.brief,
+      classicId: r.classic_id ?? undefined,
+      styleBible: r.style_bible,
+      rerollBudgetRemaining: r.reroll_budget_remaining,
+      rerollCredits: r.reroll_credits,
+      createdAt: new Date(r.created_at),
+      finalizedAt: r.finalized_at ? new Date(r.finalized_at) : null,
+    };
+  }
+
+  private toPage(r: Row): Page {
+    return {
+      id: r.id,
+      storybookId: r.storybook_id,
+      index: r.index,
+      text: r.text,
+      illustrationUrl: r.illustration_url,
+      illustrationBlobKey: r.illustration_blob_key,
+      videoBlobKey: r.video_blob_key ?? null,
+      videoUrl: r.video_url ?? null,
+      voiceClipId: r.voice_clip_id ?? null,
+      generationStatus: r.generation_status,
+      personaCount: r.persona_count,
+    };
+  }
+
+  private toPageCandidate(r: Row): PageCandidate {
+    return {
+      id: r.id,
+      pageId: r.page_id,
+      kind: r.kind,
+      content: r.content,
+      selected: r.selected,
+      createdAt: new Date(r.created_at),
+    };
+  }
+
+  private toBaby(r: Row): import("@/domain/types").Baby {
+    return {
+      id: r.id,
+      familyId: r.family_id,
+      displayName: r.display_name,
+      birthDate: r.birth_date ? String(r.birth_date).slice(0, 10) : null,
+      dailyRoutine: Array.isArray(r.daily_routine)
+        ? (r.daily_routine as import("@/domain/daily-types").RoutineEntry[])
+        : null,
+      rosterGroupId: r.roster_group_id,
+      rosterScope: r.roster_scope,
+      isDefault: r.is_default,
+      createdAt: new Date(r.created_at),
+    };
+  }
+
+  private toBond(r: Row): import("@/domain/types").BabyPersonBond {
+    return {
+      id: r.id,
+      babyId: r.baby_id,
+      personaId: r.persona_id,
+      relationship: r.relationship,
+      babyCallsThem: r.baby_calls_them,
+      theyCallBaby: r.they_call_baby,
+    };
+  }
+
+  private toMoment(r: Row): import("@/domain/types").Moment {
+    return {
+      id: r.id,
+      familyId: r.family_id,
+      babyId: r.baby_id,
+      createdByMemberId: r.created_by_member_id,
+      body: r.body,
+      occurredOn: String(r.occurred_on).slice(0, 10),
+      isSignificant: r.is_significant,
+      momentType: r.moment_type,
+      createdAt: new Date(r.created_at),
+    };
+  }
+
+  private toMomentPersonLink(r: Row): import("@/domain/types").MomentPersonLink {
+    return {
+      id: r.id,
+      momentId: r.moment_id,
+      personaId: r.persona_id ?? undefined,
+      characterId: r.character_id ?? undefined,
+    };
+  }
+
+  private toEmailPlusVpcRequest(r: Row): EmailPlusVpcRequest {
+    return {
+      id: r.id,
+      familyId: r.family_id,
+      memberId: r.member_id,
+      email: r.email,
+      status: r.status,
+      token: r.token,
+      noticeVersion: r.notice_version,
+      requestedAt: new Date(r.requested_at),
+      confirmedAt: r.confirmed_at ? new Date(r.confirmed_at) : undefined,
+    };
+  }
+
+  private toFalTrainingRequest(r: Row): FalTrainingRequestRecord {
+    return {
+      requestId: r.request_id,
+      familyId: r.family_id,
+      personaId: r.persona_id,
+      endpoint: r.endpoint,
+      model: r.model,
+      steps: r.steps,
+      idempotencyKey: r.idempotency_key,
+      status: r.status,
+      inputZipKey: r.input_zip_key ?? undefined,
+      loraWeightKey: r.lora_weight_key ?? undefined,
+      configurationKey: r.configuration_key ?? undefined,
+      error: r.error ?? undefined,
+      createdAt: new Date(r.created_at),
+      updatedAt: new Date(r.updated_at),
+    };
   }
 
   // -------------------------------------------------------------------------
