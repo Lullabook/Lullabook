@@ -60,8 +60,9 @@ export const TIER_ENTITLEMENTS: Record<Tier, Entitlement> = {
   },
   normal: {
     tier: "normal",
-    storyCap: 8,
-    memberCap: 4,
+    // Legacy compatibility only; R1 gates resolve PLAN_ENTITLEMENTS below.
+    storyCap: R1_PLAN_DEFINITION.limits.storybooksPerMonth * 2,
+    memberCap: R1_PLAN_DEFINITION.limits.personas + 1,
     canNarrate: true,
     canVideo: false,
     canCustomStyle: false,
@@ -84,9 +85,7 @@ export const PLAN_ENTITLEMENTS: Record<Plan, PlanEntitlement> = {
     storyCap: R1_PLAN_DEFINITION.limits.storybooksPerMonth,
     memberCap: R1_PLAN_DEFINITION.limits.personas,
     memberLoginCap: R1_PLAN_DEFINITION.limits.memberLogins,
-    canNarrate: false,
-    canVideo: false,
-    canCustomStyle: false,
+    ...R1_PLAN_DEFINITION.capabilities,
   },
   our_whole_family: {
     plan: "our_whole_family",
@@ -217,11 +216,14 @@ export class EntitlementService {
     return sub?.tier ?? "normal";
   }
 
-  /** The entitlement bundle for the Household's tier. */
+  /** Canonical R1 projection used by paid server surfaces. */
   getEntitlement(familyId: string): Entitlement {
-    const tier = this.getTier(familyId);
-    if (tier === "none") return { ...NO_ENTITLEMENT };
-    return TIER_ENTITLEMENTS[tier];
+    return this.getPlanEntitlement(familyId);
+  }
+
+  /** Compatibility name for callers that explicitly need the R1 projection. */
+  getR1Entitlement(familyId: string): PlanEntitlement {
+    return this.getPlanEntitlement(familyId);
   }
 
   /** Gate: the Household must have an active (paid or trial) subscription. */
@@ -234,9 +236,10 @@ export class EntitlementService {
     }
   }
 
-  /** Gate: the Household's tier must grant the capability, else 403. */
+  /** Gate: the Household's legacy tier must grant the capability, else 403. */
   requireCapability(familyId: string, capability: Capability): void {
-    const ent = this.getEntitlement(familyId);
+    const tier = this.getTier(familyId);
+    const ent = tier === "none" ? NO_ENTITLEMENT : TIER_ENTITLEMENTS[tier];
     if (!ent[CAPABILITY_FLAG[capability]]) {
       const required = CAPABILITY_TIER[capability];
       throw new EntitlementError(

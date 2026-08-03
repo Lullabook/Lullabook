@@ -1,27 +1,16 @@
-import type { RevenueCatPurchaseAdapter } from "@/adapters/types";
+import { createHash } from "node:crypto";
+import type {
+  RevenueCatEntitlementEvidence,
+  RevenueCatLifecycleEvent,
+  RevenueCatPurchaseAdapter,
+  RevenueCatPurchaseResult,
+} from "@/adapters/types";
 import type { DataStore } from "@/db/store";
 import type { Tier } from "@/domain/types";
-import type { Entitlement } from "@/services/entitlement";
-import { EntitlementService, TIER_ENTITLEMENTS } from "@/services/entitlement";
+import { PLAN_ENTITLEMENTS, EntitlementService, type Entitlement } from "@/services/entitlement";
+import { R1_PLAN_DEFINITION, r1TierFromRevenueCatProduct } from "@/domain/plan";
 import type { SubscriptionService } from "@/services/subscription";
 
-/**
- * RevenueCat Apple IAP + 7-day trial as VPC (issue 92 / ADR-0023 / ADR-0018).
- *
- * The entry point to the paid product: a **7-day free trial of Normal** that
- * requires a **card-on-file** — that card is the Verifiable Parental Consent
- * gate (ADR-0008 as updated). No child likeness (baby/Family-member photo
- * upload) is permitted without it. The trial/purchase maps to the server
- * entitlement model from issue 91.
- *
- * Entitlements are **cached** so a RevenueCat outage degrades gracefully: the
- * last-known tier is kept and the system retries on the next sync; the user is
- * never blocked or crashed because RevenueCat is down. The cache is the
- * subscription row itself — `SubscriptionService.isActive` reads it directly.
- *
- * No secrets: RevenueCat API keys are referenced by env-var name only
- * (`REVENUECAT_API_KEY`, `REVENUECAT_WEBHOOK_SECRET`); never committed.
- */
 export interface TrialStartOptions {
   hasPaymentMethod: boolean;
 }
@@ -32,13 +21,52 @@ export interface PurchaseOptions {
 
 export interface SyncResult {
   entitlement: Entitlement;
-  /** True when the sync fell back to the cached entitlement (RevenueCat unreachable). */
+  /** True when RevenueCat did not provide verified evidence. */
   degraded: boolean;
 }
 
-export class RevenueCatPurchaseService {
-  private readonly cache = new Map<string, { tier: Tier; isTrial: boolean; syncedAt: Date }>();
+export interface RevenueCatWebhookResult {
+  ok: boolean;
+  duplicate: boolean;
+  action?: "activated" | "deactivated" | "ignored";
+  error?: string;
+}
 
+const ACTIVE_EVENTS = new Set([
+  "INITIAL_PURCHASE",
+  "NON_RENEWING_PURCHASE",
+  "RENEWAL",
+  "PRODUCT_CHANGE",
+  "UNCANCELLATION",
+  "RESTORE",
+]);
+const INACTIVE_EVENTS = new Set(["CANCELLATION", "EXPIRATION", "BILLING_ISSUE", "REFUND"]);
+const KNOWN_EVENTS = new Set([...ACTIVE_EVENTS, ...INACTIVE_EVENTS]);
+
+function isTier(value: string | undefined): value is Tier {
+  return value === "basic" || value === "normal" || value === "plus";
+}
+
+function evidenceTier(evidence: RevenueCatEntitlementEvidence): Tier | undefined {
+  const productTier = r1TierFromRevenueCatProduct(evidence.productId);
+  if (evidence.productId && !productTier) return undefined;
+  if (productTier) return productTier;
+  return isTier(evidence.tier) ? evidence.tier : undefined;
+}
+
+function purchaseIsResolved(result: RevenueCatPurchaseResult): boolean {
+  const verified = result.verified === true ||
+    (result.verified === undefined && process.env.NODE_ENV !== "production");
+  return Boolean(result.entitlementId && verified);
+}
+
+/**
+ * Server RevenueCat seam. Native transactions are evidence producers; this
+ * service is the only code allowed to turn verified evidence into entitlement.
+ * Webhook receipts use the already hydrated Family context and are persisted by
+ * the caller's single `ctx.persist()`.
+ */
+export class RevenueCatPurchaseService {
   constructor(
     private readonly store: DataStore,
     private readonly subscriptions: SubscriptionService,
@@ -46,73 +74,192 @@ export class RevenueCatPurchaseService {
     private readonly entitlements?: EntitlementService
   ) {}
 
-  /** Start the 7-day trial of the given tier (Normal default). Requires card-on-file = VPC. */
   async startTrial(familyId: string, tier: Tier = "normal", options: TrialStartOptions): Promise<void> {
     if (!options.hasPaymentMethod) {
       throw new Error("A payment method is required to start a trial (VPC gate — ADR-0008)");
     }
     const result = await this.revenuecat.startTrial(familyId, tier, { hasPaymentMethod: true });
-    this.applyEntitlement(familyId, tier, result.isTrial);
+    this.applyPurchaseEvidence(familyId, tier, result);
   }
 
-  /** Direct purchase (non-trial) of a tier. */
   async purchase(familyId: string, tier: Tier, options: PurchaseOptions): Promise<void> {
     if (!options.hasPaymentMethod) {
       throw new Error("A payment method is required to purchase");
     }
     const result = await this.revenuecat.purchase(familyId, tier, { hasPaymentMethod: true });
-    this.applyEntitlement(familyId, tier, result.isTrial);
+    this.applyPurchaseEvidence(familyId, tier, result);
+  }
+
+  /** Reconcile a server-side entitlement read from RevenueCat. */
+  async syncEntitlement(familyId: string): Promise<SyncResult> {
+    return this.applyRemoteEvidence(familyId, await this.revenuecat.fetchEntitlement(familyId));
+  }
+
+  /** Restore is explicit; a missing native restore method falls back to a read. */
+  async restorePurchases(familyId: string): Promise<SyncResult> {
+    const evidence = this.revenuecat.restorePurchases
+      ? await this.revenuecat.restorePurchases(familyId)
+      : await this.revenuecat.fetchEntitlement(familyId);
+    return this.applyRemoteEvidence(familyId, evidence);
   }
 
   /**
-   * Sync the current entitlement from RevenueCat. On outage, falls back to the
-   * cached entitlement (the subscription row) and returns `degraded: true`.
+   * Apply one normalized, already signature-verified RevenueCat lifecycle event.
+   * Event receipts live in the hydrated Family audit inventory, so replaying an
+   * event is a no-op after the request context is persisted.
    */
-  async syncEntitlement(familyId: string): Promise<SyncResult> {
-    const remote = await this.revenuecat.fetchEntitlement(familyId);
-    if (remote) {
-      const tier = remote.tier as Tier;
-      this.applyEntitlement(familyId, tier, remote.isTrial);
-      return {
-        entitlement: this.getEntitlement(familyId),
-        degraded: false,
-      };
+  handleWebhookEvent(event: RevenueCatLifecycleEvent): RevenueCatWebhookResult {
+    const familyId = this.resolveFamilyId(event.appUserId);
+    if (!familyId) {
+      return { ok: false, duplicate: false, error: "RevenueCat app_user_id is not bound to a Family" };
     }
-    return {
-      entitlement: this.getEntitlement(familyId),
-      degraded: true,
-    };
+    if (typeof event.eventId !== "string" || !event.eventId.trim() || typeof event.type !== "string" || !event.type.trim()) {
+      return { ok: false, duplicate: false, error: "RevenueCat event id and type are required" };
+    }
+
+    const eventType = event.type.toUpperCase();
+    if ([...this.store.moderationAudit.values()].some(
+      (receipt) =>
+        receipt.familyId === familyId &&
+        receipt.resourceType === "revenuecat_lifecycle" &&
+        receipt.resourceId === event.eventId
+    )) {
+      return { ok: true, duplicate: true };
+    }
+
+    const outOfOrder = this.isOlderThanRecordedEvent(familyId, event.eventTimestampMs);
+    const tier = this.lifecycleTier(event);
+    const known = KNOWN_EVENTS.has(eventType);
+    const action = !known || outOfOrder || (ACTIVE_EVENTS.has(eventType) && !tier)
+      ? "ignored"
+      : ACTIVE_EVENTS.has(eventType)
+        ? "activated"
+        : "deactivated";
+
+    const receiptId = this.receiptId(familyId, event.eventId);
+    this.store.moderationAudit.set(receiptId, {
+      id: receiptId,
+      familyId,
+      resourceType: "revenuecat_lifecycle",
+      resourceId: event.eventId,
+      outcome: action === "ignored" ? "blocked" : "allowed",
+      reason: `${eventType}:${event.eventTimestampMs ?? ""}`,
+      createdAt: new Date(),
+    });
+
+    if (action === "ignored") return { ok: true, duplicate: false, action };
+
+    if (action === "activated") {
+      this.subscriptions.handleRevenueCatActivated(
+        familyId,
+        event.subscriptionId ?? `rc_${event.eventId}`,
+        tier!,
+        {
+          isTrial: event.isTrial === true,
+          expirationAtMs: event.expirationAtMs,
+        }
+      );
+    } else {
+      this.subscriptions.handleRevenueCatInactive(
+        familyId,
+        event.subscriptionId,
+        eventType === "BILLING_ISSUE" ? "past_due" : "canceled"
+      );
+    }
+    return { ok: true, duplicate: false, action };
   }
 
-  private applyEntitlement(familyId: string, tier: Tier, isTrial: boolean): void {
-    const existing = this.store.getSubscription(familyId);
-    this.store.saveSubscription({
+  private applyPurchaseEvidence(
+    familyId: string,
+    tier: Tier,
+    result: RevenueCatPurchaseResult
+  ): void {
+    if (!purchaseIsResolved(result)) {
+      throw new UnresolvedRevenueCatPurchaseError();
+    }
+    this.subscriptions.handleRevenueCatActivated(
       familyId,
-      status: "active",
-      stripeCustomerId: existing?.stripeCustomerId ?? null,
-      stripeSubscriptionId: existing?.stripeSubscriptionId ?? `rc_${familyId}`,
+      result.subscriptionId ?? result.entitlementId,
       tier,
-      updatedAt: new Date(),
-    });
-    this.cache.set(familyId, { tier, isTrial, syncedAt: new Date() });
+      { isTrial: result.isTrial, expirationAtMs: result.expirationAtMs }
+    );
+  }
+
+  private async applyRemoteEvidence(
+    familyId: string,
+    evidence: RevenueCatEntitlementEvidence | null
+  ): Promise<SyncResult> {
+    const tier = evidence ? evidenceTier(evidence) : undefined;
+    const verified = evidence?.verified === true ||
+      (evidence?.verified === undefined && process.env.NODE_ENV !== "production");
+    if (evidence && tier && verified) {
+      this.subscriptions.handleRevenueCatActivated(
+        familyId,
+        evidence.subscriptionId ?? `rc_${familyId}`,
+        tier,
+        { isTrial: evidence.isTrial, expirationAtMs: evidence.expirationAtMs }
+      );
+      return { entitlement: this.getEntitlement(familyId), degraded: false };
+    }
+    return { entitlement: this.getEntitlement(familyId), degraded: true };
+  }
+
+  private lifecycleTier(event: RevenueCatLifecycleEvent): Tier | undefined {
+    const productTier = r1TierFromRevenueCatProduct(event.productId);
+    if (event.productId && !productTier) return undefined;
+    if (productTier) return productTier;
+    return isTier(event.tier) ? event.tier : "normal";
+  }
+
+  private resolveFamilyId(appUserId: string): string | undefined {
+    if (this.store.familyDataExists(appUserId)) return appUserId;
+    return this.store.getMemberByAuthUserId(appUserId)?.familyId;
+  }
+
+  private receiptId(familyId: string, eventId: string): string {
+    const hex = createHash("sha256")
+      .update(`${familyId}:${eventId}`)
+      .digest("hex")
+      .slice(0, 32);
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20)}`;
+  }
+
+  private isOlderThanRecordedEvent(familyId: string, timestampMs?: number): boolean {
+    if (timestampMs === undefined) return false;
+    let newest = -Infinity;
+    for (const entry of this.store.moderationAudit.values()) {
+      if (entry.familyId !== familyId || entry.resourceType !== "revenuecat_lifecycle") continue;
+      const rawTimestamp = entry.reason?.split(":").at(-1);
+      if (!rawTimestamp) continue;
+      const recorded = Number(rawTimestamp);
+      if (Number.isFinite(recorded)) newest = Math.max(newest, recorded);
+    }
+    return newest !== -Infinity && timestampMs < newest;
   }
 
   private getEntitlement(familyId: string): Entitlement {
-    if (this.entitlements) {
-      return this.entitlements.getEntitlement(familyId);
-    }
+    if (this.entitlements) return this.entitlements.getEntitlement(familyId);
     const sub = this.store.getSubscription(familyId);
-    if (!sub || sub.status !== "active") {
-      return {
-        tier: "basic" as Tier,
-        storyCap: 0,
-        memberCap: 0,
-        canNarrate: false,
-        canVideo: false,
-        canCustomStyle: false,
-      };
-    }
-    const tier = (sub.tier ?? "normal") as Tier;
-    return TIER_ENTITLEMENTS[tier];
+    if (!sub || sub.status !== "active") return {
+      tier: "basic",
+      storyCap: 0,
+      memberCap: 0,
+      canNarrate: false,
+      canVideo: false,
+      canCustomStyle: false,
+    };
+    return sub.tier === "plus" ? PLAN_ENTITLEMENTS.our_whole_family : {
+      ...PLAN_ENTITLEMENTS.just_us,
+      storyCap: R1_PLAN_DEFINITION.limits.storybooksPerMonth,
+      memberCap: R1_PLAN_DEFINITION.limits.personas,
+    };
+  }
+}
+
+export class UnresolvedRevenueCatPurchaseError extends Error {
+  readonly code = "revenuecat_purchase_unresolved";
+  constructor() {
+    super("RevenueCat has not verified the purchase yet");
+    this.name = "UnresolvedRevenueCatPurchaseError";
   }
 }

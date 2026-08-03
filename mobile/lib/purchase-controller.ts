@@ -47,11 +47,25 @@ export type StartTrialResult =
 export interface PurchaseController {
   readonly kind: "fake" | "revenuecat";
   startTrial(): Promise<StartTrialResult>;
+  restorePurchases?(): Promise<StartTrialResult>;
 }
 
 export interface PurchaseControllerDeps {
   startTrialRequest(): Promise<StartTrialWire>;
   fetchEntitlement(): Promise<EntitlementSnapshot>;
+}
+
+/** Native-module boundary; the SDK is injected by an EAS native profile. */
+export interface NativeRevenueCatClient {
+  purchase(productId: string): Promise<void>;
+  restorePurchases(): Promise<void>;
+}
+
+export interface RevenueCatPurchaseControllerDeps extends PurchaseControllerDeps {
+  nativePurchases: NativeRevenueCatClient;
+  productId: string;
+  /** Server response after the webhook has made entitlement authoritative. */
+  fetchVerifiedPurchase(): Promise<StartTrialResult>;
 }
 
 export class FakePurchaseController implements PurchaseController {
@@ -82,14 +96,43 @@ export class FakePurchaseController implements PurchaseController {
 }
 
 /**
- * EAS-milestone placeholder (ADR-0027). Never optimistic, never throws into
- * UI code — startTrial resolves to a structured failure until the real
- * react-native-purchases implementation lands in a dev build.
+ * Native RevenueCat seam. The SDK transaction is never enough to unlock: the
+ * injected server read must report verified entitlement after the webhook.
+ * With no native client (Expo Go), retain the old structured failure.
  */
 export class RevenueCatPurchaseController implements PurchaseController {
   readonly kind = "revenuecat" as const;
 
+  constructor(private readonly deps?: RevenueCatPurchaseControllerDeps) {}
+
   async startTrial(): Promise<StartTrialResult> {
+    if (!this.deps) return this.unavailable();
+    try {
+      await this.deps.nativePurchases.purchase(this.deps.productId);
+      return await this.verifiedResult();
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Purchase failed — please try again" };
+    }
+  }
+
+  async restorePurchases(): Promise<StartTrialResult> {
+    if (!this.deps) return this.unavailable();
+    try {
+      await this.deps.nativePurchases.restorePurchases();
+      return await this.verifiedResult();
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Restore failed — please try again" };
+    }
+  }
+
+  private async verifiedResult(): Promise<StartTrialResult> {
+    const result = await this.deps!.fetchVerifiedPurchase();
+    return result.ok && result.isActive
+      ? result
+      : { ok: false, error: "Purchase is pending server verification — no paid action was unlocked" };
+  }
+
+  private unavailable(): StartTrialResult {
     return {
       ok: false,
       error:
@@ -104,9 +147,10 @@ export class RevenueCatPurchaseController implements PurchaseController {
  */
 export function createPurchaseController(
   deps: PurchaseControllerDeps,
-  realPurchasesEnabled: boolean
+  realPurchasesEnabled: boolean,
+  nativeDeps?: RevenueCatPurchaseControllerDeps
 ): PurchaseController {
   return realPurchasesEnabled
-    ? new RevenueCatPurchaseController()
+    ? new RevenueCatPurchaseController(nativeDeps)
     : new FakePurchaseController(deps);
 }

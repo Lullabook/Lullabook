@@ -67,6 +67,23 @@ export const R1_PLAN_DEFINITION = {
 /** Offline-safe fallback sourced from the same contract as every server route. */
 export const R1_FALLBACK_PLAN: R1PlanContract = R1_PLAN_DEFINITION;
 
+/**
+ * RevenueCat product ids are configured outside the domain contract. Keep the
+ * mapping here so webhook and entitlement code cannot invent a second R1 plan.
+ * An absent product is allowed for legacy lifecycle payloads; an unknown
+ * product is rejected before it can unlock the Family.
+ */
+export function r1TierFromRevenueCatProduct(productId: string | undefined): Tier | undefined {
+  if (!productId) return "normal";
+  const normalized = productId
+    .toLowerCase()
+    .replace(/-/g, "_")
+    .replace(/^lullabook_/, "");
+  return normalized === R1_PLAN_DEFINITION.plan || normalized.startsWith(`${R1_PLAN_DEFINITION.plan}_`)
+    ? "normal"
+    : undefined;
+}
+
 /** Limit copy stays data-driven so mobile billing cannot drift from server values. */
 export function getR1PlanFeatureLabels(plan: R1PlanContract): string[] {
   return [

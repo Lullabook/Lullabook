@@ -56,17 +56,44 @@ export class SubscriptionService {
     });
   }
 
-  handleRevenueCatActivated(familyId: string, revenueCatSubscriptionId: string) {
+  handleRevenueCatActivated(
+    familyId: string,
+    revenueCatSubscriptionId: string,
+    tier?: Tier,
+    options: { isTrial?: boolean; expirationAtMs?: number } = {}
+  ) {
     const existing = this.store.getSubscription(familyId);
+    const trialEndsAt = options.isTrial
+      ? new Date(options.expirationAtMs ?? Date.now() + TRIAL_DAYS * DAY_MS)
+      : null;
     this.store.saveSubscription({
       familyId,
       status: "active",
       stripeCustomerId: existing?.stripeCustomerId ?? null,
-      stripeSubscriptionId: existing?.stripeSubscriptionId ?? revenueCatSubscriptionId,
-      // Real purchase converts/overrides any trial — clear the window (issue 168).
+      stripeSubscriptionId: revenueCatSubscriptionId,
+      tier: tier ?? existing?.tier ?? "normal",
+      trialEndsAt,
+      updatedAt: new Date(),
+    });
+    this.store.purgeScheduled.delete(familyId);
+  }
+
+  handleRevenueCatInactive(
+    familyId: string,
+    revenueCatSubscriptionId?: string,
+    status: "canceled" | "past_due" = "canceled"
+  ) {
+    const existing = this.store.getSubscription(familyId);
+    this.store.saveSubscription({
+      familyId,
+      status,
+      stripeCustomerId: existing?.stripeCustomerId ?? null,
+      stripeSubscriptionId: revenueCatSubscriptionId ?? existing?.stripeSubscriptionId ?? null,
+      tier: existing?.tier ?? "normal",
       trialEndsAt: null,
       updatedAt: new Date(),
     });
+    if (status === "canceled") this.schedulePurge(familyId);
   }
 
   cancel(familyId: string) {
@@ -77,6 +104,10 @@ export class SubscriptionService {
       status: "canceled",
       updatedAt: new Date(),
     });
+    this.schedulePurge(familyId);
+  }
+
+  private schedulePurge(familyId: string) {
     const purgeAt = new Date();
     purgeAt.setDate(purgeAt.getDate() + 30);
     this.store.purgeScheduled.set(familyId, { familyId, purgeAt });

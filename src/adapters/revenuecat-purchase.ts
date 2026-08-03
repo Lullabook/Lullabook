@@ -1,4 +1,8 @@
-import type { RevenueCatPurchaseAdapter, RevenueCatPurchaseResult } from "@/adapters/types";
+import type {
+  RevenueCatEntitlementEvidence,
+  RevenueCatPurchaseAdapter,
+  RevenueCatPurchaseResult,
+} from "@/adapters/types";
 import { optionalEnv } from "@/adapters/env";
 
 /**
@@ -8,9 +12,9 @@ import { optionalEnv } from "@/adapters/env";
  * entitlement sync. API keys are referenced by env-var name only — never
  * logged, never committed.
  *
- * In local dev (no keys set), the adapter throws on purchase attempts; tests
- * use the FakeRevenueCat adapter. The webhook handler
- * (`src/adapters/revenuecat.ts`) handles the push-side separately.
+ * The native SDK owns the Apple transaction. This server adapter never invents
+ * a successful purchase: native callers wait for the signed RevenueCat webhook,
+ * while this adapter is only used for server-side reconciliation.
  */
 const API_BASE = "https://api.revenuecat.com/v1";
 
@@ -29,7 +33,7 @@ export class RealRevenueCatPurchaseAdapter implements RevenueCatPurchaseAdapter 
     if (!options.hasPaymentMethod) {
       throw new Error("A payment method is required to start a trial (VPC gate)");
     }
-    return this.makePurchase(familyId, tier, true);
+    return this.unresolvedNativePurchase(tier, true);
   }
 
   async purchase(
@@ -40,33 +44,49 @@ export class RealRevenueCatPurchaseAdapter implements RevenueCatPurchaseAdapter 
     if (!options.hasPaymentMethod) {
       throw new Error("A payment method is required to purchase");
     }
-    return this.makePurchase(familyId, tier, false);
+    return this.unresolvedNativePurchase(tier, false);
   }
 
-  async fetchEntitlement(familyId: string): Promise<{ tier: string; isTrial: boolean } | null> {
+  async fetchEntitlement(familyId: string): Promise<RevenueCatEntitlementEvidence | null> {
     if (!this.apiKey) return null;
     try {
-      const res = await fetch(`${API_BASE}/subscribers/${familyId}`, {
+      const res = await fetch(`${API_BASE}/subscribers/${encodeURIComponent(familyId)}`, {
         headers: { Authorization: `Bearer ${this.apiKey}` },
       });
       if (!res.ok) return null;
-      const data = await res.json() as { subscriber?: { entitlements?: Record<string, { product_id?: string; period_type?: string }> } };
-      const ents = data.subscriber?.entitlements ?? {};
-      const first = Object.values(ents)[0];
+      const data = await res.json() as {
+        subscriber?: {
+          entitlements?: Record<string, {
+            product_id?: string;
+            product_identifier?: string;
+            period_type?: string;
+            expires_date?: string | null;
+          }>;
+        };
+      };
+      const first = Object.values(data.subscriber?.entitlements ?? {})[0];
       if (!first) return null;
+      const productId = first.product_id ?? first.product_identifier;
       return {
-        tier: first.product_id?.replace(/^lullabook_/, "") ?? "normal",
-        isTrial: first.period_type === "trial",
+        tier: productId?.replace(/^lullabook[_-]/i, "") ?? "unknown",
+        productId,
+        isTrial: first.period_type?.toLowerCase() === "trial",
+        verified: true,
+        expirationAtMs: first.expires_date ? Date.parse(first.expires_date) : undefined,
       };
     } catch {
       return null;
     }
   }
 
-  private async makePurchase(familyId: string, tier: string, isTrial: boolean): Promise<RevenueCatPurchaseResult> {
-    if (!this.apiKey) {
-      throw new Error("RevenueCat API key not configured (REVENUECAT_API_KEY)");
-    }
-    return { entitlementId: `rc_ent_${familyId}_${tier}`, isTrial };
+  async restorePurchases(familyId: string): Promise<RevenueCatEntitlementEvidence | null> {
+    return this.fetchEntitlement(familyId);
+  }
+
+  private unresolvedNativePurchase(tier: string, isTrial: boolean): RevenueCatPurchaseResult {
+    // Server-side RevenueCat REST has no authority to perform an Apple purchase.
+    // The native SDK must emit a webhook before this transaction can unlock.
+    void tier;
+    return { entitlementId: "", isTrial, verified: false };
   }
 }
