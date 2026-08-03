@@ -1520,7 +1520,7 @@ export class StorybookService {
       // R1 video is disabled by the plan contract. Do not even construct a
       // workflow step for an injected adapter: an unpriced provider boundary
       // must fail closed rather than becoming an accidental paid path.
-      ...(this.video && R1_PLAN_DEFINITION.capabilities.canVideo
+      ...(this.video && !isR1OnePlan()
         ? [
             {
               name: `video-${pageIndex}`,

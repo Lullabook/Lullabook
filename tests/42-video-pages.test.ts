@@ -1,10 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createTestContext,
   generateAndWait,
   householdWithBaby,
 } from "@/test/fixtures";
 import { SHORT_PAGE_COUNT } from "@/domain/story-type";
+
+// Issue 146 — video is a legacy R2 capability. Opt into R2 explicitly; the
+// default R1 plan must not construct the video workflow step.
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 describe("42 — video page pipeline", () => {
   it("generates per-page video clips behind a faked adapter", async () => {
