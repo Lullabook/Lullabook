@@ -31,7 +31,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   // The page pipeline also writes diagnostic siblings (`.error`, `.moderation`,
   // `.raw`) under the same `books/{familyId}/` prefix; those are internal —
   // never client-servable (they carry raw fal error text / pre-moderation bytes).
-  const isServableBlob = /\.(png|jpg|jpeg|webp|mp4)$/i.test(key);
+  const isServableBlob = /\.(png|svg|jpg|jpeg|webp|mp4)$/i.test(key);
   if (!isServableBlob) {
     return privateCache(NextResponse.json({ error: "Forbidden" }, { status: 403 }));
   }

@@ -118,6 +118,14 @@ describe("189 — C2/C4: Character-only Brief → deterministic placeholder art,
     // Every Page has deterministic local placeholder art, not a hole.
     expect(pages.every((p) => p.generationStatus === "ready")).toBe(true);
     expect(pages.every((p) => p.illustrationBlobKey !== null)).toBe(true);
+    expect(pages.every((p) => p.illustrationBlobKey?.endsWith(".svg"))).toBe(true);
+
+    const textAttempt = [...ctx.store.providerCostLedgerEntries.values()].find(
+      (entry) => entry.owningEntityIds.storybookId === book.id && entry.attemptType === "text"
+    );
+    expect(textAttempt?.units.input_tokens).toBeGreaterThan(0);
+    expect(textAttempt?.units.output_tokens).toBeGreaterThan(0);
+    expect(textAttempt?.actualCostUsd).toBeNull();
   });
 
   it("C2/C4: stored placeholder bytes are deterministic local SVG, identical per (storybookId, pageIndex)", async () => {
@@ -458,6 +466,133 @@ describe("189 — C7/C8: re-roll candidates, budget, and the typed cap error", (
     expect(ctx.store.getCandidatesForPage(page.id)).toHaveLength(1);
     expect(ctx.store.getStorybook(book.id, guardian.id)!.rerollCredits).toBe(0);
   });
+
+  it("C7: reroll uses deterministic local PNG bytes, never an external placeholder URL", async () => {
+    const ctx = createTestContext();
+    const { guardian, book } = await readyPersonaBook(ctx);
+    const page = ctx.store.getPagesForStorybook(book.id)[0]!;
+
+    ctx.storybooks.rerollImage(guardian.id, page.id);
+    const candidate = ctx.store.getCandidatesForPage(page.id)[0]!;
+
+    expect(candidate.content).toMatch(/^data:image\/png;base64,/);
+    expect(candidate.content).not.toMatch(/example\.com|lora|photo|likeness|https?:/i);
+    expect(ctx.fal.imageCalls).toBe(12);
+  });
+
+  it("C7: repeated delivery with one idempotency key creates one candidate and spends once", async () => {
+    const ctx = createTestContext();
+    const { guardian, book } = await readyPersonaBook(ctx);
+    const page = ctx.store.getPagesForStorybook(book.id)[0]!;
+    const before = ctx.store.getStorybook(book.id, guardian.id)!.rerollBudgetRemaining;
+
+    ctx.storybooks.rerollImage(guardian.id, page.id, "reroll-request-1");
+    ctx.storybooks.rerollImage(guardian.id, page.id, "reroll-request-1");
+
+    expect(ctx.store.getCandidatesForPage(page.id)).toHaveLength(1);
+    expect(ctx.store.getStorybook(book.id, guardian.id)!.rerollBudgetRemaining).toBe(before - 1);
+  });
+
+  it("C7: reroll is draft-only and cannot spend finalized-book budget", async () => {
+    const ctx = createTestContext();
+    const { guardian, book } = await readyPersonaBook(ctx);
+    const page = ctx.store.getPagesForStorybook(book.id)[0]!;
+    ctx.storybooks.finalize(guardian.id, book.id);
+    const before = ctx.store.getStorybook(book.id, guardian.id)!.rerollBudgetRemaining;
+
+    expect(() => ctx.storybooks.rerollImage(guardian.id, page.id)).toThrow(/draft/i);
+    expect(ctx.store.getStorybook(book.id, guardian.id)!.rerollBudgetRemaining).toBe(before);
+    expect(ctx.store.getCandidatesForPage(page.id)).toHaveLength(0);
+  });
+});
+
+describe("189 — red-team lifecycle and generation integrity", () => {
+  it("finalization rejects an incomplete Page set instead of finalizing what happens to exist", async () => {
+    const ctx = createTestContext();
+    const { guardian, book } = await readyPersonaBook(ctx);
+    const pages = ctx.store.getPagesForStorybook(book.id);
+    ctx.store.pages.delete(pages[11]!.id);
+
+    expect(() => ctx.storybooks.finalize(guardian.id, book.id)).toThrow(UnresolvedPageError);
+    expect(ctx.store.getStorybook(book.id, guardian.id)!.status).toBe("draft");
+  });
+
+  it("finalization rejects non-sequential Page indexes", async () => {
+    const ctx = createTestContext();
+    const { guardian, book } = await readyPersonaBook(ctx);
+    const page = ctx.store.getPagesForStorybook(book.id)[0]!;
+    page.index = 4;
+    ctx.store.savePage(page);
+
+    expect(() => ctx.storybooks.finalize(guardian.id, book.id)).toThrow(UnresolvedPageError);
+  });
+
+  it("finalization rejects a selected candidate whose persisted blob is missing", async () => {
+    const ctx = createTestContext();
+    const { guardian, book } = await readyPersonaBook(ctx);
+    const page = ctx.store.getPagesForStorybook(book.id)[0]!;
+    ctx.storybooks.rerollImage(guardian.id, page.id);
+    const candidate = ctx.store.getCandidatesForPage(page.id)[0]!;
+
+    await ctx.storybooks.selectCandidate(guardian.id, candidate.id);
+    expect(page.illustrationBlobKey).toBeTruthy();
+    await ctx.blobs.delete(page.illustrationBlobKey!);
+
+    await expect(ctx.storybooks.finalizeAsync(guardian.id, book.id)).rejects.toThrow(
+      UnresolvedPageError
+    );
+    expect(ctx.store.getStorybook(book.id, guardian.id)!.status).toBe("draft");
+  });
+
+  it("watchdog fails a stranded generation with incomplete persisted Pages", async () => {
+    const ctx = createTestContext();
+    const { guardian, character } = await guardianWithCharacter(ctx, "watchdog-incomplete@example.com");
+    const book = await ctx.storybooks.generate(guardian.id, {
+      starringPersonaIds: [],
+      starringCharacterIds: [character.id],
+      storyType: "bedtime",
+      theme: "incomplete watchdog",
+      pageCount: 12,
+    }, { deferEnqueue: true });
+    const story = validStory();
+    ctx.store.savePersistedGeneration({
+      storybookId: book.id,
+      story: { ...story, pages: story.pages.slice(0, 11), scenes: story.scenes.slice(0, 11) },
+      persistedAt: new Date(),
+    });
+
+    const past = new Date(book.createdAt.getTime() + 5 * 60 * 1000 + 1);
+    expect(ctx.storybooks.reapStrandedGenerations(past)).toBe(1);
+    expect(ctx.store.getStorybook(book.id, guardian.id)!.status).toBe("failed");
+  });
+
+  it("preserves the model-selected Persona subset on each Scene/Page request", async () => {
+    const ctx = createTestContext();
+    const { guardian, persona: first } = await readyPersona(ctx, "scene-one@example.com");
+    const second = await ctx.personas.createAdult({
+      memberId: guardian.id,
+      displayName: "Second",
+      photos: [goodPhoto(), goodPhoto(), goodPhoto()],
+      selfie: Buffer.from("selfie-2"),
+    });
+    const story = validStory([first.id, second.id]);
+    story.scenes = story.scenes.map((scene, index) => ({
+      ...scene,
+      personaIds: index % 2 === 0 ? [first.id] : [second.id],
+    }));
+    vi.spyOn(ctx.anthropic, "generateStory").mockResolvedValue(story);
+    const falSpy = vi.spyOn(ctx.fal, "generatePageImage");
+
+    await generateAndWait(ctx, guardian.id, {
+      starringPersonaIds: [first.id, second.id],
+      storyType: "bedtime",
+      theme: "scene cast",
+    });
+
+    expect(falSpy.mock.calls.map(([request]) => request.personaIds)).toEqual(
+      Array.from({ length: 12 }, (_, index) => (index % 2 === 0 ? [first.id] : [second.id]))
+    );
+  });
 });
 
 describe("189 — C9: finalization persists exactly one selected candidate per Page", () => {
@@ -554,6 +689,29 @@ describe("189 — C9: finalization persists exactly one selected candidate per P
 });
 
 describe("189 — C1: the exact 12-Page Story contract (R1)", () => {
+  it("C1: default R1 rejects a non-12 Page Brief before any text spend", async () => {
+    vi.stubEnv("R1_MULTI_FAMILY_ENABLED", "false");
+    vi.stubEnv("R1_ONE_PLAN", "false");
+    try {
+      const ctx = createTestContext();
+      const { guardian, character } = await guardianWithCharacter(ctx, "default-r1-short@example.com");
+
+      await expect(
+        ctx.storybooks.generate(guardian.id, {
+          starringPersonaIds: [],
+          starringCharacterIds: [character.id],
+          storyType: "bedtime",
+          theme: "default r1 short",
+          pageCount: 5,
+        })
+      ).rejects.toThrow(/exactly 12 Pages/i);
+      expect(ctx.anthropic.calls).toHaveLength(0);
+      expect(ctx.fal.imageCalls).toBe(0);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("C1: under R1_ONE_PLAN a non-12 pageCount Brief is rejected before any text spend", async () => {
     vi.stubEnv("R1_ONE_PLAN", "true");
     try {

@@ -33,8 +33,14 @@ import { R1_PLAN_DEFINITION } from "@/domain/plan";
 import { getProductionStoryModel, validateGeneratedStoryContract } from "@/adapters/anthropic";
 import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
 import { optionalEnv } from "@/adapters/env";
-import { renderPlaceholderArtSvg, shouldUsePlaceholderArt } from "@/lib/placeholder-art";
+import {
+  renderDeterministicRerollArtPng,
+  renderPlaceholderArtSvg,
+  shouldUsePlaceholderArt,
+  toImageDataUrl,
+} from "@/lib/placeholder-art";
 import { estimateProviderCostUsd, TEXT_WORST_CASE_UNITS } from "@/lib/provider-prices";
+import { isR1OnePlan } from "@/lib/paywall-config";
 
 const FREE_REROLL_BUDGET = 5;
 
@@ -162,6 +168,26 @@ async function mapWithConcurrency<T>(
   );
 }
 
+function hasSequentialPageSet(pages: { index: number }[], expectedPageCount: number): boolean {
+  return (
+    pages.length === expectedPageCount &&
+    pages.every((page, index) => page.index === index)
+  );
+}
+
+function candidateImageExtension(candidateContent: string): "png" | "svg" {
+  return /^data:image\/svg\+xml(?:;|,)/i.test(candidateContent) ? "svg" : "png";
+}
+
+function stableRequestToken(value: string): string {
+  let hash = 2166136261;
+  for (const char of value) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+}
+
 /**
  * Watchdog budget: a Storybook may not remain in `generating` longer than this
  * before the reaper forces it `failed` (PRD v13 / issue 100 — generation
@@ -240,7 +266,7 @@ export class StorybookService {
       (p) => p.familyId === member.familyId && p.kind === "baby" && p.status === "ready"
     );
     const starringPersonaIds = [...brief.starringPersonaIds];
-    if (process.env.R1_ONE_PLAN === "true" && brief.pageCount !== undefined && brief.pageCount !== 12) {
+    if (isR1OnePlan() && resolvePageCount(brief) !== 12) {
       throw new Error("R1 Storybooks must contain exactly 12 Pages");
     }
     if (babyPersona && !starringPersonaIds.includes(babyPersona.id)) {
@@ -385,7 +411,7 @@ export class StorybookService {
     const twist = [brief.note, brief.customStyleNote].filter(Boolean).join(" ");
     if (twist) await this.childSafety.checkText(twist, `classic-twist-${memberId}`, member.familyId);
 
-    if (process.env.R1_ONE_PLAN === "true" && brief.pageCount !== undefined && brief.pageCount !== 12) {
+    if (isR1OnePlan() && resolvePageCount(brief) !== 12) {
       throw new Error("R1 Storybooks must contain exactly 12 Pages");
     }
     if (brief.starringPersonaIds.length > R1_PLAN_DEFINITION.limits.starringPersonas) {
@@ -478,11 +504,7 @@ export class StorybookService {
     for (const storybook of this.store.storybooks.values()) {
       if (storybook.status !== "generating") continue;
       if (now.getTime() - storybook.createdAt.getTime() > budgetMs) {
-        const persisted = this.store.persistedGenerations.get(storybook.id);
-        const hasValidText = Boolean(
-          persisted?.story.pages.length &&
-          persisted.story.pages.some((page) => page.text.trim().length > 0)
-        );
+        const hasValidText = this.hasValidPersistedStory(storybook);
         if (hasValidText) {
           // Text succeeded, so Page recovery must not refund or recharge allowance.
           storybook.status = "draft";
@@ -627,9 +649,7 @@ export class StorybookService {
     const pageData = persisted.story.pages.find((p) => p.index === page.index);
     if (!pageData) throw new Error("Page data not found");
 
-    const scene = persisted.story.scenes
-      .map((s) => ({ ...s, personaIds: book.brief.starringPersonaIds }))
-      .find((s) => s.pageIndex === page.index);
+    const scene = persisted.story.scenes.find((s) => s.pageIndex === page.index);
     if (!scene) throw new Error("Scene not found");
 
     const personas = book.brief.starringPersonaIds.map((id) => {
@@ -660,6 +680,10 @@ export class StorybookService {
       input_tokens: evidence?.inputTokens ?? 0,
       output_tokens: evidence?.outputTokens ?? 0,
     };
+    const recordedUnits =
+      evidenceUnits.input_tokens > 0 || evidenceUnits.output_tokens > 0
+        ? evidenceUnits
+        : TEXT_WORST_CASE_UNITS;
     // Issue 190: every payable attempt records a NON-ZERO versioned estimate.
     // If token evidence is missing, price the worst case so the row is never
     // silently free (the table's wildcard covers unknown models on this route).
@@ -674,9 +698,8 @@ export class StorybookService {
       endpoint: "messages.create",
       model: evidence?.model ?? "unknown-anthropic-model",
       pricingVersion: price.pricingVersion,
-      units: evidenceUnits,
+      units: recordedUnits,
       estimatedCostUsd: price.estimatedCostUsd,
-      actualCostUsd: 0,
       latencyMs: Math.max(0, Date.now() - startedAt),
       requestId: evidence?.providerRequestId ?? `${storybook.id}/story`,
       owningEntityIds: { familyId: storybook.familyId, storybookId: storybook.id },
@@ -820,10 +843,10 @@ export class StorybookService {
       this.store.saveStorybook(storybook);
       return;
     }
-    const scenes = persisted.story.scenes.map((s) => ({
-      ...s,
-      personaIds: brief.starringPersonaIds,
-    }));
+    // Preserve the model's per-Scene cast selection. The text contract has
+    // already proved every ID belongs to the selected cast; replacing it with
+    // the whole Brief cast would silently put every Persona in every Page.
+    const scenes = persisted.story.scenes;
 
     if (shouldUsePlaceholderArt(brief)) {
       // FAIL-3 (PRD v22 decision 3): a Character-only Brief (no Persona, no
@@ -859,7 +882,7 @@ export class StorybookService {
     pageCount: number
   ): Promise<void> {
     for (const pageData of pages) {
-      const blobKey = `books/${storybook.familyId}/${storybook.id}/page-${pageData.index}.png`;
+      const blobKey = `books/${storybook.familyId}/${storybook.id}/page-${pageData.index}.svg`;
       const bytes = renderPlaceholderArtSvg({
         storybookId: storybook.id,
         pageIndex: pageData.index,
@@ -1031,7 +1054,6 @@ export class StorybookService {
     const prefix = `${storybook.id}/${pageIndex}/${attempt}`;
     const moderationKey = `${blobKey}.attempt-${attempt}.moderation`;
     const personaCount = scene.personaIds.length;
-    const falIdempotencyKey = `${prefix}/fal-generate`;
 
     return [
       {
@@ -1204,8 +1226,14 @@ export class StorybookService {
     if (storybook.status !== "generating" && storybook.status !== "failed") return;
 
     const pages = this.store.getPagesForStorybook(storybookId);
+    const expectedPageCount = resolvePageCount(storybook.brief);
+    if (!hasSequentialPageSet(pages, expectedPageCount)) {
+      storybook.status = "failed";
+      this.store.saveStorybook(storybook);
+      return;
+    }
     const readyCount = pages.filter((p) => p.generationStatus === "ready").length;
-    const floor = readyPageFloor(resolvePageCount(storybook.brief));
+    const floor = readyPageFloor(expectedPageCount);
 
     if (readyCount >= floor) {
       storybook.status = "draft";
@@ -1239,23 +1267,51 @@ export class StorybookService {
     ).length;
   }
 
-  rerollImage(memberId: string, pageId: string): void {
+  private hasValidPersistedStory(storybook: Storybook): boolean {
+    const persisted = this.store.getPersistedGeneration(storybook.id);
+    if (!persisted) return false;
+    try {
+      validateGeneratedStoryContract(
+        persisted.story,
+        resolvePageCount(storybook.brief),
+        storybook.brief.starringPersonaIds
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  rerollImage(memberId: string, pageId: string, idempotencyKey?: string): void {
     const page = this.store.pages.get(pageId);
     if (!page) throw new Error("Page not found");
     const book = this.store.getStorybook(page.storybookId, memberId);
     if (!book) throw new Error("Storybook not found");
+    if (book.status !== "draft") throw new Error("Only draft Storybooks can be re-rolled");
 
-    this.decrementRerollBudget(book);
+    const requestMarker = idempotencyKey ? `-key-${stableRequestToken(idempotencyKey)}` : "";
+    const existing = idempotencyKey
+      ? this.store
+          .getCandidatesForPage(pageId)
+          .find((candidate) => candidate.id.endsWith(requestMarker))
+      : undefined;
+    if (existing) return;
 
     const attempt = this.countRerollAttempts(pageId) + 1;
+    const bytes = renderDeterministicRerollArtPng({
+      storybookId: book.id,
+      pageIndex: page.index,
+      attempt,
+    });
     const candidate: import("@/domain/types").PageCandidate = {
-      id: `${pageId}-reroll-${attempt}`,
+      id: `${pageId}-reroll-${attempt}${requestMarker}`,
       pageId,
       kind: "image",
-      content: `https://example.com/reroll/${pageId}/${attempt}.png`,
+      content: toImageDataUrl(bytes, "image/png"),
       selected: false,
       createdAt: new Date(),
     };
+    this.decrementRerollBudget(book);
     this.store.savePageCandidate(candidate);
   }
 
@@ -1264,6 +1320,7 @@ export class StorybookService {
     if (!page) throw new Error("Page not found");
     const book = this.store.getStorybook(page.storybookId, memberId);
     if (!book) throw new Error("Storybook not found");
+    if (book.status !== "draft") throw new Error("Only draft Storybooks can be re-rolled");
 
     this.decrementRerollBudget(book);
 
@@ -1286,22 +1343,36 @@ export class StorybookService {
     if (!page) throw new Error("Page not found");
     const book = this.store.getStorybook(page.storybookId, memberId);
     if (!book) throw new Error("Storybook not found");
-
-    for (const c of this.store.getCandidatesForPage(candidate.pageId)) {
-      c.selected = c.id === candidateId;
-      this.store.savePageCandidate(c);
-    }
+    if (book.status !== "draft") throw new Error("Only draft Storybooks can be curated");
 
     if (candidate.kind === "image") {
+      const extension = candidateImageExtension(candidate.content);
+      const blobKey = `${book.id}/pages/${page.id}/selected-${candidate.id}.${extension}`;
+      if (
+        candidate.selected &&
+        page.illustrationBlobKey === blobKey &&
+        (await this.blobs.get(blobKey))
+      ) {
+        return;
+      }
       const res = await fetch(candidate.content);
       if (!res.ok) throw new Error("Failed to fetch illustration candidate");
       const bytes = Buffer.from(await res.arrayBuffer());
       await this.childSafety.checkUpload(bytes, `candidate-${candidateId}`, book.familyId);
-      const blobKey = `${book.id}/pages/${page.id}/selected-${candidateId}.png`;
       await this.blobs.put(blobKey, bytes);
+
+      for (const c of this.store.getCandidatesForPage(candidate.pageId)) {
+        c.selected = c.id === candidateId;
+        this.store.savePageCandidate(c);
+      }
       page.illustrationBlobKey = blobKey;
       page.illustrationUrl = null;
+      page.generationStatus = "ready";
     } else {
+      for (const c of this.store.getCandidatesForPage(candidate.pageId)) {
+        c.selected = c.id === candidateId;
+        this.store.savePageCandidate(c);
+      }
       page.text = candidate.content;
     }
     this.store.savePage(page);
@@ -1314,66 +1385,91 @@ export class StorybookService {
     this.store.saveStorybook(book);
   }
 
-  finalize(memberId: string, storybookId: string): Storybook {
-    const book = this.store.getStorybook(storybookId, memberId);
-    if (!book) throw new Error("Storybook not found");
-    if (book.status !== "draft") throw new Error("Only drafts can be finalized");
-
-    // FAIL-4a: a finalized book persists exactly one selected candidate per
-    // Page. A Page carrying re-roll candidates must have exactly one selected
-    // (the selection itself is persisted by the selectCandidate seam, and the
-    // Page's illustration must be that candidate's stored blob); a Page with
-    // no candidates is resolved only when the pipeline produced a ready
-    // illustration. Anything else is an unresolved Page → typed rejection
-    // with the draft untouched (E4).
+  private assertFinalizable(book: Storybook): import("@/domain/types").Page[] {
     const pages = this.store
-      .getPagesForStorybook(storybookId)
+      .getPagesForStorybook(book.id)
       .sort((a, b) => a.index - b.index);
+    const expectedPageCount = resolvePageCount(book.brief);
+    if (!hasSequentialPageSet(pages, expectedPageCount)) {
+      throw new UnresolvedPageError(
+        book.id,
+        pages.find((page, index) => page.index !== index)?.index ?? pages.length,
+        `must contain exactly ${expectedPageCount} sequential Pages`
+      );
+    }
+
     for (const page of pages) {
       const candidates = this.store.getCandidatesForPage(page.id);
       const selected = candidates.filter((c) => c.selected);
+      if (page.generationStatus !== "ready" || !page.illustrationBlobKey) {
+        throw new UnresolvedPageError(
+          book.id,
+          page.index,
+          "has no ready persisted illustration"
+        );
+      }
       if (candidates.length > 0) {
         if (selected.length === 0) {
           throw new UnresolvedPageError(
-            storybookId,
+            book.id,
             page.index,
             "has re-roll candidates but none selected"
           );
         }
         if (selected.length > 1) {
           throw new UnresolvedPageError(
-            storybookId,
+            book.id,
             page.index,
             "has multiple selected candidates"
           );
         }
         const selectedCandidate = selected[0]!;
         if (selectedCandidate.kind === "image") {
-          const expectedKey = `${book.id}/pages/${page.id}/selected-${selectedCandidate.id}.png`;
+          const extension = candidateImageExtension(selectedCandidate.content);
+          const expectedKey = `${book.id}/pages/${page.id}/selected-${selectedCandidate.id}.${extension}`;
           if (page.illustrationBlobKey !== expectedKey) {
             throw new UnresolvedPageError(
-              storybookId,
+              book.id,
               page.index,
               `selected candidate ${selectedCandidate.id} was never persisted as the Page illustration`
             );
           }
         } else if (page.text !== selectedCandidate.content) {
           throw new UnresolvedPageError(
-            storybookId,
+            book.id,
             page.index,
             `selected text candidate ${selectedCandidate.id} was never persisted as the Page text`
           );
         }
-      } else if (!page.illustrationBlobKey) {
-        // A failed illustration hole with no re-roll attempt: the keepsake
-        // cannot ship an empty Page — repair or re-roll it first.
+      }
+    }
+
+    return pages;
+  }
+
+  /** Route-facing finalization seam that also proves every selected blob exists. */
+  async finalizeAsync(memberId: string, storybookId: string): Promise<Storybook> {
+    const book = this.store.getStorybook(storybookId, memberId);
+    if (!book) throw new Error("Storybook not found");
+    if (book.status !== "draft") throw new Error("Only drafts can be finalized");
+    const pages = this.assertFinalizable(book);
+    for (const page of pages) {
+      if (!page.illustrationBlobKey || !(await this.blobs.get(page.illustrationBlobKey))) {
         throw new UnresolvedPageError(
-          storybookId,
+          book.id,
           page.index,
-          "has no illustration (unresolved image hole)"
+          "selected illustration blob is missing"
         );
       }
     }
+    return this.finalize(memberId, storybookId);
+  }
+
+  finalize(memberId: string, storybookId: string): Storybook {
+    const book = this.store.getStorybook(storybookId, memberId);
+    if (!book) throw new Error("Storybook not found");
+    if (book.status !== "draft") throw new Error("Only drafts can be finalized");
+    this.assertFinalizable(book);
 
     book.status = "finalized";
     book.finalizedAt = new Date();

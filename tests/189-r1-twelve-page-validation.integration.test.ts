@@ -33,10 +33,10 @@ import { POST as finalizePost } from "@/app/api/storybooks/[id]/finalize/route";
 import { POST as selectPost } from "@/app/api/storybooks/candidates/[candidateId]/select/route";
 import { POST as rerollPost } from "@/app/api/storybooks/pages/[pageId]/reroll-image/route";
 
-function bearerRequest(path: string, token = "good"): Request {
+function bearerRequest(path: string, token = "good", extraHeaders: Record<string, string> = {}): Request {
   return new Request(`http://localhost${path}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, ...extraHeaders },
   });
 }
 
@@ -158,6 +158,26 @@ describe("189 — POST /api/storybooks/pages/[pageId]/reroll-image", () => {
     expect(body.error).toMatch(/budget/i);
     expect(ctx.fal.imageCalls).toBe(callsBefore);
     expect(ctx.store.getCandidatesForPage(page.id)).toHaveLength(0);
+  });
+
+  it("replayed Idempotency-Key returns the same local reroll without a second budget debit", async () => {
+    const { ctx, guardian, page, book } = await draftBook();
+    const budgetBefore = ctx.store.getStorybook(book.id, guardian.id)!.rerollBudgetRemaining;
+    const path = `/api/storybooks/pages/${page.id}/reroll-image`;
+
+    const res1 = await rerollPost(bearerRequest(path, "good", { "Idempotency-Key": "route-reroll-1" }), {
+      params: Promise.resolve({ pageId: page.id }),
+    });
+    const res2 = await rerollPost(bearerRequest(path, "good", { "Idempotency-Key": "route-reroll-1" }), {
+      params: Promise.resolve({ pageId: page.id }),
+    });
+
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    expect(ctx.store.getCandidatesForPage(page.id)).toHaveLength(1);
+    expect(ctx.store.getStorybook(book.id, guardian.id)!.rerollBudgetRemaining).toBe(
+      budgetBefore - 1
+    );
   });
 
   it("exposes the typed error class at the seam (RerollBudgetError)", async () => {
