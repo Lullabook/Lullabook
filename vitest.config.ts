@@ -14,5 +14,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // Integration tests boot an embedded PostgreSQL engine (withIsolatedPostgres);
+    // the 5s vitest default times out whenever parallel files contend for the
+    // pg binary. 30s keeps the suite honest on a loaded machine.
+    testTimeout: 30_000,
   },
 });
