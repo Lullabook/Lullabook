@@ -368,6 +368,7 @@ export class SupabaseDataStore extends DataStore {
           : [],
         // Issue 125: persisted likeness-confirmation gate.
         likenessConfirmed: r.likeness_confirmed ?? false,
+        failureReason: r.failure_reason ?? undefined,
         promotedFromCharacterId: r.promoted_from_character_id ?? undefined,
         questionnaire: r.questionnaire ?? undefined,
         createdAt: new Date(r.created_at),
@@ -1060,6 +1061,7 @@ export class SupabaseDataStore extends DataStore {
         ? r.review_sample_keys.filter((key): key is string => typeof key === "string")
         : [],
       likenessConfirmed: r.likeness_confirmed ?? false,
+      failureReason: r.failure_reason ?? undefined,
       promotedFromCharacterId: r.promoted_from_character_id ?? undefined,
       questionnaire: r.questionnaire ?? undefined,
       createdAt: new Date(r.created_at),
@@ -1306,6 +1308,7 @@ export class SupabaseDataStore extends DataStore {
           review_sample_keys: p.reviewSampleKeys ?? [],
           // Issue 125: persisted likeness-confirmation gate.
           likeness_confirmed: p.likenessConfirmed ?? false,
+          failure_reason: p.failureReason ?? null,
           promoted_from_character_id: p.promotedFromCharacterId ?? null,
           questionnaire: p.questionnaire ?? null,
           created_at: p.createdAt.toISOString(),

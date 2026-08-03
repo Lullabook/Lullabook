@@ -4,6 +4,7 @@ import { withBearerAuth, jsonError, jsonOk, jsonDomainError } from "@/lib/api-ro
 import { SupabasePersonaTrainingLifecycleRepository } from "@/db/persona-training-lifecycle";
 import { createBearerClient } from "@/lib/supabase";
 import { FalLoraTrainingService } from "@/services/fal-lora-training";
+import { submitRetrainingThenCommit } from "@/services/persona";
 
 function filesFrom(formData: FormData, key: string): File[] {
   return formData.getAll(key).filter((value): value is File => value instanceof File);
@@ -12,12 +13,11 @@ function filesFrom(formData: FormData, key: string): File[] {
 /**
  * Bearer-authenticated likeness replacement/retraining boundary (ticket 188).
  *
- * A Persona in `review` is durably moved back to `training` through the
- * authenticated SQL RPC (subject/Guardian authority + `review` state enforced
- * in one transaction), after the byte gates — liveness (Adult, jurisdiction-
- * configured), moderation, and preflight — pass. The replacement training job
- * is submitted through the same durable Fal submission seam; its signed
- * callback regenerates review samples and moves the Persona back to `review`.
+ * A Persona in `review` passes the byte gates — liveness (Adult,
+ * jurisdiction-configured), moderation, and preflight — before the replacement
+ * job crosses fal. Only a successful submission is followed by the authenticated
+ * SQL `review -> training` transition; its signed callback returns the Persona
+ * to `review` with fresh samples.
  */
 export async function POST(
   request: Request,
@@ -48,30 +48,39 @@ export async function POST(
         selfie: selfieBuf,
       });
 
-      // Durable, authoritative `review -> training`; another Member cannot
-      // invoke it (SQL enforces subject/Guardian ownership).
       const authHeader = request.headers.get("authorization");
       const token = authHeader?.slice("Bearer ".length).trim();
       if (!token) return jsonError("Missing bearer token", 401);
       const repository = new SupabasePersonaTrainingLifecycleRepository(createBearerClient(token));
-      await repository.transitionReviewToTraining(id);
 
-      // Submit the replacement training job; its signed callback returns the
-      // Persona to `review` with fresh Family-owned samples.
+      // Submit before the durable transition. A failed provider boundary leaves
+      // the existing review state retryable rather than stranding training.
       const training = new FalLoraTrainingService(ctx.store, ctx.fal, ctx.blobs);
-      await training.submit({
-        familyId: persona.familyId,
-        personaId: persona.id,
-        images: buffers.map((bytes, index) => ({
-          filename: `photo-${index}.jpg`,
-          bytes,
-          moderated: true,
-        })),
-        defaultCaption: `a family member named ${persona.displayName}`,
-        idempotencyKey: `persona-retraining:${persona.id}:${createHash("sha256")
-          .update(Buffer.concat(buffers))
-          .digest("hex")
-          .slice(0, 24)}`,
+      await submitRetrainingThenCommit({
+        submit: () => training.submit({
+          familyId: persona.familyId,
+          personaId: persona.id,
+          images: buffers.map((bytes, index) => ({
+            filename: `photo-${index}.jpg`,
+            bytes,
+            moderated: true,
+          })),
+          defaultCaption: `a family member named ${persona.displayName}`,
+          idempotencyKey: `persona-retraining:${persona.id}:${createHash("sha256")
+            .update(Buffer.concat(buffers))
+            .digest("hex")
+            .slice(0, 24)}`,
+        }),
+        // Another Member cannot invoke it (SQL enforces subject/Guardian
+        // ownership and the review-state precondition).
+        transition: () => repository.transitionReviewToTraining(id),
+        onCommitted: () => {
+          persona.status = "training";
+          persona.likenessConfirmed = false;
+          persona.reviewSampleKeys = [];
+          persona.failureReason = undefined;
+          ctx.store.savePersona(persona);
+        },
       });
 
       await ctx.persist();

@@ -292,7 +292,6 @@ export const scheduledPurges = inngest.createFunction(
 export const workflowFunctions = [
   storybookGenerate,
   pageRecover,
-  personaCreate,
   personaCreationFinalized,
   personaCreationRecovery,
   scheduledPurges,

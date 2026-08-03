@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createHash } from "node:crypto";
 import type { Brief, TextStoryBrief, TraitQuestionnaire } from "@/domain/types";
 import type { BlobStore, LivenessAdapter, WorkflowAdapter } from "@/adapters/types";
 import type { ChildSafetyService } from "@/services/child-safety";
@@ -23,6 +24,9 @@ import {
   personaCreationRequestFingerprint,
   type ProductionPersonaCreationInput,
 } from "@/services/production-persona-creation";
+import { SupabasePersonaTrainingLifecycleRepository } from "@/db/persona-training-lifecycle";
+import { FalLoraTrainingService } from "@/services/fal-lora-training";
+import { submitRetrainingThenCommit } from "@/services/persona";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T }
@@ -159,6 +163,36 @@ export async function runPersonaCreationActionBoundary(input: {
   return finalized;
 }
 
+/** Keep the web form's consent and jurisdiction fields on the production seam. */
+export async function buildPersonaCreationInput(input: {
+  formData: FormData;
+  mode: "adult" | "baby";
+  displayName: string;
+  photos: Buffer[];
+  selfie?: Buffer;
+  jurisdiction: string;
+}): Promise<Omit<ProductionPersonaCreationInput, "requestFingerprint">> {
+  return {
+    kind: input.mode,
+    displayName: input.displayName,
+    photoCount: input.photos.length,
+    photos: input.photos,
+    selfie: input.selfie,
+    selfConsent: input.mode === "adult" ? input.formData.get("selfConsent") === "true" : undefined,
+    jurisdiction: input.jurisdiction,
+    ...(input.mode === "baby"
+      ? {
+          baby: { displayName: input.displayName },
+          bond: {
+            relationship: String(input.formData.get("relationship") ?? "").trim(),
+            babyCallsThem: String(input.formData.get("babyCalls") ?? "").trim(),
+            theyCallBaby: String(input.formData.get("theyCallBaby") ?? "").trim(),
+          },
+        }
+      : {}),
+  };
+}
+
 /**
  * The authenticated request owns source bytes only in memory. PostgreSQL
  * reserves immutable family-scoped keys after source checks, then finalizes
@@ -182,9 +216,6 @@ export async function createPersonaAction(
     }
     const mode = String(formData.get("mode") ?? "adult") as "adult" | "baby";
     const displayName = String(formData.get("displayName") ?? "").trim();
-    const relationship = String(formData.get("relationship") ?? "").trim();
-    const babyCallsThem = String(formData.get("babyCalls") ?? "").trim();
-    const theyCallBaby = String(formData.get("theyCallBaby") ?? "").trim();
     if (!displayName) return { ok: false, error: "Name is required" };
     const photos = formData.getAll("photos").filter((f): f is File => f instanceof File);
     const selfie = formData.get("selfie");
@@ -216,19 +247,14 @@ export async function createPersonaAction(
       photos.map(async (photo) => Buffer.from(await photo.arrayBuffer())),
     );
     const selfieBytes = selfie instanceof File ? Buffer.from(await selfie.arrayBuffer()) : undefined;
-    const creationInput = {
-      kind: mode,
+    const creationInput = await buildPersonaCreationInput({
+      formData,
+      mode,
       displayName,
-      photoCount: sourcePhotos.length,
       photos: sourcePhotos,
       selfie: selfieBytes,
-      ...(mode === "baby"
-        ? {
-            baby: { displayName },
-            bond: { relationship, babyCallsThem, theyCallBaby },
-          }
-        : {}),
-    };
+      jurisdiction: member.jurisdiction,
+    });
     const authClient = await createAuthClient();
     const repository = new SupabasePersonaCreationRepository(authClient);
     await runPersonaCreationActionBoundary({
@@ -304,6 +330,12 @@ export async function replacePersonaPhotosAction(
     }
     const persona = ctx.store.getPersona(personaId, member.id);
     if (!persona) return { ok: false, error: "Persona not found" };
+    if (persona.status !== "review") {
+      return {
+        ok: false,
+        error: "Reference-photo replacement is available only from likeness review; use Retry / retrain.",
+      };
+    }
     if (persona.kind === "adult" && !(selfie instanceof File)) {
       return { ok: false, error: "A selfie is required to verify your own likeness" };
     }
@@ -312,11 +344,38 @@ export async function replacePersonaPhotosAction(
       persona.kind === "adult" && selfie instanceof File
         ? Buffer.from(await selfie.arrayBuffer())
         : undefined;
-    await ctx.personas.replacePhotos({
+    await ctx.personas.retrainForReview({
       personaId,
       memberId: member.id,
       photos: buffers,
       selfie: selfieBuf,
+    });
+    const training = new FalLoraTrainingService(ctx.store, ctx.fal, ctx.blobs);
+    const repository = new SupabasePersonaTrainingLifecycleRepository(await createAuthClient());
+    const requestId = `persona-retraining:${persona.id}:${createHash("sha256")
+      .update(Buffer.concat(buffers))
+      .digest("hex")
+      .slice(0, 24)}`;
+    await submitRetrainingThenCommit({
+      submit: () => training.submit({
+        familyId: persona.familyId,
+        personaId: persona.id,
+        images: buffers.map((bytes, index) => ({
+          filename: `photo-${index}.jpg`,
+          bytes,
+          moderated: true,
+        })),
+        defaultCaption: `a family member named ${persona.displayName}`,
+        idempotencyKey: requestId,
+      }),
+      transition: () => repository.transitionReviewToTraining(persona.id),
+      onCommitted: () => {
+        persona.status = "training";
+        persona.likenessConfirmed = false;
+        persona.reviewSampleKeys = [];
+        persona.failureReason = undefined;
+        ctx.store.savePersona(persona);
+      },
     });
     await ctx.persist();
     revalidatePath("/family");

@@ -37,10 +37,15 @@ import {
   personaCreationRequestFingerprint,
 } from "@/services/production-persona-creation";
 import { runPersonaCreationFinalizedBody } from "@/workflows/persona-creation-finalized-body";
+import { runPersonaCreateBody } from "@/workflows/persona-create-body";
+import { personaCreate, workflowFunctions } from "@/workflows/functions";
+import { submitRetrainingThenCommit } from "@/services/persona";
+import { buildPersonaCreationInput } from "@/lib/actions";
+import { SupabaseDataStore } from "@/db/supabase-store";
 import { makeTestSafetensorsArtifact } from "./support/fal-training-artifacts";
 import { withIsolatedPostgres } from "./support/postgres/rls-harness";
 
-const requireBearerMember = vi.fn();
+const requireBearerMember = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/bearer-auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/bearer-auth")>();
   return { ...actual, requireBearerMember };
@@ -118,6 +123,29 @@ function unitPersonaService(store: DataStore, liveness = new FakeLiveness()) {
 }
 
 describe("188 — Persona training lifecycle: consent, moderation, retrain, readiness", () => {
+  it("web Persona form mapping preserves explicit Adult self-consent and Member jurisdiction", async () => {
+    const formData = new FormData();
+    formData.set("selfConsent", "true");
+    formData.set("relationship", "parent");
+    formData.set("babyCalls", "Mama");
+    formData.set("theyCallBaby", "Maya");
+    const photos = [goodPhoto(), goodPhoto(0xab), goodPhoto(0xac)];
+
+    expect(await buildPersonaCreationInput({
+      formData,
+      mode: "adult",
+      displayName: "Parent",
+      photos,
+      selfie: goodPhoto(0x11),
+      jurisdiction: "IN",
+    })).toMatchObject({
+      kind: "adult",
+      selfConsent: true,
+      jurisdiction: "IN",
+      photoCount: 3,
+    });
+  });
+
   it("C1: a non-Guardian Baby Persona request is denied before any photo is staged or persisted", { timeout: 20_000 }, async () => {
     await withIsolatedPostgres(async ({ asSystem, asUser, asService, fixture }) => {
       const memberAuthId = "00000000-0000-0000-0000-000000000188";
@@ -186,16 +214,28 @@ describe("188 — Persona training lifecycle: consent, moderation, retrain, read
         [memberId, memberAuthId, fixture.familyA.familyId],
       );
 
-      // create: non-Guardian Members cannot reserve an Adult Persona at all in
-      // this release; the Guardian's reservation binds the durable subject
-      // receipt to the calling Member (the subject).
+      // create: an authenticated Member may reserve their own Adult Persona;
+      // the durable receipt binds the reservation to that same subject.
       const memberRepository = new PostgresPersonaCreationRepository(asUser, memberAuthId, asService);
-      await expect(memberRepository.prepare({
+      const memberPrepared = await memberRepository.prepare({
         kind: "adult",
         displayName: "Member B",
         photoCount: 1,
         requestFingerprint: createHash("sha256").update("adult-member-b-v1").digest("hex"),
-      })).rejects.toThrow(/Guardian authority/i);
+      });
+      const memberProtocol = new PersonaCreationProtocol(memberRepository, new InMemoryBlobStore());
+      await memberProtocol.uploadModeratedPhotos(memberPrepared, [goodPhoto()]);
+      await memberRepository.finalize(memberPrepared.id);
+      const memberPersona = await asService<{ created_by_member_id: string; kind: string }>(
+        "select created_by_member_id, kind from personas where id = $1",
+        [(
+          await asService<{ persona_id: string }>(
+            "select persona_id from persona_creation_reservations where id = $1",
+            [memberPrepared.id],
+          )
+        ).rows[0]?.persona_id],
+      );
+      expect(memberPersona.rows[0]).toEqual({ created_by_member_id: memberId, kind: "adult" });
 
       const guardianRepository = new PostgresPersonaCreationRepository(asUser, fixture.familyA.authUserId, asService);
       const prepared = await guardianRepository.prepare({
@@ -307,6 +347,46 @@ describe("188 — Persona training lifecycle: consent, moderation, retrain, read
     expect(repository.prepared).toBe(0);
   });
 
+  it("C4b: source moderation completes before an Adult photo reaches liveness", async () => {
+    const order: string[] = [];
+    const moderation = {
+      checkImage: async () => {
+        order.push("moderation");
+        return { allowed: true };
+      },
+      checkText: async () => ({ allowed: true }),
+    };
+    const liveness = {
+      verifySelfie: async () => {
+        order.push("liveness");
+        return { matched: true, confidence: 1 };
+      },
+    };
+    const photos = [goodPhoto(), goodPhoto(), goodPhoto()];
+    const base = {
+      kind: "adult" as const,
+      displayName: "Parent",
+      photoCount: photos.length,
+      photos,
+      selfie: goodPhoto(0x11),
+      selfConsent: true,
+      jurisdiction: "US",
+      familyId: "family-188",
+    };
+    const service = new ProductionPersonaCreationService(
+      new ChildSafetyService(new DataStore(), moderation),
+      liveness,
+      new PersonaCreationProtocol(new Ticket188RecordingRepository(), new InMemoryBlobStore()),
+    );
+
+    await service.create({
+      ...base,
+      requestFingerprint: personaCreationRequestFingerprint(base),
+    });
+
+    expect(order).toEqual(["moderation", "moderation", "moderation", "liveness"]);
+  });
+
   it("C5: child-age, consent method, and residency come from jurisdiction configuration", () => {
     expect(ConsentEngine.getJurisdiction("US")).toMatchObject({
       childAgeThreshold: 13,
@@ -315,6 +395,16 @@ describe("188 — Persona training lifecycle: consent, moderation, retrain, read
       noticeVersion: "us-coppa-v1",
     });
     expect(ConsentEngine.getJurisdiction("US_IOS")?.consentMethod).toBe("email_plus");
+  });
+
+  it("C5b: the durable Baby-consent predicate follows the persisted jurisdiction config", { timeout: 20_000 }, async () => {
+    await withIsolatedPostgres(async ({ asSystem }) => {
+      const configured = await asSystem<{ allowed: boolean }>(
+        "select app_persona_creation_baby_consent_is_canonical($1, $2, $3) as allowed",
+        ["IN", "payment_vpc", "in-dpdp-v1"],
+      );
+      expect(configured.rows[0]?.allowed).toBe(true);
+    });
   });
 
   it("C6: a verified Baby consent receipt is required before any source photo is staged", { timeout: 20_000 }, async () => {
@@ -587,6 +677,21 @@ describe("188 — Persona training lifecycle: consent, moderation, retrain, read
     });
   });
 
+  it("C11b: provider submission happens before retrain commit, so provider failure leaves review durable", async () => {
+    const events: string[] = [];
+    await expect(submitRetrainingThenCommit({
+      submit: async () => {
+        events.push("provider");
+        throw new Error("fal unavailable");
+      },
+      transition: async () => {
+        events.push("transition");
+      },
+      onCommitted: () => events.push("committed"),
+    })).rejects.toThrow("fal unavailable");
+    expect(events).toEqual(["provider"]);
+  });
+
   it("C12: a Persona in review or training is rejected before Story spend", async () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);
@@ -680,5 +785,63 @@ describe("188 — Persona training lifecycle: consent, moderation, retrain, read
     const persona = ctx.store.getPersona(personaId, guardian.id);
     expect(persona?.status).toBe("training");
     expect(persona?.likenessConfirmed).toBe(false);
+  });
+
+  it("C16c: the legacy persona-create workflow is not registered as a production success path", async () => {
+    expect(workflowFunctions).not.toContain(personaCreate);
+
+    const ctx = createTestContext();
+    const guardian = await subscribedGuardian(ctx);
+    const photoKeys = [0, 1, 2].map((index) => `legacy/persona-${index}.jpg`);
+    for (const key of photoKeys) await ctx.blobs.put(key, goodPhoto());
+    await ctx.blobs.put("legacy/selfie.jpg", goodPhoto(0x11));
+
+    await expect(runPersonaCreateBody(ctx as never, {
+      mode: "adult",
+      memberId: guardian.id,
+      displayName: "Legacy Adult",
+      photoKeys,
+      selfieKey: "legacy/selfie.jpg",
+    })).rejects.toThrow(/legacy|durable/i);
+    expect([...ctx.store.personas.values()].some((persona) => persona.status === "ready")).toBe(false);
+  });
+
+  it("C17: Supabase hydration preserves a redacted terminal failure reason", async () => {
+    const familyId = "family-hydration-188";
+    const personaId = "persona-hydration-188";
+    const rows: Record<string, unknown[]> = {
+      families: [{ id: familyId, created_at: new Date().toISOString() }],
+      members: [],
+      personas: [{
+        id: personaId,
+        family_id: familyId,
+        created_by_member_id: "member-hydration-188",
+        kind: "adult",
+        display_name: "Parent",
+        status: "failed",
+        lora_weight_key: null,
+        avatar_key: null,
+        review_sample_keys: [],
+        likeness_confirmed: false,
+        failure_reason: "upstream timeout [REDACTED]",
+        created_at: new Date().toISOString(),
+      }],
+    };
+    const client = {
+      from(table: string) {
+        const response = { data: rows[table] ?? [], error: null };
+        const query = {
+          select: () => query,
+          eq: () => query,
+          then: (resolve: (value: typeof response) => unknown) => Promise.resolve(resolve(response)),
+        };
+        return query;
+      },
+    };
+    const store = new SupabaseDataStore(client as never);
+
+    await store.hydrateFamily(familyId, "read");
+
+    expect(store.personas.get(personaId)?.failureReason).toBe("upstream timeout [REDACTED]");
   });
 });

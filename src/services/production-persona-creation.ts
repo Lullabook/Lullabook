@@ -52,6 +52,16 @@ export class ProductionPersonaCreationService {
     if (!preflight.passed) {
       throw new Error(`Pre-flight failed: ${preflight.reasons.join(", ")}`);
     }
+    // Source moderation is the first provider boundary. Do not send source
+    // bytes to the Adult liveness/self-match provider until every photo has
+    // passed the fail-closed child-safety gate.
+    for (const photo of input.photos) {
+      await this.childSafety.checkUpload(
+        photo,
+        `persona-create:${input.requestFingerprint}`,
+        input.familyId
+      );
+    }
     // C4: Adult liveness/self-match is jurisdiction-configured, never
     // hardcoded. Unknown jurisdictions fail closed (liveness required).
     const requiresLiveness =
@@ -60,13 +70,6 @@ export class ProductionPersonaCreationService {
       if (!input.selfie) throw new Error("Selfie required for adult Persona");
       const liveness = await this.liveness.verifySelfie(input.photos, input.selfie);
       if (!liveness.matched) throw new Error("Selfie does not match uploaded photos");
-    }
-    for (const photo of input.photos) {
-      await this.childSafety.checkUpload(
-        photo,
-        `persona-create:${input.requestFingerprint}`,
-        input.familyId
-      );
     }
     return this.protocol.createFromModeratedPhotos(input, input.photos);
   }

@@ -672,11 +672,6 @@ export class PersonaService {
       );
     }
 
-    if (persona.kind === "adult") {
-      if (!input.selfie) throw new Error("Selfie required for adult persona");
-      const liveness = await this.liveness.verifySelfie(input.photos, input.selfie);
-      if (!liveness.matched) throw new Error("Selfie does not match uploaded photos");
-    }
     for (const photo of input.photos) {
       await this.childSafety.checkUpload(
         photo,
@@ -684,20 +679,37 @@ export class PersonaService {
         member.familyId
       );
     }
+    if (persona.kind === "adult") {
+      if (!input.selfie) throw new Error("Selfie required for adult persona");
+      const liveness = await this.liveness.verifySelfie(input.photos, input.selfie);
+      if (!liveness.matched) throw new Error("Selfie does not match uploaded photos");
+    }
     const preflight = runPreflightChecks(input.photos);
     if (!preflight.passed) {
       throw new Error(`Pre-flight failed: ${preflight.reasons.join(", ")}`);
     }
 
-    // Clear the stale likeness surface; the replacement training's signed
-    // callback regenerates samples and moves the Persona back to `review`.
-    persona.status = "training";
-    persona.likenessConfirmed = false;
-    persona.reviewSampleKeys = [];
-    persona.failureReason = undefined;
-    this.store.savePersona(persona);
+    // Do not mutate or persist `review -> training` here. The caller must submit
+    // the replacement provider job first; otherwise a provider outage strands
+    // the durable Persona in `training` with no callback able to recover it.
     return persona;
   }
+}
+
+/**
+ * Provider submission is the first side effect of retraining. The durable
+ * lifecycle transition and local state mutation happen only after submission
+ * succeeds, so a failed provider boundary leaves `review` retryable.
+ */
+export async function submitRetrainingThenCommit<T>(input: {
+  submit: () => Promise<T>;
+  transition: () => Promise<unknown>;
+  onCommitted: () => void;
+}): Promise<T> {
+  const result = await input.submit();
+  await input.transition();
+  input.onCommitted();
+  return result;
 }
 
 /**

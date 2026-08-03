@@ -45,13 +45,18 @@ export class FalReviewSampleGenerator implements PersonaReviewSampleGenerator {
     loraWeightKey: string,
   ): Promise<string[]> {
     const generationId = createHash("sha256").update(request.requestId).digest("hex").slice(0, 16);
+    // `loraWeightKey` is an internal Family-owned blob key. fal needs a
+    // temporary provider-readable URL; passing the key itself makes real
+    // review-sample generation fail after the callback has already copied the
+    // trained artifacts.
+    const loraUrl = await this.blobs.signedUrl(loraWeightKey);
     const keys: string[] = [];
     try {
       for (let index = 0; index < this.sampleCount; index++) {
         const key = likenessReviewSampleBlobKey(request.familyId, request.personaId, generationId, index);
         const image = await this.fal.generateImage(
           `Likeness review sample ${index + 1}: a gentle storybook scene, no raw photo`,
-          loraWeightKey,
+          loraUrl,
           { idempotencyKey: `likeness-sample/${request.personaId}/${request.requestId}/${index}` },
         );
         await this.blobs.put(key, image.bytes ?? Buffer.from("likeness-review-sample"));

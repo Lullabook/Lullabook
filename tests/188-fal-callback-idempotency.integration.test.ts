@@ -94,6 +94,43 @@ async function seedQueuedTraining(
 }
 
 describe("188 — fal callback idempotency and durable Persona lifecycle", () => {
+  it("callback completion is SECURITY DEFINER but callable only by service_role", { timeout: 20_000 }, async () => {
+    await withIsolatedPostgres(async ({ asSystem }) => {
+      const result = await asSystem<{
+        security_definer: boolean;
+        service_exec: boolean;
+        authenticated_exec: boolean;
+        six_arg_overloads: number;
+      }>(`
+        select
+          function_info.prosecdef as security_definer,
+          has_function_privilege('service_role', function_info.oid, 'EXECUTE') as service_exec,
+          has_function_privilege('authenticated', function_info.oid, 'EXECUTE') as authenticated_exec,
+          (
+            select count(*)::integer
+            from pg_proc old_function
+            join pg_namespace old_namespace on old_namespace.oid = old_function.pronamespace
+            where old_namespace.nspname = 'public'
+              and old_function.proname = 'app_complete_fal_training_callback'
+              and old_function.pronargs = 6
+          ) as six_arg_overloads
+        from pg_proc function_info
+        join pg_namespace function_namespace on function_namespace.oid = function_info.pronamespace
+        where function_namespace.nspname = 'public'
+          and function_info.proname = 'app_complete_fal_training_callback'
+          and function_info.pronargs = 7
+      `);
+
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0]).toEqual({
+        security_definer: true,
+        service_exec: true,
+        authenticated_exec: false,
+        six_arg_overloads: 0,
+      });
+    });
+  });
+
   it("a signed OK callback durably persists training -> review with Family-owned keys and review samples", { timeout: 20_000 }, async () => {
     await withIsolatedPostgres(async ({ asSystem, asService, fixture }) => {
       const personaId = "00000000-0000-0000-0000-000000000801";
@@ -171,6 +208,38 @@ describe("188 — fal callback idempotency and durable Persona lifecycle", () =>
         [requestId, personaId],
       );
       expect(owned.rows[0]?.count).toBe("0");
+    });
+  });
+
+  it("uses a short-lived signed URL when sending the Family-owned LoRA to fal for review samples", { timeout: 20_000 }, async () => {
+    await withIsolatedPostgres(async ({ asSystem, asService, fixture }) => {
+      const personaId = "00000000-0000-0000-0000-000000000806";
+      await seedQueuedTraining(asSystem, fixture.familyA, personaId);
+
+      const body = trainingBody();
+      const signed = signedRequest(body);
+      const verifier = createFalWebhookVerifier({
+        now: () => timestamp,
+        resolvePublicKeys: async () => [signed.publicKey],
+      });
+      const blobs = new InMemoryBlobStore();
+      const fal = new FakeFal();
+      const generateImage = vi.spyOn(fal, "generateImage");
+      const service = new FalTrainingWebhookService(
+        new PostgresFalTrainingLifecycleRepository(asService),
+        blobs,
+        verifier,
+        () => new Date(timestamp * 1000),
+        new FalReviewSampleGenerator(fal, blobs),
+      );
+
+      await service.handle(signed.headers, body, artifactDownload());
+
+      expect(generateImage).toHaveBeenCalledTimes(2);
+      for (const [, loraInput] of generateImage.mock.calls) {
+        expect(loraInput).toBe(`memory://lora/${fixture.familyA.familyId}/${personaId}/weights.safetensors`);
+        expect(loraInput).not.toBe(`lora/${fixture.familyA.familyId}/${personaId}/weights.safetensors`);
+      }
     });
   });
 
