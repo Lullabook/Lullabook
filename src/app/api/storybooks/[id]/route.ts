@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { RlsViolationError } from "@/db/store";
 import { resolveRequestAuth } from "@/lib/request-auth";
 import { deriveStorybookProgress } from "@/lib/storybook-progress";
+import type { Storybook } from "@/domain/types";
 
 /**
  * Live-progress polling for Brief composer / reader: status plus per-Page
@@ -17,16 +19,25 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { ctx, member } = authed;
-  // Issue 100: reap any book stranded in `generating` past the watchdog budget
-  // before reading, so the reader never polls an infinite "Illustrating"
-  // spinner. If the reaper changes anything, persist so the next request sees
-  // the terminal state without another reap pass.
-  if ((await ctx.storybooks.reapStrandedGenerationsDurably()) > 0) {
-    await ctx.persist();
+  let book: Storybook | undefined;
+  try {
+    book = ctx.store.getStorybook(id, member.id);
+  } catch (error) {
+    // Family isolation must not turn a cross-Family existence probe into a
+    // 500 or expose the store's domain error. Match the missing-id shape.
+    if (error instanceof RlsViolationError) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    throw error;
   }
-  const book = ctx.store.getStorybook(id, member.id);
   if (!book) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  // Issue 100: only an authorized Storybook read may trigger the global
+  // watchdog. Reaping before this ownership check lets a cross-Family probe
+  // mutate another Family's generation and allowance as a side effect.
+  if ((await ctx.storybooks.reapStrandedGenerationsDurably()) > 0) {
+    await ctx.persist();
   }
   const pages = ctx.store.getPagesForStorybook(book.id);
   const pageWire = pages.map((p) => ({

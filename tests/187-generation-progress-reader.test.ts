@@ -15,6 +15,7 @@ import {
   generationProgressCopy,
   isPollBudgetExhausted,
   isTerminalStatus,
+  shouldPollStorybook,
 } from "../mobile/lib/generation-flow";
 
 /**
@@ -184,6 +185,21 @@ describe("187 — A1: GET /api/storybooks/:id publishes server-derived progress"
     });
     expect(res.status).toBe(401);
   });
+
+  it("returns the same non-disclosing 404 for a cross-Family Storybook probe", { timeout: 20_000 }, async () => {
+    const { ctx, member, book } = await generatingBookFixture();
+    const stranger = ctx.onboarding.ensureFamilyForNewUser("auth-187-stranger", "stranger@example.com");
+    const reap = vi.spyOn(ctx.storybooks, "reapStrandedGenerationsDurably");
+    await mockAuth({ ctx, member: stranger });
+
+    const { status, body } = await getProgress(ctx, stranger, book.id);
+    expect(status).toBe(404);
+    expect(body).toEqual({ error: "Not found" });
+    // A foreign probe must not trigger the global watchdog or mutate the
+    // other Family's book/allowance as an existence side effect.
+    expect(reap).not.toHaveBeenCalled();
+    expect(ctx.store.getStorybook(book.id, member.id)?.status).toBe("generating");
+  });
 });
 
 describe("187 — A1: deriveStorybookProgress projection", () => {
@@ -264,6 +280,14 @@ describe("187 — A4: polling-stop + watchdog are pure, bounded decisions", () =
     expect(isTerminalStatus("generating")).toBe(false);
   });
 
+  it("watchdog timeout stops polling, and clearing it for Retry resumes polling", () => {
+    expect(shouldPollStorybook("generating", false)).toBe(true);
+    expect(shouldPollStorybook("generating", true)).toBe(false);
+    expect(shouldPollStorybook("draft", false)).toBe(false);
+    expect(shouldPollStorybook("failed", false)).toBe(false);
+    expect(shouldPollStorybook("finalized", false)).toBe(false);
+  });
+
   it("a five-minute watchdog budget marks the poll exhausted at/past READER_POLL_BUDGET_MS", () => {
     expect(READER_POLL_BUDGET_MS).toBe(5 * 60 * 1000);
     const start = 1_000_000;
@@ -312,6 +336,8 @@ describe("187 — A2/A4: reader source contract (text + server-derived count whi
     expect(src).toContain("isTerminalStatus(");
     expect(src).toContain("READER_POLL_BUDGET_MS");
     expect(src).toContain("isPollBudgetExhausted(");
+    expect(src).toContain("shouldPollStorybook(");
+    expect(src).toMatch(/\[book\?\.status, load, pollTimedOut\]/);
     // No inline magic 5*60*1000 budget that could drift from the module.
     expect(src).not.toMatch(/POLL_BUDGET_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/);
   });

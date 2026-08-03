@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, Chip, PrimaryButton, SkeletonCard } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, Chip, PrimaryButton, GhostButton, SkeletonCard } from "@/components/maya-ui";
 import { createStorybook, fetchHome, type HomeResponse } from "@/lib/api";
 import { isEntitlementError } from "@/lib/entitlement-error";
 import {
@@ -163,6 +163,10 @@ export default function NewStorybookScreen() {
                 disabled={generating}
                 onPress={generate}
               />
+            </View>
+          ) : error.kind === "support" ? (
+            <View style={st.retryRow}>
+              <GhostButton title="← Back to the library" onPress={() => router.replace("/stories" as never)} />
             </View>
           ) : null}
         </Card>

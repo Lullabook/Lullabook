@@ -28,6 +28,7 @@ import {
   generationProgressCopy,
   isPollBudgetExhausted,
   isTerminalStatus,
+  shouldPollStorybook,
   type GenerationFailure,
 } from "@/lib/generation-flow";
 import { BookCover } from "@/components/story-cover";
@@ -149,7 +150,7 @@ export default function StorybookReaderScreen() {
   }, [load]);
 
   useEffect(() => {
-    if (!book || isTerminalStatus(book.status)) return;
+    if (!book || !shouldPollStorybook(book.status, pollTimedOut)) return;
     if (pollStartedRef.current === null) pollStartedRef.current = Date.now();
     const timer = setInterval(() => {
       if (
@@ -166,7 +167,7 @@ export default function StorybookReaderScreen() {
       load();
     }, READER_POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [book?.status, load]);
+  }, [book?.status, load, pollTimedOut]);
 
   async function rerollCurrent() {
     const page = book?.pages[pageIndex];
@@ -329,6 +330,10 @@ export default function StorybookReaderScreen() {
           {error.retryable ? (
             <View style={st.errorActions}>
               <GhostButton title="↻ Try again" onPress={load} />
+            </View>
+          ) : error.kind === "support" ? (
+            <View style={st.errorActions}>
+              <GhostButton title="← Back to the library" onPress={() => router.back()} />
             </View>
           ) : null}
         </Card>

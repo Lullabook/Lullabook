@@ -164,4 +164,10 @@ describe("187 — reader source contract: every displayed failure has a typed ac
     expect(src).toMatch(/error\.retryable/);
     expect(src).toMatch(/Try again/);
   });
+
+  it("support-classified failures keep a typed navigation/support action visible", () => {
+    const createSrc = readMobile("app/(tabs)/create/index.tsx");
+    expect(createSrc).toMatch(/error\.kind\s*===\s*["']support["']/);
+    expect(src).toMatch(/error\.kind\s*===\s*["']support["']/);
+  });
 });

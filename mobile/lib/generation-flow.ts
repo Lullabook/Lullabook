@@ -27,6 +27,14 @@ export function isTerminalStatus(status: StorybookStatus): boolean {
   return TERMINAL_STATUSES.includes(status);
 }
 
+/** Whether the reader should own an active polling timer for this snapshot. */
+export function shouldPollStorybook(
+  status: StorybookStatus,
+  pollTimedOut: boolean
+): boolean {
+  return !pollTimedOut && !isTerminalStatus(status);
+}
+
 /** The 5-minute watchdog: once the budget is exceeded the reader renders a
  * terminal timeout state instead of spinning forever. */
 export function isPollBudgetExhausted(
