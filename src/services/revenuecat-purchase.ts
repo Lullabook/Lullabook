@@ -51,13 +51,19 @@ function isTier(value: string | undefined): value is Tier {
 
 function evidenceTier(evidence: RevenueCatEntitlementEvidence): Tier | undefined {
   const productTier = r1TierFromRevenueCatProduct(evidence.productId);
-  return productTier;
+  if (productTier) return productTier;
+  return !evidence.productId && process.env.NODE_ENV !== "production" && isTier(evidence.tier)
+    ? evidence.tier
+    : undefined;
 }
 
 function purchaseIsResolved(result: RevenueCatPurchaseResult): boolean {
   const verified = result.verified === true ||
     (result.verified === undefined && process.env.NODE_ENV !== "production");
-  return Boolean(result.entitlementId && verified && r1TierFromRevenueCatProduct(result.productId));
+  const productValid = result.productId
+    ? Boolean(r1TierFromRevenueCatProduct(result.productId))
+    : process.env.NODE_ENV !== "production";
+  return Boolean(result.entitlementId && verified && productValid);
 }
 
 /**

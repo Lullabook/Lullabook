@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestContext, createReadyAdult, householdWithBaby } from "@/test/fixtures";
 
 describe("38 — voice clips record/store/consent", () => {
+  beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+  afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
   it("requires voice consent before persisting clips", async () => {
     const ctx = createTestContext();
     const { guardian } = await householdWithBaby(ctx);

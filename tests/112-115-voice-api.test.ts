@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestContext, goodPhoto, withActiveSubscription } from "@/test/fixtures";
 
 /**
@@ -6,6 +6,8 @@ import { createTestContext, goodPhoto, withActiveSubscription } from "@/test/fix
  * Issue 115 — Voice message: immediate post + notify parents.
  */
 describe("112/115 — voice API + immediate post + notify", () => {
+  beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+  afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
   async function readyMemberWithAdult(ctx: ReturnType<typeof createTestContext>) {
     const member = ctx.onboarding.ensureFamilyForNewUser("auth-112", "v@example.com");
     withActiveSubscription(ctx, member);
