@@ -1,9 +1,6 @@
 ## Now
 
-- 2026-08-03 part2 parallel batch: ALL 12 PRD v22 child tickets (#194-#205) built on
-  `feat/prd-v22-186-205` and moved out of Coding — #194/#195/#196/#204 Done (part4),
-  #197-#200 in the grader loop, #201/#202/#203/#205 Debugger Ready. Full
-  `npm run verify` green. Handoff `SESSION-HANDOFF-2026-08-02-part2-prd-v22-parallel-wave.md`.
+- 2026-08-04 part4 drained Grader Ready: #202 (RevenueCat lifecycle) and #205 (hard-delete/RLS evidence) both **PASS → Done**. Queue empty. Handoff `SESSION-HANDOFF-2026-08-04-part4-202-205.md`. PRD v22 implementation tickets on the board are Done; live/human release evidence remains BLOCKED by design.
 - #203/#205 live-evidence parts (native smoke, real provider IDs, billing
   reconciliation, real RLS/hard-delete, human sign-offs) report BLOCKED by design;
   require wayfinder #135/#150 + fresh approvals.
