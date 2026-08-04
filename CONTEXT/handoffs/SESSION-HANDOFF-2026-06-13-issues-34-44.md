@@ -2,7 +2,7 @@
 
 Status: historical
 
-`/part2` run completing all PRD v5 issues 34–44 (152 tests, build green): Baby /
+`/coder` run completing all PRD v5 issues 34–44 (152 tests, build green): Baby /
 BabyPersonBond / VoiceClip / VoiceConsentReceipt domain + services, migration
 `004_maya_world.sql`, StorybookService page-count/cast/lullaby-weave/video-step
 extensions, v2 design system (cream `#FBF4E7`, Baloo 2 + Nunito) with

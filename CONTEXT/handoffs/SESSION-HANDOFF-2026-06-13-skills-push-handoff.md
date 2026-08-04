@@ -1,9 +1,9 @@
-# Session Handoff — 2026-06-13: `/part1` + `/part2` mandatory push-handoff
+# Session Handoff — 2026-06-13: `/planner` + `/coder` mandatory push-handoff
 
 Status: historical
 
-Meta session, no app code: updated the global `~/.claude/skills/part1` and
-`part2` orchestrator skills so every chain ends `handoff → push-handoff`, and
+Meta session, no app code: updated the global `~/.claude/skills/planner` and
+`coder` orchestrator skills so every chain ends `handoff → push-handoff`, and
 merged `fix/web-shared-service-bugs` → `main` (origin/main at `a8b5f76`,
 including issues 32–33).
 

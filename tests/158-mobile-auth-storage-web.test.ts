@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 /**
  * Issue 158 — Supabase auth storage must not use expo-secure-store on web
- * (part3 audit). expo-secure-store has NO web implementation; on Expo-web its
+ * (debugger audit). expo-secure-store has NO web implementation; on Expo-web its
  * native methods (e.g. `getValueWithKeyAsync`) are undefined and throw the
  * instant Supabase reads the session — which crashed the baby-persona photo
  * upload on the web preview.

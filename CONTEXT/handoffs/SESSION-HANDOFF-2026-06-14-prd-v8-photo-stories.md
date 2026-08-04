@@ -2,7 +2,7 @@
 
 Status: historical
 
-Planning-only `/part1`: produced PRD v8
+Planning-only `/planner`: produced PRD v8
 (`CONTEXT/planning/prd-v8-photo-stories-and-calendar.md`), ADR-0021, glossary updates, and
 issues 64–73 (baby birthDate, Moment photo + vision adapter, Firsts view, Birthday story,
 hard-delete purge, mobile photo-upload wiring, lullaby HITL runbook).

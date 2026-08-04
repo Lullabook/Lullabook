@@ -95,7 +95,7 @@ export default function StorybookReaderScreen() {
   // Issue 160 (E4): finalize is deliberate — the CTA opens an inline confirm
   // sheet that names the re-roll lock before anything is sent to the server.
   const [confirmingFinalize, setConfirmingFinalize] = useState(false);
-  // Part3 hardening (E4): flips the moment the finalize ROUTE succeeds — pure
+  // Debugger hardening (E4): flips the moment the finalize ROUTE succeeds — pure
   // server truth, never a local book.status flip. If the follow-up refetch
   // fails, this keeps the (now wrong) draft CTA hidden so the parent can't
   // re-send finalize into a confusing "Only drafts" error; a reload card
@@ -512,7 +512,7 @@ export default function StorybookReaderScreen() {
             />
           </View>
 
-          {/* Part3 hardening — finalize succeeded on the server but the
+          {/* Debugger hardening — finalize succeeded on the server but the
               refetch failed: the local copy still says draft. Tell the truth
               and offer a reload; never a re-confirmable finalize CTA (E4). */}
           {isDraft && finalizedOnServer ? (

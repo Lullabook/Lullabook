@@ -102,12 +102,12 @@ resolves to `store.sync()`/`workflow.flush()`.
 
 - **`linear-pipeline`** — load before any stage work. LUL ticket IDs are in play
   and Linear is the only write surface for workflow state.
-- **`part4`** — the natural next stage. PR #191 is built and hardened; it needs an
-  independent grade before it can close. The grader must read only the diff and
+- **`reviewer`** — the natural next stage. PR #191 is built and hardened; it needs an
+  independent review before it can close. The reviewer must read only the diff and
   the ticket, never this handoff.
 - **`shared-worktree-safety`** — mandatory here given the Superconductor
   interference described above.
-- **`part1`** — to file the `ColdStartService` follow-up as a proper ticket.
+- **`planner`** — to file the `ColdStartService` follow-up as a proper ticket.
 
 ## Immediate next actions
 

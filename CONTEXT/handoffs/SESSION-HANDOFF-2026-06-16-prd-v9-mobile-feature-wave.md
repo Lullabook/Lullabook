@@ -1,8 +1,8 @@
-# Session Handoff — 2026-06-16: `/part1` PRD v9 (native mobile feature wave)
+# Session Handoff — 2026-06-16: `/planner` PRD v9 (native mobile feature wave)
 
 Status: historical
 
-Planning-only `/part1`: PRD v9 (`CONTEXT/planning/prd-v9-mobile-feature-wave.md`) + issues
+Planning-only `/planner`: PRD v9 (`CONTEXT/planning/prd-v9-mobile-feature-wave.md`) + issues
 74–81 (GH #17–24) — mobile Journal/Moments/Firsts + Storybook generate/reader over Bearer
 APIs, plus social-only auth. Monetization deferred again (later superseded by PRD
 v12/ADR-0023).

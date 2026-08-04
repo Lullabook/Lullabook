@@ -7,7 +7,7 @@ LUL-101 through LUL-110 remain existing issues updated in place. The verified LU
 - Priority: 1 — Urgent
 - State after corrective planner handoff: Coding
 - Blocked by: None
-- Next handoff: coder (`part2`), then debugger (`part3`)
+- Next handoff: coder (`coder`), then debugger (`debugger`)
 
 Goal: Add a repo-owned deterministic integration harness that executes the real Lullabook migrations and RLS policies on an actual PostgreSQL engine with Supabase-compatible authenticated claims, so Family A/B isolation is proven by PostgreSQL rather than DataStore guards or a recording stub.
 
@@ -82,7 +82,7 @@ Blocked live-evidence gate: None. Storage and workflow failures use stateful det
 - Priority: 1 — Urgent
 - State after planner handoff: Coding
 - Blocked by: LUL-129, LUL-130
-- Next handoff: coder (`part2`), then debugger (`part3`)
+- Next handoff: coder (`coder`), then debugger (`debugger`)
 
 Goal: Make the native Persona creation route/action and workflow consume the LUL-129/LUL-130 PostgreSQL, compensation, and outbox foundations as one externally observable operation. LUL-103 owns production wiring and behavior, not redesigning the protocol.
 

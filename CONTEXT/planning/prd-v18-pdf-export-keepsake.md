@@ -1,10 +1,10 @@
 # PRD v18 — PDF Export keepsake: finalize + export on mobile
 
-> Status: ready for agent. Planning artifact from `/part1` (2026-07-05). Completes R1
+> Status: ready for agent. Planning artifact from `/planner` (2026-07-05). Completes R1
 > aha-path steps 9–10 (finalize → export) from
 > [`r1-release-scope-and-invariants.md`](r1-release-scope-and-invariants.md). Grilled
 > decisions locked with the founder this session; invariants E1–E6 below are the
-> red-team targets for `/part2` and `/part3`.
+> red-team targets for `/coder` and `/debugger`.
 
 ## Why this wave
 
@@ -13,7 +13,7 @@ R1's keepsake promise — "Export PDF, no Share links" — is half-built. The se
 `StorybookService.finalize` (draft → finalized), but **no API route exposes finalize**,
 and the mobile reader has **no finalize or export affordance at all**. A parent can
 generate and read a book but never keep it — the aha path dead-ends at step 8. This is
-the largest remaining demo gap (per the 2026-07-05 part3 handoff) and the last unshipped
+the largest remaining demo gap (per the 2026-07-05 debugger handoff) and the last unshipped
 R1 core-loop step.
 
 ## Grilled decisions (locked 2026-07-05)

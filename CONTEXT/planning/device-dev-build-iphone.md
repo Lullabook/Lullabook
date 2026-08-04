@@ -1,7 +1,7 @@
 # Device Dev Build — run Lullabook on a physical iPhone
 
 Status: active
-Owner: /part1 planning pass, 2026-08-03
+Owner: /planner planning pass, 2026-08-03
 Local tickets: 198–201 · GitHub issues: see `index-issues.md`
 
 ## Why
@@ -49,7 +49,7 @@ entitlements are not a concern.
 
 ## Locked invariants
 
-These are the falsifiable constraints. `/part3` attacks them; `/part4` grades
+These are the falsifiable constraints. `/debugger` attacks them; `/reviewer` reviews
 against them.
 
 ### Latency and performance budgets

@@ -1,11 +1,11 @@
 ## Now
 
-- 2026-08-04 part4 drained Grader Ready: #202 (RevenueCat lifecycle) and #205 (hard-delete/RLS evidence) both **PASS → Done**. Queue empty. Handoff `SESSION-HANDOFF-2026-08-04-part4-202-205.md`. PRD v22 implementation tickets on the board are Done; live/human release evidence remains BLOCKED by design.
+- 2026-08-04 reviewer drained Review Ready: #202 (RevenueCat lifecycle) and #205 (hard-delete/RLS evidence) both **PASS → Done**. Queue empty. Handoff `SESSION-HANDOFF-2026-08-04-reviewer-202-205.md`. PRD v22 implementation tickets on the board are Done; live/human release evidence remains BLOCKED by design.
 - #203/#205 live-evidence parts (native smoke, real provider IDs, billing
   reconciliation, real RLS/hard-delete, human sign-offs) report BLOCKED by design;
   require wayfinder #135/#150 + fresh approvals.
-- #193 (parent index) is doc-only — flagged for /part4 or a human to close.
-- #206-#209 (iPhone device dev build) planned by a parallel part1 on the same
+- #193 (parent index) is doc-only — flagged for /reviewer or a human to close.
+- #206-#209 (iPhone device dev build) planned by a parallel planner on the same
   branch — user-owned, do not build without instruction.
 - Gotchas unchanged: `.env.example` needed for verify; Metro binds `[::1]` on this
   machine (ipv4-metro-proxy); verify now has a 30s vitest test timeout (pg-embedded)

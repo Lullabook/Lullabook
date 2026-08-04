@@ -5,7 +5,7 @@ Status: historical
 Planning-only session: produced `CONTEXT/planning/prd-v4-production-persistence.md`
 and issues 32 (persist `push_subscriptions` + `email_plus_vpc_requests`, migration
 003, CI migration smoke-check) and 33 (Email-Plus VPC revoke withdraws consent).
-Also created the global `/part1` and `/part2` orchestrator skills.
+Also created the global `/planner` and `/coder` orchestrator skills.
 
 - Binding: test strategy — keep fast in-memory simulated-RLS tests + CI migration smoke-check (apply `001`→`003` to throwaway Postgres); real-Postgres RLS harness deferred.
 - Binding: `push_subscriptions` is member-scoped (no `family_id`); `email_plus_vpc_requests` is Family-scoped + Guardian-managed, secret `token` resolved server-side only.

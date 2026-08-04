@@ -1,9 +1,9 @@
 # SESSION HANDOFF — 2026-07-09 — Post-R1 wayfinder map charted
 
 ## Scope
-User invoked `/part1` to (a) lay out the whole **post-R1 territory** as a map and
+User invoked `/planner` to (a) lay out the whole **post-R1 territory** as a map and
 (b) run the updated dev server to see Fable's 168–174 monetization changes. Per
-`/part1` step-0 sizing gate, (a) was a **mountain** (spans many subsystems, open
+`/planner` step-0 sizing gate, (a) was a **mountain** (spans many subsystems, open
 questions not yet nameable) → routed to `/wayfinder` in **chart mode**. No
 application code was written this session — planning + charting only.
 
@@ -50,8 +50,8 @@ application code was written this session — planning + charting only.
 ## Deferred to next session
 - **168–174 simulator/runtime review** — needs Xcode (above). This is the "xcode review"
   the user chose to skip for now.
-- **NOT re-running `/part3`** — 168–174 is already audited + green (126 files / 736 tests,
-  commit `e185ea1`; see `SESSION-HANDOFF-2026-07-09-part3-168-174-audit-graded-fixes.md`).
+- **NOT re-running `/debugger`** — 168–174 is already audited + green (126 files / 736 tests,
+  commit `e185ea1`; see `SESSION-HANDOFF-2026-07-09-debugger-168-174-audit-graded-fixes.md`).
   Nothing new to audit — this session added no app code.
 
 ## State
@@ -66,9 +66,9 @@ application code was written this session — planning + charting only.
    **#136 (fix prod illustration/LoRA)** — biggest known risk and gates #137 App Store.
 2. **When Xcode is ready:** run the deferred 168–174 live review via `npm run ios:paid`
    (relaunch `npm run dev:paid` alongside it).
-3. A resolved chunk that has become grillable re-enters `/part1`.
+3. A resolved chunk that has become grillable re-enters `/planner`.
 
 ## Suggested skills
 - **`/wayfinder`** (with `#133`) — the mechanism to advance the map, one ticket/session.
-- **`/part1`** — once a resolved chunk is grillable (nameable open questions, fits one pass).
-- **`/part3`** — only after new mobile app code lands; not needed for this planning session.
+- **`/planner`** — once a resolved chunk is grillable (nameable open questions, fits one pass).
+- **`/debugger`** — only after new mobile app code lands; not needed for this planning session.

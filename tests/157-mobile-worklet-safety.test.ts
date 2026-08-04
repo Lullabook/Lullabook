@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Issue 157 — Reanimated worklet safety guard (part3 audit, R1 polish).
+ * Issue 157 — Reanimated worklet safety guard (debugger audit, R1 polish).
  *
  * A `useAnimatedStyle` / `useDerivedValue` / `useAnimatedReaction` body is a
  * **worklet**: it runs on the Reanimated UI thread. Calling a plain JS function
