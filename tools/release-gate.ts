@@ -49,19 +49,36 @@ export const LIVE_EVIDENCE_MISSING_STEPS = {
     "Run the authenticated Supabase/PostgreSQL RLS evidence against two real Families and retain the denied cross-Family read/write result.",
   hardDelete:
     "Run real database, blob-store, and provider-artifact Hard-delete evidence and retain the post-delete inventory for the deleted Family.",
+  safeLiveFixtures:
+    "Rotate exposed credentials and attach a synthetic or consenting-adult fixture manifest before any live run.",
 } as const;
 
 export type LiveEvidenceMissingStep = keyof typeof LIVE_EVIDENCE_MISSING_STEPS;
 
 export interface NativeEvidence {
-  nativeSimulatorOrTestFlightSmoke?: boolean;
+  approval?: {
+    approved: true;
+    budgetUsd: number;
+    fixture: "synthetic" | "consenting-adult";
+    credentialsRotated: true;
+    serverOnlyCredentials: true;
+  };
+  nativeSimulatorOrTestFlightSmoke?: {
+    profile: "production";
+    buildId: string;
+    evidenceId: string;
+  };
   providerEvidenceSource?: "real-provider";
-  realProviderRequestIds?: string[];
-  billingReconciliation?: boolean;
+  realProviderRequestIds?: Array<{ provider: "anthropic" | "fal"; id: string }>;
+  billingReconciliation?: {
+    verified: true;
+    invoiceId: string;
+    requestIds: string[];
+  };
   actualProviderCostUsd?: number;
-  realOwnedLoraArtifacts?: string[];
-  rlsEvidence?: boolean;
-  hardDeleteEvidence?: boolean;
+  realOwnedLoraArtifacts?: Array<{ key: string; familyId: string; personaId: string }>;
+  rlsEvidence?: { verified: true; evidenceId: string; familyIds: [string, string] };
+  hardDeleteEvidence?: { verified: true; evidenceId: string; familyId: string };
 }
 
 export interface LiveEvidenceDecision {
@@ -157,6 +174,12 @@ function isSyntheticRequestId(value: string): boolean {
   return /^(?:deterministic|fake|test|placeholder|example)(?:[-_:]|$)/i.test(value);
 }
 
+function isHumanEvidenceId(value: string): boolean {
+  return value.trim().length >= 8 &&
+    !isSyntheticRequestId(value) &&
+    !/^https?:\/\//i.test(value);
+}
+
 function isRealArtifactKey(value: string): boolean {
   return value.trim().length > 0 &&
     !/^(?:https?|data|blob):/i.test(value) &&
@@ -165,33 +188,87 @@ function isRealArtifactKey(value: string): boolean {
 
 export function evaluateLiveEvidence(evidence: NativeEvidence = {}): LiveEvidenceDecision {
   const missingEvidence: string[] = [];
-  if (evidence.nativeSimulatorOrTestFlightSmoke !== true) {
+  const approval = evidence.approval;
+  if (
+    approval?.approved !== true ||
+    !Number.isFinite(approval?.budgetUsd) ||
+    (approval?.budgetUsd ?? 0) <= 0 ||
+    !["synthetic", "consenting-adult"].includes(approval?.fixture ?? "") ||
+    approval?.credentialsRotated !== true ||
+    approval?.serverOnlyCredentials !== true
+  ) {
+    missingEvidence.push(LIVE_EVIDENCE_MISSING_STEPS.safeLiveFixtures);
+  }
+
+  const native = evidence.nativeSimulatorOrTestFlightSmoke;
+  if (
+    !native ||
+    native.profile !== "production" ||
+    !isHumanEvidenceId(native.buildId) ||
+    !isHumanEvidenceId(native.evidenceId)
+  ) {
     missingEvidence.push(LIVE_EVIDENCE_MISSING_STEPS.nativeSmoke);
   }
-  const requestIds = evidence.realProviderRequestIds ?? [];
+
+  const requestEvidence = evidence.realProviderRequestIds ?? [];
+  const requestIds = requestEvidence.map(({ id }) => id);
+  const providers = new Set(requestEvidence.map(({ provider }) => provider));
   if (
     evidence.providerEvidenceSource !== "real-provider" ||
-    requestIds.length < 2 ||
+    requestEvidence.length < 2 ||
+    providers.size !== 2 ||
+    !providers.has("anthropic") ||
+    !providers.has("fal") ||
     new Set(requestIds).size !== requestIds.length ||
-    requestIds.some((requestId) => !requestId.trim() || isSyntheticRequestId(requestId))
+    requestIds.some((requestId) => !isHumanEvidenceId(requestId))
   ) {
     missingEvidence.push(LIVE_EVIDENCE_MISSING_STEPS.providerRequestIds);
   }
+
+  const billing = evidence.billingReconciliation;
+  const billedRequestIds = billing?.requestIds ?? [];
   if (
-    evidence.billingReconciliation !== true ||
+    billing?.verified !== true ||
+    !isHumanEvidenceId(billing.invoiceId) ||
+    billedRequestIds.length !== requestIds.length ||
+    new Set(billedRequestIds).size !== billedRequestIds.length ||
+    billedRequestIds.some((id) => !requestIds.includes(id)) ||
     !Number.isFinite(evidence.actualProviderCostUsd) ||
-    (evidence.actualProviderCostUsd ?? 0) <= 0
+    (evidence.actualProviderCostUsd ?? 0) <= 0 ||
+    (approval && (evidence.actualProviderCostUsd ?? 0) > approval.budgetUsd)
   ) {
     missingEvidence.push(LIVE_EVIDENCE_MISSING_STEPS.billingReconciliation);
   }
+
   const artifacts = evidence.realOwnedLoraArtifacts ?? [];
-  if (artifacts.length < 2 || artifacts.some((artifact) => !isRealArtifactKey(artifact))) {
+  const artifactPersonas = new Set(artifacts.map((artifact) => artifact.personaId));
+  if (
+    artifacts.length < 2 ||
+    artifactPersonas.size < 2 ||
+    artifacts.some((artifact) => !isRealArtifactKey(artifact.key) || !isHumanEvidenceId(artifact.familyId) || !isHumanEvidenceId(artifact.personaId))
+  ) {
     missingEvidence.push(LIVE_EVIDENCE_MISSING_STEPS.realOwnedLoraArtifacts);
   }
-  if (evidence.rlsEvidence !== true) {
+
+  const rls = evidence.rlsEvidence;
+  if (
+    !rls ||
+    rls.verified !== true ||
+    !isHumanEvidenceId(rls.evidenceId) ||
+    rls.familyIds.length !== 2 ||
+    new Set(rls.familyIds).size !== 2 ||
+    rls.familyIds.some((id) => !isHumanEvidenceId(id))
+  ) {
     missingEvidence.push(LIVE_EVIDENCE_MISSING_STEPS.rls);
   }
-  if (evidence.hardDeleteEvidence !== true) {
+
+  const hardDelete = evidence.hardDeleteEvidence;
+  if (
+    !hardDelete ||
+    hardDelete.verified !== true ||
+    !isHumanEvidenceId(hardDelete.evidenceId) ||
+    !isHumanEvidenceId(hardDelete.familyId)
+  ) {
     missingEvidence.push(LIVE_EVIDENCE_MISSING_STEPS.hardDelete);
   }
   return {

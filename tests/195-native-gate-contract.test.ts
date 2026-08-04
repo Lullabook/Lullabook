@@ -11,6 +11,40 @@ import {
 
 const ROOT = process.cwd();
 
+function completeLiveEvidence(): NativeEvidence {
+  return {
+    approval: {
+      approved: true,
+      budgetUsd: 2,
+      fixture: "consenting-adult",
+      credentialsRotated: true,
+      serverOnlyCredentials: true,
+    },
+    nativeSimulatorOrTestFlightSmoke: {
+      profile: "production",
+      buildId: "build-195-real",
+      evidenceId: "native-evidence-195",
+    },
+    providerEvidenceSource: "real-provider",
+    realProviderRequestIds: [
+      { provider: "anthropic", id: "anthropic-request-195" },
+      { provider: "fal", id: "fal-request-195" },
+    ],
+    billingReconciliation: {
+      verified: true,
+      invoiceId: "invoice-195-real",
+      requestIds: ["anthropic-request-195", "fal-request-195"],
+    },
+    actualProviderCostUsd: 1.23,
+    realOwnedLoraArtifacts: [
+      { key: "lora/family-195/persona-a.safetensors", familyId: "family-195", personaId: "persona-a-195" },
+      { key: "lora/family-195/persona-b.safetensors", familyId: "family-195", personaId: "persona-b-195" },
+    ],
+    rlsEvidence: { verified: true, evidenceId: "rls-evidence-195", familyIds: ["family-195", "family-other-195"] },
+    hardDeleteEvidence: { verified: true, evidenceId: "delete-evidence-195", familyId: "family-195" },
+  };
+}
+
 describe("195 — native/live evidence is a separate, fail-closed contract", () => {
   it("reports every absent native and production-like proof as BLOCKED, never PASS", async () => {
     const report = await runReachableReleaseGate({ liveEvidence: {} });
@@ -25,21 +59,20 @@ describe("195 — native/live evidence is a separate, fail-closed contract", () 
   });
 
   it("turns live evidence green only when every separately-owned marker is present", () => {
-    const evidence: NativeEvidence = {
-      nativeSimulatorOrTestFlightSmoke: true,
-      providerEvidenceSource: "real-provider",
-      realProviderRequestIds: ["req-anthropic-195", "req-fal-195"],
-      billingReconciliation: true,
-      actualProviderCostUsd: 1.23,
-      realOwnedLoraArtifacts: ["lora/family-195/persona-a.safetensors", "lora/family-195/persona-b.safetensors"],
-      rlsEvidence: true,
-      hardDeleteEvidence: true,
-    };
+    const evidence = completeLiveEvidence();
 
     expect(evaluateLiveEvidence(evidence)).toEqual({
       status: "passed",
       missingEvidence: [],
     });
+
+    expect(evaluateLiveEvidence({
+      ...evidence,
+      realProviderRequestIds: [
+        { provider: "anthropic", id: "x" },
+        { provider: "fal", id: "y" },
+      ],
+    }).status).toBe("blocked");
 
     expect(evaluateLiveEvidence({ ...evidence, realOwnedLoraArtifacts: [] })).toEqual({
       status: "blocked",
@@ -49,16 +82,7 @@ describe("195 — native/live evidence is a separate, fail-closed contract", () 
 
   it("allows the full gate to pass only when the separately-owned evidence markers are present", async () => {
     const report = await runReachableReleaseGate({
-      liveEvidence: {
-        nativeSimulatorOrTestFlightSmoke: true,
-        providerEvidenceSource: "real-provider",
-        realProviderRequestIds: ["req-anthropic-195", "req-fal-195"],
-        billingReconciliation: true,
-        actualProviderCostUsd: 1.23,
-        realOwnedLoraArtifacts: ["lora/family-195/persona-a.safetensors", "lora/family-195/persona-b.safetensors"],
-        rlsEvidence: true,
-        hardDeleteEvidence: true,
-      },
+      liveEvidence: completeLiveEvidence(),
     });
 
     expect(report.liveEvidence).toEqual({ status: "passed", missingEvidence: [] });
