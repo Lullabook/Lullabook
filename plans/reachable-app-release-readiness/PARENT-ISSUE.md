@@ -1,6 +1,6 @@
 # PRD v22 — Reachable app release readiness
 
-This planning issue publishes the complete `/part1` result for the reachable Lullabook iOS app effort. It covers all three planned slices: Story generation reliability, performance optimization, and economics/release readiness.
+This planning issue publishes the complete `/planner` result for the reachable Lullabook iOS app effort. It covers all three planned slices: Story generation reliability, performance optimization, and economics/release readiness.
 
 ## Source of truth
 

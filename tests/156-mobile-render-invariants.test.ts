@@ -3,8 +3,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Issue 156 — Mobile render-layer invariant guards (part3 audit, R1 polish).
- * Hardened per handoff follow-ups #5/#6 (2026-07-05 part3 pass):
+ * Issue 156 — Mobile render-layer invariant guards (debugger audit, R1 polish).
+ * Hardened per handoff follow-ups #5/#6 (2026-07-05 debugger pass):
  *
  *   D1. Reader page-turn < 100ms (latency budget). The fix replaced
  *       `SlideInRight.duration(280).springify()` — springify IGNORES

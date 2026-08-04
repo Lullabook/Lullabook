@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 /**
  * Issue 159 — Apple Sign-In fallback must be inert on the expo-web preview
- * (part3 audit, handoff follow-up #7).
+ * (debugger audit, handoff follow-up #7).
  *
  * `expo-apple-authentication` is native-only. On web the module degrades
  * gracefully (`isAvailableAsync()` → false, the native button renders null),

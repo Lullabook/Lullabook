@@ -5,7 +5,7 @@
 - Depends on: [ADR-0002](0002-per-persona-lora.md), [ADR-0004](0004-curated-versioned-storybook.md)
 
 > **2026-06-16 note — monetization deferred, gate moving.** Implementation of the
-> paywall is **deferred to a dedicated `/part1` payment wave** (PRD v9 ships mobile
+> paywall is **deferred to a dedicated `/planner` payment wave** (PRD v9 ships mobile
 > features only; the `isActive` gate is force-unlocked in dev via
 > `DEV_FORCE_SUBSCRIPTION`). When that wave runs, the product direction
 > (`../../planning/pricing-and-features-2026-06-13.md`, confirmed in the 2026-06-16

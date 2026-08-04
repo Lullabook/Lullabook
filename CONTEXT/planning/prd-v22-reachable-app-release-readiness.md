@@ -1,6 +1,6 @@
 # PRD v22 — Reachable app release readiness
 
-> Planning result of the 2026-08-02 `/part1` run. This plan turns the founder's live report (“the app is laggy; Generate appears to do nothing; provider access and cost are unclear”) into one dependency-ordered release-readiness effort. It covers the currently reachable iOS app surfaces only. It does not invent deferred roadmap features.
+> Planning result of the 2026-08-02 `/planner` run. This plan turns the founder's live report (“the app is laggy; Generate appears to do nothing; provider access and cost are unclear”) into one dependency-ordered release-readiness effort. It covers the currently reachable iOS app surfaces only. It does not invent deferred roadmap features.
 >
 > Parent map: [Wayfinder #133](https://github.com/Lullabook/Lullabook/issues/133). Implementation tickets are drafted in `plans/reachable-app-release-readiness/TICKETS.md` and are published only after this entire plan is reviewed for internal consistency.
 

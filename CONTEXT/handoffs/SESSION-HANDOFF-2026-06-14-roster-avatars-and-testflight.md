@@ -2,7 +2,7 @@
 
 Status: historical
 
-Planning-only `/part1`: wrote PRD v7, ADR-0020, the "Roster avatar" glossary term, issues
+Planning-only `/planner`: wrote PRD v7, ADR-0020, the "Roster avatar" glossary term, issues
 57–63, the running UI feedback log (`CONTEXT/planning/web-and-app-feedback.md`), and
 created the `lullabook-design` + `lullabook-design-check` project skills.
 

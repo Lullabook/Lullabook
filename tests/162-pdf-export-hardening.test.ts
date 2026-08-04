@@ -11,7 +11,7 @@ import type { RequestContext } from "@/lib/context";
 import type { Member } from "@/domain/types";
 
 /**
- * Part3 hardening pass over the PRD v18 PDF-export surface (issues 160/161).
+ * Debugger hardening pass over the PRD v18 PDF-export surface (issues 160/161).
  *
  * BUG-1 — cross-tenant existence oracle: the dev store's RlsViolationError
  *         message ("…another family") must never reach the 400 body of the

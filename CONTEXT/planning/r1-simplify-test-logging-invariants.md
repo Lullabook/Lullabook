@@ -1,6 +1,6 @@
 # R1 Simplification + Test/Logging — Locked Decisions & Invariants
 
-> Grilled 2026-06-23. This doc is the invariants gate for a two-PRD `/part1` wave that
+> Grilled 2026-06-23. This doc is the invariants gate for a two-PRD `/planner` wave that
 > sits **on top of** the already-planned R1 release (PRD v14) and UI polish (PRD v15):
 >
 > - **PRD v16 — Ruthless R1 cut.** Take the R1 scope and cut harder, per the founder's

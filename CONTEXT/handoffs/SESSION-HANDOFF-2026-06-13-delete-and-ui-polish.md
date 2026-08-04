@@ -2,7 +2,7 @@
 
 Status: historical
 
-`/part2` follow-up on issues 34–44 (156 tests, build green): `CharacterService.delete()`
+`/coder` follow-up on issues 34–44 (156 tests, build green): `CharacterService.delete()`
 (issue 45) with confirm UI, restyled `/characters/new`, `/personas/new`, and the
 promote page to v2 (scoped `.v2-form` CSS), halved per-navigation server work by
 wrapping `getAuthedContext` in React `cache()`, and replaced the dead voice-record

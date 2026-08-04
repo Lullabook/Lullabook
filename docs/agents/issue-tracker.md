@@ -38,13 +38,13 @@ The project must have one `Status` single-select field with these exact options:
 
 ```text
 Planned, Agent Ready, Coding, Debugger Ready, Debugging,
-Grading Ready, Grading, Done, Canceled, Duplicate
+Review Ready, Reviewing, Done, Canceled, Duplicate
 ```
 
 Labels are metadata only. Do not use labels as a second stage machine. Review
 built-in Project workflows: GitHub can set `Done` when an issue closes or a pull
 request merges, which must be disabled or constrained when only the independent
-grader may set `Done`.
+reviewer may set `Done`.
 
 ## Conventions
 
@@ -127,4 +127,4 @@ Post the answer as a resolution comment, update the Project `Status` and read it
 back, close the issue only when the configured workflow allows it, and append a
 one-line pointer to the map's `## Decisions so far`. Link created assets from the
 issue; don't paste them in. A resolved chunk that has become grillable re-enters
-`/part1`.
+`/planner`.

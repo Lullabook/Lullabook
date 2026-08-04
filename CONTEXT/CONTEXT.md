@@ -246,7 +246,7 @@ Internal; parent never writes it directly.
   over real data. Same suggestion contract. Free.
 - **Mobile Storybook** — native generation (Brief→generate) + reader (paged
   text+illustration, per-Page candidates/re-roll). Force-unlocked in
-  simulator. Gate-move belongs to the deferred payment `/part1`.
+  simulator. Gate-move belongs to the deferred payment `/planner`.
 
 ## Tier
 Subscription level: three paid tiers — **Basic** ($8), **Normal** ($15),

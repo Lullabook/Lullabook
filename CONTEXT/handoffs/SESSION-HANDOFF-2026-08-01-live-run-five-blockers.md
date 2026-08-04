@@ -1,9 +1,9 @@
 # Session Handoff — Live run of the app, five production blockers fixed
 
 **Date:** 2026-08-01
-**Branch:** `fix/lul-100-part3-debugger-ready` (tip at session start `83bb029`)
+**Branch:** `fix/lul-100-debugger-debugger-ready` (tip at session start `83bb029`)
 **Worktree:** `~/Work/Lullabook` (mainline checkout, not a stage worktree)
-**Mode:** Ad-hoc live run + repair. Not a `/part2` or `/part3` ticket run. No tracker moves.
+**Mode:** Ad-hoc live run + repair. Not a `/coder` or `/debugger` ticket run. No tracker moves.
 **Trigger:** "run the dev server, give me full access, I want to fully test the app so I can release it to the App Store."
 
 ## Summary
