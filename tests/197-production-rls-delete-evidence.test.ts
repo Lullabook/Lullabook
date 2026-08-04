@@ -153,6 +153,11 @@ describe("197 — deterministic release evidence reconciliation", () => {
 
       const proof = await runCrossFamilyRlsDenialProof({
         query: (sql, values) => asUser(fixture.familyA.authUserId, sql, values),
+        verifyTargetOwnership: async (target, foreignFamily) =>
+          (await asSystem(
+            `select id from ${target.table} where id = $1 and family_id = $2`,
+            [target.id, foreignFamily],
+          )).rows.length === 1,
         targets: [
           { table: "personas", id: fixture.familyB.personaId, familyId: fixture.familyB.familyId },
           { table: "moderation_audit", id: auditId, familyId: fixture.familyB.familyId },

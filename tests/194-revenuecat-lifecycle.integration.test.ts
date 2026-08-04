@@ -215,6 +215,19 @@ describe("194 — RevenueCat lifecycle at the server seam", () => {
     expect(r1TierFromRevenueCatProduct(undefined)).toBeUndefined();
   });
 
+  it("does not activate an already-expired verified lifecycle event", async () => {
+    const ctx = createTestContext();
+    const member = guardian(ctx, "auth-194-expired-event");
+    const result = await service(ctx).handleWebhookEvent(event({
+      appUserId: member.familyId,
+      eventId: "expired-initial",
+      expirationAtMs: Date.now() - 1,
+    }));
+
+    expect(result).toMatchObject({ ok: true, action: "ignored" });
+    expect(ctx.subscriptions.isActive(member.familyId)).toBe(false);
+  });
+
   it("does not unlock a paid action for an unresolved native purchase", async () => {
     const ctx = createTestContext();
     const member = guardian(ctx, "auth-194-unresolved");
@@ -223,6 +236,23 @@ describe("194 — RevenueCat lifecycle at the server seam", () => {
 
     await expect(
       service(ctx, adapter).purchase(member.familyId, "normal", { hasPaymentMethod: true })
+    ).rejects.toBeInstanceOf(UnresolvedRevenueCatPurchaseError);
+    expect(ctx.subscriptions.isActive(member.familyId)).toBe(false);
+  });
+
+  it("does not activate the requested tier when verified product evidence names another tier", async () => {
+    const ctx = createTestContext();
+    const member = guardian(ctx, "auth-194-product-tier");
+    const adapter = new FakeRevenueCat();
+    adapter.purchase = async () => ({
+      entitlementId: "rc-entitlement-194",
+      isTrial: false,
+      verified: true,
+      productId: `${R1_PLAN_DEFINITION.plan}_monthly`,
+    });
+
+    await expect(
+      service(ctx, adapter).purchase(member.familyId, "plus", { hasPaymentMethod: true })
     ).rejects.toBeInstanceOf(UnresolvedRevenueCatPurchaseError);
     expect(ctx.subscriptions.isActive(member.familyId)).toBe(false);
   });

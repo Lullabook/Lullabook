@@ -57,13 +57,15 @@ function evidenceTier(evidence: RevenueCatEntitlementEvidence): Tier | undefined
     : undefined;
 }
 
-function purchaseIsResolved(result: RevenueCatPurchaseResult): boolean {
+function purchaseIsResolved(result: RevenueCatPurchaseResult, requestedTier: Tier): boolean {
   const verified = result.verified === true ||
     (result.verified === undefined && process.env.NODE_ENV !== "production");
-  const productValid = result.productId
-    ? Boolean(r1TierFromRevenueCatProduct(result.productId))
+  const productId = result.productId?.trim();
+  const productTier = productId ? r1TierFromRevenueCatProduct(productId) : undefined;
+  const productValid = productId
+    ? productTier === requestedTier
     : process.env.NODE_ENV !== "production";
-  return Boolean(result.entitlementId && verified && productValid);
+  return Boolean(result.entitlementId?.trim() && verified && productValid);
 }
 
 /**
@@ -115,30 +117,41 @@ export class RevenueCatPurchaseService {
    * event is a no-op after the request context is persisted.
    */
   async handleWebhookEvent(event: RevenueCatLifecycleEvent): Promise<RevenueCatWebhookResult> {
-    const familyId = this.resolveFamilyId(event.appUserId);
+    if (
+      typeof event.eventId !== "string" ||
+      !event.eventId.trim() ||
+      typeof event.type !== "string" ||
+      !event.type.trim() ||
+      typeof event.appUserId !== "string" ||
+      !event.appUserId.trim()
+    ) {
+      return { ok: false, duplicate: false, error: "RevenueCat event id, type, and app_user_id are required" };
+    }
+    const eventId = event.eventId.trim();
+    const appUserId = event.appUserId.trim();
+    const familyId = this.resolveFamilyId(appUserId);
     if (!familyId) {
       return { ok: false, duplicate: false, error: "RevenueCat app_user_id is not bound to a Family" };
     }
-    if (typeof event.eventId !== "string" || !event.eventId.trim() || typeof event.type !== "string" || !event.type.trim()) {
-      return { ok: false, duplicate: false, error: "RevenueCat event id and type are required" };
-    }
 
-    const eventType = event.type.toUpperCase();
+    const eventType = event.type.trim().toUpperCase();
     const outOfOrder = this.isOlderThanRecordedEvent(familyId, event.eventTimestampMs);
     const tier = this.lifecycleTier(event);
+    const eventExpired = event.expirationAtMs !== undefined &&
+      (!Number.isFinite(event.expirationAtMs) || event.expirationAtMs <= Date.now());
     const known = KNOWN_EVENTS.has(eventType);
-    const action = !known || outOfOrder || (ACTIVE_EVENTS.has(eventType) && !tier)
+    const action = !known || outOfOrder || (ACTIVE_EVENTS.has(eventType) && (!tier || eventExpired))
       ? "ignored"
       : ACTIVE_EVENTS.has(eventType)
         ? "activated"
         : "deactivated";
 
-    const receiptId = this.receiptId(familyId, event.eventId);
+    const receiptId = this.receiptId(familyId, eventId);
     const receipt = {
       id: receiptId,
       familyId,
       resourceType: "revenuecat_lifecycle",
-      resourceId: event.eventId,
+      resourceId: eventId,
       outcome: action === "ignored" ? "blocked" as const : "allowed" as const,
       reason: `${eventType}:${event.eventTimestampMs ?? ""}`,
       createdAt: new Date(),
@@ -158,7 +171,7 @@ export class RevenueCatPurchaseService {
     if (action === "activated" || retainsAccessThroughExpiration) {
       this.subscriptions.handleRevenueCatActivated(
         familyId,
-        event.subscriptionId ?? `rc_${event.eventId}`,
+        event.subscriptionId ?? `rc_${eventId}`,
         tier ?? this.currentTier(familyId),
         {
           isTrial: event.isTrial === true,
@@ -180,13 +193,15 @@ export class RevenueCatPurchaseService {
     tier: Tier,
     result: RevenueCatPurchaseResult
   ): void {
-    if (!purchaseIsResolved(result)) {
+    if (!purchaseIsResolved(result, tier)) {
       throw new UnresolvedRevenueCatPurchaseError();
     }
+    const resolvedTier = result.productId ? r1TierFromRevenueCatProduct(result.productId) : tier;
+    if (!resolvedTier) throw new UnresolvedRevenueCatPurchaseError();
     this.subscriptions.handleRevenueCatActivated(
       familyId,
       result.subscriptionId ?? result.entitlementId,
-      tier,
+      resolvedTier,
       { isTrial: result.isTrial, expirationAtMs: result.expirationAtMs }
     );
   }

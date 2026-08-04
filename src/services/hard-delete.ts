@@ -89,6 +89,47 @@ export class HardDeleteService {
     const creditLedgerEntries = [...this.store.creditLedgerEntries.values()].filter(
       (entry) => entry.familyId === familyId
     );
+    const memberIds = new Set(members.map((member) => member.id));
+    const pageIds = new Set(pages.map((page) => page.id));
+    const databaseCounts: Record<string, number> = {
+      families: familyCount,
+      members: members.length,
+      personas: personas.length,
+      characters: [...this.store.characters.values()].filter((character) => character.familyId === familyId).length,
+      subscriptions: this.store.subscriptions.has(familyId) ? 1 : 0,
+      consentReceipts: consentReceipts.length,
+      lightConsentReceipts: [...this.store.lightConsentReceipts.values()].filter((receipt) => receipt.familyId === familyId).length,
+      storybooks: storybooks.length,
+      pages: pages.length,
+      pageCandidates: [...this.store.pageCandidates.values()].filter((candidate) => pageIds.has(candidate.pageId)).length,
+      shareLinks: [...this.store.shareLinks.values()].filter((link) => bookIds.has(link.storybookId)).length,
+      moderationAudit: moderationAuditIds.length,
+      pendingBriefs: [...this.store.pendingBriefs.values()].filter((brief) => memberIds.has(brief.memberId)).length,
+      invites: [...this.store.invites.values()].filter((invite) => invite.familyId === familyId).length,
+      purgeScheduled: this.store.purgeScheduled.has(familyId) ? 1 : 0,
+      persistedGenerations: [...this.store.persistedGenerations.values()].filter((generation) => bookIds.has(generation.storybookId)).length,
+      textStories: [...this.store.textStories.values()].filter((story) => story.familyId === familyId).length,
+      storyAllowanceReservations: reservations.length,
+      providerCostLedger: costLedgerEntries.length,
+      providerKillSwitches: providerKillSwitches.length,
+      pushSubscriptions: [...this.store.pushSubscriptions.values()].filter((subscription) => memberIds.has(subscription.memberId)).length,
+      emailPlusVpcRequests: [...this.store.emailPlusVpcRequests.values()].filter((request) => request.familyId === familyId).length,
+      babies: babies.length,
+      babyPersonBonds: bonds.length,
+      voiceClips: [...this.store.voiceClips.values()].filter((clip) => clip.familyId === familyId).length,
+      voiceConsentReceipts: [...this.store.voiceConsentReceipts.values()].filter((receipt) => receipt.familyId === familyId).length,
+      moments: [...this.store.moments.values()].filter((moment) => moment.familyId === familyId).length,
+      momentPeople: [...this.store.momentPeople.values()].filter((link) => this.store.moments.get(link.momentId)?.familyId === familyId).length,
+      creditLedger: creditLedgerEntries.length,
+      creditPurchasedBalance: this.store.creditPurchasedBalances.has(familyId) ? 1 : 0,
+      babyAutoContextWatermarks: [...this.store.autoContextWatermarks.keys()].filter((babyId) => babyIds.has(babyId)).length,
+      babyPastStorySummaries: [...this.store.babyPastStorySummaries.values()].filter((summary) => babyIds.has(summary.babyId)).length,
+      journalNudgeStates: [...this.store.journalNudgeStates.values()].filter((state) => memberIds.has(state.memberId)).length,
+      customStyles: [...this.store.customStyles.values()].filter((style) => style.familyId === familyId).length,
+      falTrainingRequests: falRequests.length,
+      falWebhookReceipts: falReceipts.length,
+      storyContextProvenance: provenance.length,
+    };
 
     const limitations: HardDeleteLimitation[] = [];
     const deletedProviderArtifacts: string[] = [];
@@ -180,9 +221,7 @@ export class HardDeleteService {
     return {
       familyId,
       inventory: {
-        families: familyCount,
-        members: members.length,
-        personas: personas.length,
+        ...databaseCounts,
         babies: babies.length,
         babyPersonBonds: bonds.length,
         consentReceipts: consentReceipts.length,
@@ -205,25 +244,7 @@ export class HardDeleteService {
         creditPurchasedBalance: this.store.creditPurchasedBalances.has(familyId) ? 1 : 0,
       },
       deleted: {
-        database: {
-          families: familyCount,
-          members: members.length,
-          personas: personas.length,
-          babies: babies.length,
-          babyPersonBonds: bonds.length,
-          consentReceipts: consentReceipts.length,
-          moderationAudit: moderationAuditIds.length,
-          providerKillSwitches: providerKillSwitches.length,
-          falTrainingRequests: falRequests.length,
-          falWebhookReceipts: falReceipts.length,
-          storyContextProvenance: provenance.length,
-          storyAllowanceReservations: reservations.length,
-          storybooks: storybooks.length,
-          pages: pages.length,
-          providerCostLedger: costLedgerEntries.length,
-          creditLedger: creditLedgerEntries.length,
-          creditPurchasedBalance: this.store.creditPurchasedBalances.has(familyId) ? 1 : 0,
-        },
+        database: databaseCounts,
         blobKeys: deletedBlobKeys,
         providerArtifacts: deletedProviderArtifacts,
       },
