@@ -5,7 +5,7 @@ Parent Wayfinder map: GitHub issue #133
 
 These are complete planning drafts. They are not GitHub issues until the whole set has been reviewed, then each is created, added to the Project, assigned a live Project `Status`, and read back. Local IDs continue the repository's issue sequence; the publisher replaces local `Blocked by` references with GitHub issue links after creation.
 
-## 186 — Make Story generation asynchronous and terminal
+## 186 / Lullabook #194 — Make Story generation asynchronous and terminal
 
 ### What-to-build
 Make the production Storybook enqueue boundary durable and non-blocking. A production composition without a usable Inngest dispatch configuration fails closed. Keep local inline execution explicit and development-only. Persist the reservation and `generating` state before dispatch, make duplicate delivery idempotent, and ensure the watchdog/reaper reaches `draft` or `failed`.
@@ -30,7 +30,7 @@ npx vitest run tests/186-generation-queue-terminal.test.ts tests/186-generation-
 
 None.
 
-## 187 — Publish generation progress and progressive reader state
+## 187 / Lullabook #195 — Publish generation progress and progressive reader state
 
 ### What-to-build
 Expose server-derived generation progress and make the native reader useful before every Page is terminal. Add typed errors, a bounded create-request timeout, and a visible retry/continue action.
@@ -51,9 +51,9 @@ npx vitest run tests/187-generation-progress-reader.test.ts tests/187-generation
 
 ### Blocked by
 
-186
+186 / Lullabook #194
 
-## 188 — Complete the real Persona training callback lifecycle
+## 188 / Lullabook #196 — Complete the real Persona training callback lifecycle
 
 ### What-to-build
 Wire one production Persona-creation protocol from jurisdiction-configured consent and moderation through ZIP submission, signed fal callback, owned artifact copy, review samples, and durable Persona state. `review` is the canonical post-training state before likeness confirmation. Remove reachable legacy success paths and emit the downstream lifecycle event exactly once.
@@ -89,7 +89,7 @@ npx vitest run tests/188-persona-training-lifecycle.integration.test.ts tests/18
 
 None.
 
-## 189 — Enforce the exact 12-Page Story contract and deterministic placeholder art
+## 189 / Lullabook #197 — Enforce the exact 12-Page Story contract and deterministic placeholder art
 
 ### What-to-build
 Make the R1 Story contract uniform. Character-only Briefs produce a readable 12-Page draft with deterministic local placeholder art and zero fal image calls. A Brief that selects an unconfirmed Persona is rejected before text/image spend; it is never silently downgraded to placeholder art. Valid Persona Scenes use only selected Personas. Invalid text fails before image spend.
@@ -114,9 +114,9 @@ npx vitest run tests/189-placeholder-art-story-contract.test.ts tests/189-r1-twe
 
 ### Blocked by
 
-186
+186 / Lullabook #194
 
-## 190 — Wire atomic allowance and payable spend authorization
+## 190 / Lullabook #198 — Wire atomic allowance and payable spend authorization
 
 ### What-to-build
 Make Story allowance, provider cost authorization, ledger persistence, and red kill switches part of the production composition. Use versioned prices and a worst-case reservation before each payable attempt.
@@ -147,9 +147,9 @@ npx vitest run tests/190-spend-boundary.integration.test.ts tests/190-kill-switc
 
 ### Blocked by
 
-186
+186 / Lullabook #194
 
-## 191 — Instrument request, database-wave, and native startup performance
+## 191 / Lullabook #199 — Instrument request, database-wave, and native startup performance
 
 ### What-to-build
 Add deterministic request timing and query/wave instrumentation plus a dev-only native timing overlay/breadcrumb. Capture a baseline for cold start, authenticated reads, Story detail, and create response without logging secrets or personal data.
@@ -174,7 +174,7 @@ npx vitest run tests/191-request-performance-instrumentation.test.ts && npm run 
 
 None.
 
-## 192 — Reduce authenticated read and blob-serving cost
+## 192 / Lullabook #200 — Reduce authenticated read and blob-serving cost
 
 ### What-to-build
 Split the Supabase read profile from the write/delete profile, remove repeated append-only ledger hydration from ordinary reads, flatten sequential waves, and make image/avatar routes use a minimal authenticated Family lookup. Fix the native roster-avatar bearer request.
@@ -195,9 +195,9 @@ npx vitest run tests/192-read-hydration-scope.test.ts tests/192-blob-serving-aut
 
 ### Blocked by
 
-191
+191 / Lullabook #199
 
-## 193 — Bound polling, startup, and screen rendering
+## 193 / Lullabook #201 — Bound polling, startup, and screen rendering
 
 ### What-to-build
 Replace fixed full-payload polling with bounded backoff/ETag behavior, pause background polling, bound auth startup, preserve painted content during refresh, deduplicate Home reads, and remove duplicate route artifacts that enter the Expo tree.
@@ -220,9 +220,9 @@ npx vitest run tests/193-polling-startup-render.test.ts tests/149-dead-surface-s
 
 ### Blocked by
 
-192
+192 / Lullabook #200
 
-## 194 — Make production entitlement and RevenueCat lifecycle real
+## 194 / Lullabook #202 — Make production entitlement and RevenueCat lifecycle real
 
 ### What-to-build
 Replace the fake-only purchase path with a real RevenueCat seam for native builds, persist webhook events through one hydrated context, add restore and subscription lifecycle handling, and derive every client/server surface from `R1_PLAN_DEFINITION`.
@@ -244,9 +244,9 @@ npx vitest run tests/194-revenuecat-lifecycle.integration.test.ts tests/194-r1-p
 
 ### Blocked by
 
-190
+190 / Lullabook #198
 
-## 195 — Prove the production-like reachable-app release gate
+## 195 / Lullabook #203 — Prove the production-like reachable-app release gate
 
 ### What-to-build
 Build one deterministic and explicitly opt-in live gate for the reachable native surface. It must exercise the real composition boundary, not only isolated service fakes, and must publish evidence for provider IDs, cost, failures, RLS, Hard-delete, and cut surfaces.
@@ -286,9 +286,9 @@ LIVE_PROVIDER_RUN_APPROVED=true LIVE_PROVIDER_BUDGET_USD=2 npm run smoke:r1-prov
 
 ### Blocked by
 
-Wayfinder #135, Wayfinder #150, 187, 188, 189, 190, 193, 194
+Wayfinder #135, Wayfinder #150, 187 / Lullabook #195, 188 / Lullabook #196, 189 / Lullabook #197, 190 / Lullabook #198, 193 / Lullabook #201, 194 / Lullabook #202
 
-## 196 — Configure the Super.Engineering current-workspace iOS launcher
+## 196 / Lullabook #204 — Configure the Super.Engineering current-workspace iOS launcher
 
 ### What-to-build
 Add a safe launcher script/configuration for the Super.Engineering Run button. It must use `$SUPERCONDUCTOR_WORKSPACE_PATH`, start the selected local backend, start the IPv4 Metro proxy, wait for readiness, then invoke `mobile`'s iOS launch command so the Simulator opens the latest workspace code. It must clean up child processes on exit and never carry provider secrets.
@@ -312,7 +312,7 @@ npx vitest run tests/196-super-engineering-ios-launcher.test.ts && npm run verif
 
 None
 
-## 197 — Final hard-delete/RLS and human release evidence reconciliation
+## 197 / Lullabook #205 — Final hard-delete/RLS and human release evidence reconciliation
 
 ### What-to-build
 Run the final human-owned evidence pass after the deterministic gate. Reconcile actual provider billing, Apple/RevenueCat/EAS evidence, PostgreSQL RLS, Hard-delete after restart, cache/CDN/backup retention, provider-deletion limitations, and the complete reachable-feature smoke matrix. This ticket does not silently deploy or submit the app.
@@ -341,4 +341,4 @@ npx vitest run tests/197-production-rls-delete-evidence.test.ts && npm run verif
 
 ### Blocked by
 
-195
+195 / Lullabook #203
