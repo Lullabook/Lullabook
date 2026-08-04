@@ -57,6 +57,12 @@ export class SupabaseDataStore extends DataStore {
   private snapshot = new Map<string, Set<string>>();
   private hydratedFamilyProfiles = new Map<string, HydrationProfile>();
   private hydratingFamilies = new Map<string, Promise<void>>();
+  private hardDeletedFamilyIds = new Set<string>();
+
+  override hardDeleteFamily(familyId: string): void {
+    super.hardDeleteFamily(familyId);
+    this.hardDeletedFamilyIds.add(familyId);
+  }
 
   constructor(private readonly client: SupabaseClient) {
     super();
@@ -1770,6 +1776,20 @@ export class SupabaseDataStore extends DataStore {
     ];
     for (const op of upsertOps) await op();
 
+    // Some service-role-owned Family tables are intentionally not hydrated
+    // into the ordinary unit-of-work maps. Hard-delete still must remove them;
+    // issue a family-scoped cleanup before the FK-sensitive snapshot deletes.
+    for (const familyId of this.hardDeletedFamilyIds) {
+      for (const table of [
+        "persona_creation_upload_attempts",
+        "persona_creation_outbox",
+        "persona_creation_reservations",
+      ]) {
+        const { error } = await this.client.from(table).delete().in("family_id", [familyId]);
+        if (error) throw new Error(`sync hard-delete ${table} failed: ${error.message}`);
+      }
+    }
+
     // Deletes run sequentially child-first for the same reason.
     const deleteOps: Array<() => Promise<void>> = [
       () => deleteMissing("page_candidates", new Set(this.pageCandidates.keys())),
@@ -1819,5 +1839,12 @@ export class SupabaseDataStore extends DataStore {
       () => deleteMissing("email_plus_vpc_requests", new Set(this.emailPlusVpcRequests.keys())),
     ];
     for (const op of deleteOps) await op();
+    for (const familyId of this.hardDeletedFamilyIds) {
+      for (const table of ["voice_clips", "voice_consent_receipts"]) {
+        const { error } = await this.client.from(table).delete().in("family_id", [familyId]);
+        if (error) throw new Error(`sync hard-delete ${table} failed: ${error.message}`);
+      }
+    }
+    this.hardDeletedFamilyIds.clear();
   }
 }

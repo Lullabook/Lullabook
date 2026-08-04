@@ -356,10 +356,12 @@ export interface RlsQueryResult {
 }
 
 type RlsQuery = (sql: string, values?: unknown[]) => Promise<RlsQueryResult>;
+type RlsTarget = { table: string; id: string; familyId: string };
 
 export async function runCrossFamilyRlsDenialProof(input: {
   query: RlsQuery;
-  targets: Array<{ table: string; id: string; familyId: string }>;
+  verifyTargetOwnership: (target: RlsTarget, foreignFamily: string) => Promise<boolean>;
+  targets: RlsTarget[];
   policyContract: RlsPolicyContract;
   familyA: string;
   foreignFamily: string;
@@ -376,6 +378,9 @@ export async function runCrossFamilyRlsDenialProof(input: {
     const table = identifier(target.table);
     if (target.familyId !== input.foreignFamily) {
       errors.push(`${table}/${target.id}: target is not owned by the claimed foreign Family`);
+    }
+    if (!await input.verifyTargetOwnership(target, input.foreignFamily)) {
+      errors.push(`${table}/${target.id}: system-side ownership check failed`);
     }
     for (const operation of ["select", "update", "delete"] as const) {
       const sql = operation === "select"
@@ -487,7 +492,7 @@ export interface ExternalDeletionStore {
   delete(artifact: ExternalDeletionArtifact): Promise<ExternalDeletionResult>;
 }
 
-const BLOB_PREFIXES = ["photos", "persona-creation", "lora", "training-inputs", "books", "styles", "avatars", "likeness-samples", "voice"] as const;
+const BLOB_PREFIXES = ["photos", "photos-staging", "persona-creation", "lora", "training-inputs", "books", "styles", "avatars", "likeness-samples", "voice"] as const;
 
 function familyReferencedBlobKeys(store: DataStore, familyId: string) {
   const keys = new Set<string>();
@@ -527,7 +532,13 @@ async function listOwnedBlobKeys(
 ) {
   const prefixes = [
     ...BLOB_PREFIXES.map((prefix) => `${prefix}/${familyId}/`),
-    ...personaIds.flatMap((id) => [`photos/${id}/`, `voice/${id}/`, `avatars/${familyId}/${id}/`, `likeness-samples/${familyId}/${id}/`]),
+    ...personaIds.flatMap((id) => [
+      `photos/${id}/`,
+      `photos-staging/${id}/`,
+      `voice/${id}/`,
+      `avatars/${familyId}/${id}/`,
+      `likeness-samples/${familyId}/${id}/`,
+    ]),
     ...bookIds.map((id) => `${id}/`),
   ];
   const keys = new Set<string>();
@@ -597,7 +608,7 @@ function familyDatabaseCounts(store: DataStore, familyId: string) {
 }
 
 function blobCounts(keys: string[]) {
-  const sourcePhotos = keys.filter((key) => /^(?:photos|persona-creation)\//.test(key));
+  const sourcePhotos = keys.filter((key) => /^(?:photos|photos-staging|persona-creation)\//.test(key));
   const trainingInputs = keys.filter((key) => key.startsWith("training-inputs/"));
   const loraArtifacts = keys.filter((key) => key.startsWith("lora/"));
   const derivatives = keys.filter((key) => /^(?:avatars|likeness-samples|books|styles|voice)\//.test(key));
@@ -699,10 +710,7 @@ export async function runHardDeleteEvidence(input: {
     for (let index = 0; index < count; index += 1) {
       const deletedCount = report.deleted.database[table];
       const residual = after.counts[table] ?? 0;
-      const status: EvidenceStatus = residual === 0 &&
-        (deletedCount === undefined || deletedCount === count)
-        ? "PASS"
-        : "FAIL";
+      const status: EvidenceStatus = residual === 0 && deletedCount === count ? "PASS" : "FAIL";
       attempts.push({ artifactId: `${table}:${index + 1}`, category: "database", status, commandOutput: `database ${table} row ${index + 1}: contract=${deletedCount ?? "not reported"}/${count}, residual=${residual} -> ${status}` });
       if (status === "FAIL") errors.push(`${table}: database rows remained after Hard-delete`);
     }

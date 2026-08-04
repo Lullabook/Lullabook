@@ -97,6 +97,26 @@ describe("184 — durable hard-delete restart", () => {
         cost_category: "provider_attempt",
         created_at: now,
       }],
+      persona_creation_upload_attempts: [
+        { id: "upload-184", family_id: "family-184" },
+        { id: "upload-keep-184", family_id: "family-keep" },
+      ],
+      persona_creation_outbox: [
+        { id: "outbox-184", family_id: "family-184" },
+        { id: "outbox-keep-184", family_id: "family-keep" },
+      ],
+      persona_creation_reservations: [
+        { id: "reservation-184", family_id: "family-184" },
+        { id: "reservation-keep-184", family_id: "family-keep" },
+      ],
+      voice_clips: [
+        { id: "voice-184", family_id: "family-184" },
+        { id: "voice-keep-184", family_id: "family-keep" },
+      ],
+      voice_consent_receipts: [
+        { id: "voice-consent-184", family_id: "family-184" },
+        { id: "voice-consent-keep-184", family_id: "family-keep" },
+      ],
     };
     const client = durableClient(tables);
     const blobs = new InMemoryBlobStore();
@@ -109,6 +129,11 @@ describe("184 — durable hard-delete restart", () => {
     expect(tables.families).toEqual([]);
     expect(tables.members).toEqual([]);
     expect(tables.provider_cost_ledger).toEqual([]);
+    expect(tables.persona_creation_upload_attempts).toEqual([{ id: "upload-keep-184", family_id: "family-keep" }]);
+    expect(tables.persona_creation_outbox).toEqual([{ id: "outbox-keep-184", family_id: "family-keep" }]);
+    expect(tables.persona_creation_reservations).toEqual([{ id: "reservation-keep-184", family_id: "family-keep" }]);
+    expect(tables.voice_clips).toEqual([{ id: "voice-keep-184", family_id: "family-keep" }]);
+    expect(tables.voice_consent_receipts).toEqual([{ id: "voice-consent-keep-184", family_id: "family-keep" }]);
 
     const restartedStore = new SupabaseDataStore(client);
     await restartedStore.hydrateByMemberId("guardian-184");
