@@ -61,12 +61,24 @@ function PageIllustration({ page }: { page: StorybookPageWire }) {
   const [source, setSource] = useState<{ uri: string; headers?: Record<string, string> } | null>(null);
 
   useEffect(() => {
-    if (!page.illustrationBlobKey) {
+    let cancelled = false;
+    if (!page.illustrationUrl) {
       setSource(null);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
-    illustrationSource(page.illustrationBlobKey).then(setSource).catch(() => setSource(null));
-  }, [page.illustrationBlobKey]);
+    illustrationSource(page.illustrationUrl)
+      .then((nextSource) => {
+        if (!cancelled) setSource(nextSource);
+      })
+      .catch(() => {
+        if (!cancelled) setSource(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [page.illustrationUrl]);
 
   if (page.generationStatus === "failed") {
     return (

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, SkeletonRow, InsetSeparator, MotionCard } from "@/components/maya-ui";
+import { SectionListScreen, Screen, Eyebrow, PageTitle, Lead, Card, SkeletonRow, MotionCard } from "@/components/maya-ui";
 import { RosterAvatar } from "@/components/roster-avatar";
 import { usePressFeedback } from "@/lib/use-press-feedback";
 import { fetchHome, refreshHome, seedDemo, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
-import type { PersonaStatus } from "@domain/types";
+import type { Character, Persona, PersonaStatus } from "@domain/types";
 import { shouldShowInitialSkeleton } from "@/lib/render-state";
 
 const AnimatedPressable = createAnimatedComponent(Pressable);
@@ -26,6 +26,21 @@ const STATUS_DOT: Record<PersonaStatus, string> = {
   review: C.accent,
   ready: C.green,
   failed: C.soft,
+};
+
+type FamilyListItem =
+  | { kind: "persona"; value: Persona }
+  | { kind: "character"; value: Character }
+  | { kind: "empty"; label: string }
+  | { kind: "add-persona"; label: string }
+  | { kind: "add-character"; label: string };
+
+type FamilySection = {
+  key: "personas" | "characters";
+  title: string;
+  emoji: string;
+  count: number;
+  data: FamilyListItem[];
 };
 
 /** Pill add-button with the shared press feedback + a11y (44pt target). */
@@ -149,35 +164,56 @@ export default function FamilyTab() {
   const babyName = home?.selectedBaby?.displayName ?? "your baby";
   const personas = home?.personas ?? [];
   const characters = home?.characters ?? [];
+  const sections: FamilySection[] = [
+    {
+      key: "personas",
+      title: "Family",
+      emoji: "💛",
+      count: personas.length,
+      data: personas.length > 0
+        ? [
+            ...personas.map((value): FamilyListItem => ({ kind: "persona", value })),
+            { kind: "add-persona", label: `Add someone who loves ${babyName}` },
+          ]
+        : [
+            { kind: "empty", label: `Add someone who loves ${babyName} to draw your family.` },
+            { kind: "add-persona", label: `Add someone who loves ${babyName}` },
+          ],
+    },
+    {
+      key: "characters",
+      title: "Characters",
+      emoji: "🐻",
+      count: characters.length,
+      data: characters.length > 0
+        ? [
+            ...characters.map((value): FamilyListItem => ({ kind: "character", value })),
+            { kind: "add-character", label: "Invent a made-up character" },
+          ]
+        : [
+            { kind: "empty", label: "Invent a free, text-only friend — no photos, no consent gate." },
+            { kind: "add-character", label: "Invent a made-up character" },
+          ],
+    },
+  ];
 
   return (
-    <Screen onRefresh={() => load(true)} refreshing={loading}>
-      <View>
-        <Eyebrow>💛 {babyName}&apos;s family</Eyebrow>
-        <PageTitle>The people in their world</PageTitle>
-        <Lead>Real people and made-up friends who star in {babyName}&apos;s stories — drawn and voiced as themselves.</Lead>
-      </View>
-
-      {error ? (
-        <Card style={st.errorCard}>
-          <Text style={st.errorText}>{error}</Text>
-        </Card>
-      ) : null}
-
-      <MotionCard delay={60}>
-        <Text style={st.sectionTitle}>💛 Family ({personas.length})</Text>
-        <FlatList
-          data={personas}
-          keyExtractor={(p) => p.id}
-          scrollEnabled={false}
-          ItemSeparatorComponent={() => <InsetSeparator indent={56} />}
-          ListEmptyComponent={
-            <View style={st.emptyInline}>
-              <Text style={st.emptyEmoji}>💛</Text>
-              <Text style={st.emptyNote}>Add someone who loves {babyName} to draw your family.</Text>
-            </View>
-          }
-          renderItem={({ item: p }) => (
+    <SectionListScreen<FamilyListItem, FamilySection>
+      sections={sections}
+      keyExtractor={(item) => {
+        if (item.kind === "persona") return `persona-${item.value.id}`;
+        if (item.kind === "character") return `character-${item.value.id}`;
+        return `${item.kind}-${item.label}`;
+      }}
+      renderSectionHeader={({ section }) => (
+        <View style={st.sectionHeader}>
+          <Text style={st.sectionTitle}>{section.emoji} {section.title} ({section.count})</Text>
+        </View>
+      )}
+      renderItem={({ item }) => {
+        if (item.kind === "persona") {
+          const p = item.value;
+          return (
             <PersonaRow onPress={() => router.push(`/family/${p.id}` as never)} label={`Open ${p.displayName}`}>
               <RosterAvatar
                 name={p.displayName}
@@ -196,48 +232,61 @@ export default function FamilyTab() {
               <View style={[st.statusDot, { backgroundColor: STATUS_DOT[p.status] ?? C.soft }]} />
               <Text style={st.chev}>›</Text>
             </PersonaRow>
-          )}
-        />
-        <DashedAddRow icon="＋" label={`Add someone who loves ${babyName}`} onPress={() => router.push("/family/new")} />
-      </MotionCard>
-
-      <MotionCard delay={140}>
-        <Text style={st.sectionTitle}>🐻 Characters ({characters.length})</Text>
-        <FlatList
-          data={characters}
-          keyExtractor={(c) => c.id}
-          scrollEnabled={false}
-          ItemSeparatorComponent={() => <InsetSeparator indent={0} />}
-          ListEmptyComponent={
+          );
+        }
+        if (item.kind === "character") return <Text style={st.item}>{item.value.displayName}</Text>;
+        if (item.kind === "empty") {
+          return (
             <View style={st.emptyInline}>
-              <Text style={st.emptyEmoji}>🐻</Text>
-              <Text style={st.emptyNote}>Invent a free, text-only friend — no photos, no consent gate.</Text>
+              <Text style={st.emptyEmoji}>💛</Text>
+              <Text style={st.emptyNote}>{item.label}</Text>
             </View>
-          }
-          renderItem={({ item: c }) => (
-            <Text style={st.item}>{c.displayName}</Text>
-          )}
-        />
-        <DashedAddRow icon="🐻" label="Invent a made-up character" onPress={() => router.push("/characters")} />
-      </MotionCard>
-
-      {/* Issue 107: dev-only seed button. __DEV__ is true only in dev builds. */}
-      {__DEV__ ? (
-        <MotionCard delay={220}>
-          <Text style={st.sectionTitle}>🧪 Dev tools</Text>
-          <Text style={st.emptyNote}>
-            Populate the Maya&apos;s World demo dataset for this Household (idempotent). Requires the paid backend running with DEV_DEMO_SEED=true.
-          </Text>
-          <AddPill title={seeding ? "Seeding…" : "🧪 Seed Maya's World"} onPress={handleSeed} disabled={seeding} />
-          {seedMsg ? <Text style={st.emptyNote}>{seedMsg}</Text> : null}
-        </MotionCard>
-      ) : null}
-    </Screen>
+          );
+        }
+        return (
+          <DashedAddRow
+            icon={item.kind === "add-persona" ? "＋" : "🐻"}
+            label={item.label}
+            onPress={() => router.push(item.kind === "add-persona" ? "/family/new" : "/characters")}
+          />
+        );
+      }}
+      ListHeaderComponent={
+        <View style={st.listHeader}>
+          <View>
+            <Eyebrow>💛 {babyName}&apos;s family</Eyebrow>
+            <PageTitle>The people in their world</PageTitle>
+            <Lead>Real people and made-up friends who star in {babyName}&apos;s stories — drawn and voiced as themselves.</Lead>
+          </View>
+          {error ? (
+            <Card style={st.errorCard}>
+              <Text style={st.errorText}>{error}</Text>
+            </Card>
+          ) : null}
+        </View>
+      }
+      ListFooterComponent={
+        __DEV__ ? (
+          <MotionCard delay={220}>
+            <Text style={st.sectionTitle}>🧪 Dev tools</Text>
+            <Text style={st.emptyNote}>
+              Populate the Maya&apos;s World demo dataset for this Household (idempotent). Requires the paid backend running with DEV_DEMO_SEED=true.
+            </Text>
+            <AddPill title={seeding ? "Seeding…" : "🧪 Seed Maya's World"} onPress={handleSeed} disabled={seeding} />
+            {seedMsg ? <Text style={st.emptyNote}>{seedMsg}</Text> : null}
+          </MotionCard>
+        ) : null
+      }
+      onRefresh={() => load(true)}
+      refreshing={loading}
+    />
   );
 }
 
 const st = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: C.bg },
+  listHeader: { gap: 22 },
+  sectionHeader: { paddingTop: 12, paddingBottom: 4, backgroundColor: C.bg },
   sectionTitle: { fontSize: 18, fontFamily: F.displayBold, color: C.text },
   item: { fontSize: 16, color: C.text, fontFamily: F.bodyBold },
   emptyInline: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 },

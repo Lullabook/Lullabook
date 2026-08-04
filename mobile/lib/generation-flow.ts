@@ -18,6 +18,7 @@ import type { StorybookStatus } from "../../src/domain/types";
 import { isConsentRequiredError, isEntitlementError } from "./entitlement-error";
 
 export const CREATE_REQUEST_TIMEOUT_MS = 20_000;
+export const STORYBOOK_READ_TIMEOUT_MS = 15_000;
 export const READER_POLL_INTERVAL_MS = 2_500;
 export const READER_POLL_BUDGET_MS = 5 * 60 * 1000;
 export const READER_POLL_MAX_DELAY_MS = 30_000;
@@ -99,6 +100,13 @@ export class CreateRequestTimeoutError extends Error {
   constructor() {
     super("Generation is taking longer than expected.");
     this.name = "CreateRequestTimeoutError";
+  }
+}
+
+export class StorybookReadTimeoutError extends Error {
+  constructor() {
+    super("Storybook updates are taking longer than expected.");
+    this.name = "StorybookReadTimeoutError";
   }
 }
 

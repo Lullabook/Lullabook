@@ -46,13 +46,16 @@ export async function GET(
     index: p.index,
     text: p.text,
     generationStatus: p.generationStatus,
-    illustrationBlobKey: p.illustrationBlobKey,
-    hasIllustration: !!p.illustrationBlobKey || !!p.illustrationUrl,
+    // The mobile reader receives an opaque, Family-authorized route rather
+    // than a storage/provider key. The route resolves the blob server-side.
+    illustrationUrl: p.illustrationBlobKey
+      ? `/api/storybooks/pages/${encodeURIComponent(p.id)}/image`
+      : null,
+    hasIllustration: Boolean(p.illustrationBlobKey),
     voiceClipId: p.voiceClipId ?? null,
     candidates: ctx.store.getCandidatesForPage(p.id).map((c) => ({
       id: c.id,
       kind: c.kind,
-      content: c.content,
       selected: c.selected,
     })),
   }));

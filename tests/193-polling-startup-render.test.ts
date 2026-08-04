@@ -13,6 +13,8 @@ import {
   shouldFetchOnResume,
   shouldPollInAppState,
   shouldPollStorybook,
+  STORYBOOK_READ_TIMEOUT_MS,
+  StorybookReadTimeoutError,
 } from "../mobile/lib/generation-flow";
 import { AUTH_STARTUP_TIMEOUT_MS, resolveFirstOpenStartup } from "../mobile/lib/auth-startup";
 import { shouldShowInitialSkeleton } from "../mobile/lib/render-state";
@@ -119,6 +121,23 @@ describe("193 — Storybook detail ETag/304 boundary", () => {
     expect(unchanged.status).toBe(304);
     expect(unchanged.headers.get("ETag")).toBe(etag);
     expect(await unchanged.text()).toBe("");
+
+    await ctx.workflow.drain();
+    const rendered = await GET(new Request(path), {
+      params: Promise.resolve({ id: book.id }),
+    });
+    const renderedBody = await rendered.json() as { pages: Array<Record<string, unknown>> };
+    expect(JSON.stringify(renderedBody)).not.toContain("illustrationBlobKey");
+    expect(JSON.stringify(renderedBody)).not.toContain('"content"');
+    expect(renderedBody.pages[0]).toMatchObject({
+      hasIllustration: true,
+      illustrationUrl: `/api/storybooks/pages/${renderedBody.pages[0]?.id as string}/image`,
+    });
+  });
+
+  it("AC-2: a stuck status request has a bounded read budget and typed retry error", () => {
+    expect(STORYBOOK_READ_TIMEOUT_MS).toBeLessThanOrEqual(15_000);
+    expect(new StorybookReadTimeoutError().name).toBe("StorybookReadTimeoutError");
   });
 });
 
@@ -136,6 +155,19 @@ describe("193 — bounded auth startup", () => {
       )
     ).resolves.toBe("/sign-in");
   });
+
+  it("AC-3: an authenticated session never waits on demo storage", async () => {
+    await expect(
+      resolveFirstOpenStartup(
+        {
+          getSession: async () => true,
+          hasSeenDemo: () => new Promise<boolean>(() => {}),
+          demoRenderable: true,
+        },
+        5
+      )
+    ).resolves.toBe("/(tabs)");
+  });
 });
 
 describe("193 — painted content and virtualized collections", () => {
@@ -152,7 +184,7 @@ describe("193 — painted content and virtualized collections", () => {
   it("AC-5: reachable repeatable collections use native virtualization", () => {
     expect(readMobile("app/(tabs)/stories/index.tsx")).toContain("<ListScreen");
     expect(readMobile("app/daily.tsx")).toContain("<ListScreen");
-    expect(readMobile("app/(tabs)/family.tsx")).toContain("<FlatList");
+    expect(readMobile("app/(tabs)/family.tsx")).toContain("<SectionListScreen");
     expect(readMobile("app/characters/index.tsx")).toContain("<ListScreen");
   });
 });
@@ -187,6 +219,7 @@ describe("193 — private read deduplication and sign-out invalidation", () => {
 
   it("AC-6: API reads opt out of shared HTTP caching and settings uses the clearing sign-out path", () => {
     expect(readMobile("lib/api.ts")).toContain('cache: "no-store"');
+    expect(readMobile("lib/api.ts")).toContain("homeCacheIdentity");
     expect(readMobile("lib/supabase.ts")).toContain("clearPrivateCaches");
     expect(readMobile("app/(tabs)/settings/index.tsx")).toContain("signOutAndClearPrivateCaches");
   });

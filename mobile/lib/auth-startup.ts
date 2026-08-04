@@ -22,9 +22,12 @@ export async function resolveFirstOpenStartup(
   });
   const resolution = (async () => {
     const hasSession = await deps.getSession().catch(() => false);
+    // Returning Families must never wait on demo storage. A hung local
+    // AsyncStorage read must not route a valid session to sign-in.
+    if (hasSession) return "/(tabs)";
     const seen = await deps.hasSeenDemo().catch(() => true);
     return resolveFirstOpenRoute({
-      hasSession,
+      hasSession: false,
       hasSeenDemo: seen,
       demoRenderable: deps.demoRenderable,
     });

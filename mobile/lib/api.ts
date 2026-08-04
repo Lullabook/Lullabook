@@ -6,6 +6,8 @@ import {
   ApiStatusError,
   CREATE_REQUEST_TIMEOUT_MS,
   CreateRequestTimeoutError,
+  STORYBOOK_READ_TIMEOUT_MS,
+  StorybookReadTimeoutError,
 } from "@/lib/generation-flow";
 import {
   classifyConsentRequiredError,
@@ -15,7 +17,19 @@ import type { Character, Persona, StoryType } from "@domain/types";
 
 const apiBase = getApiUrl();
 const homeCache = createSharedRequestCache<HomeResponse>();
-registerPrivateCache(() => homeCache.clear());
+let homeCacheIdentity: string | null | undefined;
+registerPrivateCache(() => {
+  homeCacheIdentity = undefined;
+  homeCache.clear();
+});
+
+async function getHomeCache(identity: string | null, refresh: boolean) {
+  if (identity !== homeCacheIdentity) {
+    homeCacheIdentity = identity;
+    homeCache.clear();
+  }
+  return refresh ? homeCache.refresh(() => apiFetch("/api/home")) : homeCache.get(() => apiFetch("/api/home"));
+}
 
 async function apiFetch<T>(
   path: string,
@@ -142,12 +156,12 @@ export interface HomeResponse {
   trainingExpectationCopy: string;
 }
 
-export function fetchHome(): Promise<HomeResponse> {
-  return homeCache.get(() => apiFetch("/api/home"));
+export async function fetchHome(): Promise<HomeResponse> {
+  return getHomeCache(await getAccessToken(), false);
 }
 
-export function refreshHome(): Promise<HomeResponse> {
-  return homeCache.refresh(() => apiFetch("/api/home"));
+export async function refreshHome(): Promise<HomeResponse> {
+  return getHomeCache(await getAccessToken(), true);
 }
 
 /** ADR-0028 — the paywall consumes the same canonical R1 plan as entitlement. */
@@ -325,10 +339,10 @@ export interface StorybookPageWire {
   index: number;
   text: string;
   generationStatus: import("@domain/types").PageGenerationStatus;
-  illustrationBlobKey: string | null;
+  illustrationUrl: string | null;
   hasIllustration: boolean;
   voiceClipId: string | null;
-  candidates: { id: string; kind: string; content: string; selected: boolean }[];
+  candidates: { id: string; kind: string; selected: boolean }[];
 }
 
 export interface StorybookDetailWire {
@@ -348,22 +362,34 @@ export async function getStorybookSnapshot(
   etag?: string | null
 ): Promise<{ data: StorybookDetailWire | null; etag: string | null; notModified: boolean }> {
   const token = await getAccessToken();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STORYBOOK_READ_TIMEOUT_MS);
   const headers: Record<string, string> = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(etag ? { "If-None-Match": etag } : {}),
   };
-  const res = await fetch(`${apiBase}/api/storybooks/${encodeURIComponent(id)}`, {
-    headers,
-    cache: "no-store",
-  });
-  const nextEtag = res.headers.get("ETag");
-  if (res.status === 304) return { data: null, etag: nextEtag ?? etag ?? null, notModified: true };
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-    if (res.status === 401) throw new ApiSignInRequiredError();
-    throw new ApiStatusError(res.status, body.error ?? `Request failed (${res.status})`);
+  try {
+    const res = await fetch(`${apiBase}/api/storybooks/${encodeURIComponent(id)}`, {
+      headers,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const nextEtag = res.headers.get("ETag");
+    if (res.status === 304) return { data: null, etag: nextEtag ?? etag ?? null, notModified: true };
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      if (res.status === 401) throw new ApiSignInRequiredError();
+      throw new ApiStatusError(res.status, body.error ?? `Request failed (${res.status})`);
+    }
+    return { data: (await res.json()) as StorybookDetailWire, etag: nextEtag, notModified: false };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new StorybookReadTimeoutError();
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return { data: (await res.json()) as StorybookDetailWire, etag: nextEtag, notModified: false };
 }
 
 export async function getStorybook(id: string): Promise<StorybookDetailWire> {
@@ -522,10 +548,10 @@ export function fetchEntitlementSnapshot(): Promise<
   return apiFetch("/api/entitlement");
 }
 
-export async function illustrationSource(blobKey: string): Promise<{ uri: string; headers?: Record<string, string> }> {
+export async function illustrationSource(url: string): Promise<{ uri: string; headers?: Record<string, string> }> {
   const token = await getAccessToken();
   return {
-    uri: `${apiBase}/api/images?key=${encodeURIComponent(blobKey)}`,
+    uri: `${apiBase}${url}`,
     ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
   };
 }
