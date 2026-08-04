@@ -793,6 +793,11 @@ export class DataStore {
       if (reservation.familyId === familyId) this.storyAllowanceReservations.delete(id);
     }
 
+    for (const [id, entry] of this.creditLedgerEntries) {
+      if (entry.familyId === familyId) this.creditLedgerEntries.delete(id);
+    }
+    this.creditPurchasedBalances.delete(familyId);
+
     // Hard-delete is the explicit exception to normal append-only financial
     // audit retention: all Family-scoped cost evidence and controls are erased.
     for (const [id, entry] of this.providerCostLedgerEntries) {

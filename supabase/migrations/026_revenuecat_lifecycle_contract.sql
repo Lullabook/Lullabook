@@ -10,3 +10,26 @@ ALTER TABLE subscriptions
 CREATE UNIQUE INDEX IF NOT EXISTS moderation_audit_revenuecat_event_uidx
   ON moderation_audit (resource_type, resource_id)
   WHERE resource_type = 'revenuecat_lifecycle';
+
+-- A Family hard-delete removes its consent receipt and must cascade through
+-- an abandoned Persona-creation reservation before the sync layer deletes the
+-- Family. Finalized reservations are already represented by their Persona.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'persona_creation_reservations_adult_consent_receipt_id_fkey'
+  ) THEN
+    ALTER TABLE persona_creation_reservations
+      DROP CONSTRAINT persona_creation_reservations_adult_consent_receipt_id_fkey;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'persona_creation_reservations_adult_consent_receipt_id_fkey'
+  ) THEN
+    ALTER TABLE persona_creation_reservations
+      ADD CONSTRAINT persona_creation_reservations_adult_consent_receipt_id_fkey
+      FOREIGN KEY (adult_consent_receipt_id)
+      REFERENCES consent_receipts(id) ON DELETE CASCADE;
+  END IF;
+END $$;

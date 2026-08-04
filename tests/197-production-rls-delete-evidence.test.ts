@@ -154,8 +154,8 @@ describe("197 — deterministic release evidence reconciliation", () => {
       const proof = await runCrossFamilyRlsDenialProof({
         query: (sql, values) => asUser(fixture.familyA.authUserId, sql, values),
         targets: [
-          { table: "personas", id: fixture.familyB.personaId },
-          { table: "moderation_audit", id: auditId },
+          { table: "personas", id: fixture.familyB.personaId, familyId: fixture.familyB.familyId },
+          { table: "moderation_audit", id: auditId, familyId: fixture.familyB.familyId },
         ],
         policyContract,
         familyA: fixture.familyA.familyId,
@@ -452,7 +452,7 @@ describe("197 — deterministic release evidence reconciliation", () => {
     const reconciled = reconcileProviderCharges({
       familyId: guardian.familyId,
       ledgerEntries: [entry],
-      charges: [{ id: "invoice-line-197", provider: "fal", providerRequestId: entry.providerRequestId, amountUsd: 0.4 }],
+      charges: [{ id: "invoice-line-197", billingExportId: "invoice-export-197", provider: "fal", providerRequestId: entry.providerRequestId, amountUsd: 0.4 }],
       approvedBudgetUsd: 1,
     });
     expect(reconciled.status).toBe("PASS");

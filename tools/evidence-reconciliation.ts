@@ -211,6 +211,9 @@ export function validateEvidencePacket(packet: EvidencePacket) {
     if (!item.command.trim() || !item.commandOutput.trim()) {
       errors.push(`${item.id || "<unknown>"}: command and command output are required`);
     }
+    if (/(?:https?:\/\/|api[_-]?key|secret|password|prompt|raw[_ -]?photo|photo[_ -]?bytes)/i.test(`${item.command} ${item.commandOutput}`)) {
+      errors.push(`${item.id || "<unknown>"}: evidence output contains sensitive or provider URL material`);
+    }
     if (item.status === "BLOCKED" && !item.missingStep?.trim()) {
       errors.push(`${item.id}: BLOCKED evidence requires the exact missing step`);
     }
@@ -356,7 +359,7 @@ type RlsQuery = (sql: string, values?: unknown[]) => Promise<RlsQueryResult>;
 
 export async function runCrossFamilyRlsDenialProof(input: {
   query: RlsQuery;
-  targets: Array<{ table: string; id: string }>;
+  targets: Array<{ table: string; id: string; familyId: string }>;
   policyContract: RlsPolicyContract;
   familyA: string;
   foreignFamily: string;
@@ -371,6 +374,9 @@ export async function runCrossFamilyRlsDenialProof(input: {
   const errors = [...input.policyContract.errors];
   for (const target of input.targets) {
     const table = identifier(target.table);
+    if (target.familyId !== input.foreignFamily) {
+      errors.push(`${table}/${target.id}: target is not owned by the claimed foreign Family`);
+    }
     for (const operation of ["select", "update", "delete"] as const) {
       const sql = operation === "select"
         ? `select id from ${table} where id = $1`
@@ -447,7 +453,8 @@ export function reconcileModerationEvidence(input: {
   const familyOwnedBefore = input.entries.filter((entry) => entry.familyId === input.familyId);
   const unowned = input.entries.filter((entry) => !entry.familyId);
   const familyOwnedAfter = input.remainingAfterDelete.filter((entry) => entry.familyId === input.familyId);
-  if (unowned.length > 0) errors.push("moderation evidence must retain family_id ownership");
+  const unownedAfter = input.remainingAfterDelete.filter((entry) => !entry.familyId);
+  if (unowned.length > 0 || unownedAfter.length > 0) errors.push("moderation evidence must retain family_id ownership");
   if (!input.crossFamilyDenied) errors.push("cross-Family moderation evidence access was not denied");
   if (input.policyContract.status !== "PASS") errors.push(...input.policyContract.errors);
   if (familyOwnedAfter.length > 0 && !input.retentionException) {
@@ -777,8 +784,15 @@ export async function runHardDeleteEvidence(input: {
   } satisfies HardDeleteEvidence;
 }
 
+function isEvidenceId(value: string): boolean {
+  return value.trim().length >= 8 &&
+    !/^(?:deterministic|fake|test|placeholder|example)(?:[-_:]|$)/i.test(value) &&
+    !/^https?:\/\//i.test(value);
+}
+
 export interface ProviderCharge {
   id: string;
+  billingExportId: string;
   provider: string;
   providerRequestId: string;
   amountUsd: number;
@@ -805,6 +819,9 @@ export function reconcileProviderCharges(input: {
   }> = [];
   const usedEntries = new Set<string>();
   for (const charge of input.charges) {
+    if (!isEvidenceId(charge.billingExportId)) {
+      missingEvidence.push(`${charge.id}: an authenticated billing-export provenance ID`);
+    }
     if (!Number.isFinite(charge.amountUsd) || charge.amountUsd <= 0) {
       errors.push(`${charge.id}: charge amount must be positive`);
       continue;

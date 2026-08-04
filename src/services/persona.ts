@@ -357,7 +357,7 @@ export class PersonaService {
       reviewSampleKeys: [...(persona.reviewSampleKeys ?? [])],
     };
     const replacementId = uuid();
-    const stagingPrefix = `photos-staging/${persona.id}/${replacementId}`;
+    const stagingPrefix = `photos-staging/${persona.familyId}/${persona.id}/${replacementId}`;
     const candidate: Persona = {
       ...oldPersona,
       status: "training",
