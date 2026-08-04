@@ -1,8 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createReadyAdult,
   createTestContext,
-  goodPhoto,
   householdWithBaby,
   subscribedGuardian,
 } from "@/test/fixtures";
@@ -30,6 +29,10 @@ function setTier(
 }
 
 describe("91 — Tier & entitlement model (ADR-0023)", () => {
+  // Legacy tier assertions exercise the explicitly opted-in R2 compatibility
+  // model; R1 production defaults are covered by the canonical plan tests.
+  beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+  afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
   describe("tier → caps + capability flags", () => {
     it("Basic $8: 4 stories, 2 members, narration/video/customStyle all off", () => {
       expect(TIER_ENTITLEMENTS.basic).toEqual({

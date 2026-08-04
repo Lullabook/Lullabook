@@ -2,6 +2,7 @@ import type { DataStore } from "@/db/store";
 import type { Plan, Tier } from "@/domain/types";
 import type { SubscriptionService } from "@/services/subscription";
 import { isR1MultiFamilyEnabled } from "@/lib/r1-config";
+import { isR1OnePlan } from "@/lib/paywall-config";
 import { LEGACY_TIER_COMPATIBILITY, R1_PLAN_DEFINITION } from "@/domain/plan";
 
 /**
@@ -150,7 +151,10 @@ export class EntitlementService {
   getPlan(familyId: string): Plan | "none" {
     const tier = this.getTier(familyId);
     if (tier === "none") return "none";
-    return tierToPlan(tier as Tier);
+    // R1 has one sellable plan. Legacy Plus rows remain readable for R2
+    // compatibility, but cannot unlock cut multi-family capabilities by
+    // merely surviving a migration.
+    return isR1OnePlan() ? "just_us" : tierToPlan(tier as Tier);
   }
 
   /** The two-plan entitlement bundle (ADR-0025). */
@@ -238,8 +242,13 @@ export class EntitlementService {
 
   /** Gate: the Household's legacy tier must grant the capability, else 403. */
   requireCapability(familyId: string, capability: Capability): void {
+    const plan = this.getPlan(familyId);
     const tier = this.getTier(familyId);
-    const ent = tier === "none" ? NO_ENTITLEMENT : TIER_ENTITLEMENTS[tier];
+    const ent = plan === "none"
+      ? NO_ENTITLEMENT
+      : isR1OnePlan()
+        ? this.getPlanEntitlement(familyId)
+        : TIER_ENTITLEMENTS[tier as Tier];
     if (!ent[CAPABILITY_FLAG[capability]]) {
       const required = CAPABILITY_TIER[capability];
       throw new EntitlementError(

@@ -573,6 +573,13 @@ export class DataStore {
     this.moderationAudit.set(entry.id, entry);
   }
 
+  /** Durable webhook inbox seam; Supabase overrides this with an atomic insert. */
+  async claimRevenueCatEvent(entry: ModerationAuditEntry): Promise<boolean> {
+    if (this.moderationAudit.has(entry.id)) return false;
+    this.moderationAudit.set(entry.id, entry);
+    return true;
+  }
+
   savePendingBrief(key: string, brief: PendingBrief): void {
     this.pendingBriefs.set(key, brief);
   }

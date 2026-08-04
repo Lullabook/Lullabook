@@ -74,12 +74,12 @@ export const R1_FALLBACK_PLAN: R1PlanContract = R1_PLAN_DEFINITION;
  * product is rejected before it can unlock the Family.
  */
 export function r1TierFromRevenueCatProduct(productId: string | undefined): Tier | undefined {
-  if (!productId) return "normal";
+  if (!productId) return undefined;
   const normalized = productId
     .toLowerCase()
     .replace(/-/g, "_")
     .replace(/^lullabook_/, "");
-  return normalized === R1_PLAN_DEFINITION.plan || normalized.startsWith(`${R1_PLAN_DEFINITION.plan}_`)
+  return normalized === `${R1_PLAN_DEFINITION.plan}_monthly` || normalized === `${R1_PLAN_DEFINITION.plan}_annual`
     ? "normal"
     : undefined;
 }

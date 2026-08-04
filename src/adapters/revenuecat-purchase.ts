@@ -4,6 +4,7 @@ import type {
   RevenueCatPurchaseResult,
 } from "@/adapters/types";
 import { optionalEnv } from "@/adapters/env";
+import { r1TierFromRevenueCatProduct } from "@/domain/plan";
 
 /**
  * Real RevenueCat purchase adapter (issue 92).
@@ -17,6 +18,7 @@ import { optionalEnv } from "@/adapters/env";
  * while this adapter is only used for server-side reconciliation.
  */
 const API_BASE = "https://api.revenuecat.com/v1";
+const REVENUECAT_READ_TIMEOUT_MS = 10_000;
 
 export class RealRevenueCatPurchaseAdapter implements RevenueCatPurchaseAdapter {
   private readonly apiKey: string | undefined;
@@ -49,9 +51,12 @@ export class RealRevenueCatPurchaseAdapter implements RevenueCatPurchaseAdapter 
 
   async fetchEntitlement(familyId: string): Promise<RevenueCatEntitlementEvidence | null> {
     if (!this.apiKey) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REVENUECAT_READ_TIMEOUT_MS);
     try {
       const res = await fetch(`${API_BASE}/subscribers/${encodeURIComponent(familyId)}`, {
         headers: { Authorization: `Bearer ${this.apiKey}` },
+        signal: controller.signal,
       });
       if (!res.ok) return null;
       const data = await res.json() as {
@@ -64,18 +69,29 @@ export class RealRevenueCatPurchaseAdapter implements RevenueCatPurchaseAdapter 
           }>;
         };
       };
-      const first = Object.values(data.subscriber?.entitlements ?? {})[0];
-      if (!first) return null;
-      const productId = first.product_id ?? first.product_identifier;
+      const now = Date.now();
+      const active = Object.values(data.subscriber?.entitlements ?? {})
+        .map((entitlement) => ({
+          entitlement,
+          productId: entitlement.product_id ?? entitlement.product_identifier,
+          expirationAtMs: entitlement.expires_date ? Date.parse(entitlement.expires_date) : undefined,
+        }))
+        .find(({ productId, expirationAtMs }) =>
+          !!r1TierFromRevenueCatProduct(productId) &&
+          (expirationAtMs === undefined || (Number.isFinite(expirationAtMs) && expirationAtMs > now))
+        );
+      if (!active?.productId) return null;
       return {
-        tier: productId?.replace(/^lullabook[_-]/i, "") ?? "unknown",
-        productId,
-        isTrial: first.period_type?.toLowerCase() === "trial",
+        tier: "normal",
+        productId: active.productId,
+        isTrial: active.entitlement.period_type?.toLowerCase() === "trial",
         verified: true,
-        expirationAtMs: first.expires_date ? Date.parse(first.expires_date) : undefined,
+        expirationAtMs: active.expirationAtMs,
       };
     } catch {
       return null;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { R1_PLAN_DEFINITION } from "@/domain/plan";
+import { R1_PLAN_DEFINITION, r1TierFromRevenueCatProduct } from "@/domain/plan";
 import { FakeRevenueCat } from "@/adapters/fakes";
 import { createTestContext } from "@/test/fixtures";
 import {
@@ -191,14 +191,28 @@ describe("194 — RevenueCat lifecycle at the server seam", () => {
     expect(calls).toEqual(["restore"]);
   });
 
-  it("activates a Family only from a verified lifecycle event", () => {
+  it("activates a Family only from a verified lifecycle event", async () => {
     const ctx = createTestContext();
     const member = guardian(ctx);
-    const result = service(ctx).handleWebhookEvent({ ...event(), appUserId: member.familyId });
+    const result = await service(ctx).handleWebhookEvent({ ...event(), appUserId: member.familyId });
 
     expect(result).toMatchObject({ ok: true, duplicate: false, action: "activated" });
     expect(ctx.subscriptions.isActive(member.familyId)).toBe(true);
     expect(ctx.store.getSubscription(member.familyId)?.tier).toBe("normal");
+  });
+
+  it("rejects missing and unknown R1 products before entitlement activation", async () => {
+    const ctx = createTestContext();
+    const member = guardian(ctx, "auth-194-products");
+    const purchase = service(ctx);
+
+    await purchase.handleWebhookEvent(event({ appUserId: member.familyId, productId: undefined }));
+    await purchase.handleWebhookEvent(event({ appUserId: member.familyId, eventId: "unknown-product", productId: "just_us_free" }));
+
+    expect(ctx.subscriptions.isActive(member.familyId)).toBe(false);
+    expect(r1TierFromRevenueCatProduct("just_us_monthly")).toBe("normal");
+    expect(r1TierFromRevenueCatProduct("just_us_free")).toBeUndefined();
+    expect(r1TierFromRevenueCatProduct(undefined)).toBeUndefined();
   });
 
   it("does not unlock a paid action for an unresolved native purchase", async () => {
@@ -213,12 +227,12 @@ describe("194 — RevenueCat lifecycle at the server seam", () => {
     expect(ctx.subscriptions.isActive(member.familyId)).toBe(false);
   });
 
-  it("deduplicates event IDs and binds app_user_id to the owning Family", () => {
+  it("deduplicates event IDs and binds app_user_id to the owning Family", async () => {
     const ctx = createTestContext();
     const member = guardian(ctx, "auth-194-dedupe");
     const purchase = service(ctx);
-    const first = purchase.handleWebhookEvent({ ...event(), appUserId: member.familyId });
-    const replay = purchase.handleWebhookEvent({ ...event(), appUserId: member.familyId });
+    const first = await purchase.handleWebhookEvent({ ...event(), appUserId: member.familyId });
+    const replay = await purchase.handleWebhookEvent({ ...event(), appUserId: member.familyId });
 
     expect(first.duplicate).toBe(false);
     expect(replay).toMatchObject({ ok: true, duplicate: true });
@@ -228,12 +242,19 @@ describe("194 — RevenueCat lifecycle at the server seam", () => {
       )
     ).toHaveLength(1);
 
-    const foreign = purchase.handleWebhookEvent(event({ appUserId: "not-a-family" }));
+    const foreign = await purchase.handleWebhookEvent(event({ appUserId: "not-a-family" }));
     expect(foreign).toMatchObject({ ok: false, duplicate: false });
     expect(ctx.store.subscriptions.has("not-a-family")).toBe(false);
+
+    const concurrent = await Promise.all([
+      purchase.handleWebhookEvent(event({ appUserId: member.familyId, eventId: "concurrent" })),
+      purchase.handleWebhookEvent(event({ appUserId: member.familyId, eventId: "concurrent" })),
+    ]);
+    expect(concurrent.filter((result) => result.duplicate)).toHaveLength(1);
+    expect([...ctx.store.moderationAudit.values()].filter((entry) => entry.resourceId === "concurrent")).toHaveLength(1);
   });
 
-  it("handles refund, billing issue, expiration, cancellation, product change, uncancellation, and restore explicitly", () => {
+  it("handles refund, billing issue, expiration, cancellation, product change, uncancellation, and restore explicitly", async () => {
     const cases = [
       { type: "REFUND", expected: "canceled" },
       { type: "BILLING_ISSUE", expected: "past_due" },
@@ -247,7 +268,7 @@ describe("194 — RevenueCat lifecycle at the server seam", () => {
     for (const [index, current] of cases.entries()) {
       const ctx = createTestContext();
       const member = guardian(ctx, `auth-194-${index}`);
-      const result = service(ctx).handleWebhookEvent(
+      const result = await service(ctx).handleWebhookEvent(
         event({
           eventId: `rc-event-194-${current.type}`,
           appUserId: member.familyId,
@@ -263,15 +284,32 @@ describe("194 — RevenueCat lifecycle at the server seam", () => {
     }
   });
 
-  it("ignores an out-of-order lifecycle event without resurrecting entitlement", () => {
+  it("keeps access through a future cancellation expiry and expires persisted access", async () => {
+    const ctx = createTestContext();
+    const member = guardian(ctx, "auth-194-expiry");
+    const purchase = service(ctx);
+    await purchase.handleWebhookEvent(event({
+      appUserId: member.familyId,
+      eventId: "future-cancel",
+      type: "CANCELLATION",
+      expirationAtMs: Date.now() + 60_000,
+    }));
+
+    expect(ctx.subscriptions.isActive(member.familyId)).toBe(true);
+    const subscription = ctx.store.getSubscription(member.familyId)!;
+    ctx.store.saveSubscription({ ...subscription, expiresAt: new Date(Date.now() - 1) });
+    expect(ctx.subscriptions.isActive(member.familyId)).toBe(false);
+  });
+
+  it("ignores an out-of-order lifecycle event without resurrecting entitlement", async () => {
     const ctx = createTestContext();
     const member = guardian(ctx, "auth-194-order");
     const purchase = service(ctx);
 
-    purchase.handleWebhookEvent(
+    await purchase.handleWebhookEvent(
       event({ appUserId: member.familyId, eventId: "newer", eventTimestampMs: 200 })
     );
-    const stale = purchase.handleWebhookEvent(
+    const stale = await purchase.handleWebhookEvent(
       event({
         appUserId: member.familyId,
         eventId: "older",
@@ -304,11 +342,26 @@ describe("194 — RevenueCat lifecycle at the server seam", () => {
     expect(ctx.store.getSubscription(member.familyId)?.stripeSubscriptionId).toBe("rc-restored-194");
   });
 
-  it("bounds a trial Family to the canonical shared Story allowance", () => {
+  it("rejects a webhook without a durable event id", async () => {
+    const ctx = createTestContext();
+    const member = guardian(ctx, "auth-194-no-event-id");
+    routeHarness.ctx = ctx;
+    const response = await revenueCatWebhook(
+      new Request("https://example.test/api/webhooks/revenuecat", {
+        method: "POST",
+        headers: { authorization: "Bearer rc-secret" },
+        body: JSON.stringify({ event: { type: "INITIAL_PURCHASE", app_user_id: member.familyId, product_id: "just_us_monthly" } }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(ctx.subscriptions.isActive(member.familyId)).toBe(false);
+  });
+
+  it("bounds a trial Family to the canonical shared Story allowance", async () => {
     const ctx = createTestContext();
     const member = guardian(ctx, "auth-194-cap");
     const purchase = service(ctx);
-    purchase.handleWebhookEvent(
+    await purchase.handleWebhookEvent(
       event({ appUserId: member.familyId, eventId: "trial", isTrial: true })
     );
 

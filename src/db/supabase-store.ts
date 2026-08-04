@@ -62,6 +62,25 @@ export class SupabaseDataStore extends DataStore {
     super();
   }
 
+  override async claimRevenueCatEvent(entry: ModerationAuditEntry): Promise<boolean> {
+    const { error } = await this.client.from("moderation_audit").insert({
+      id: entry.id,
+      family_id: entry.familyId ?? null,
+      resource_type: entry.resourceType,
+      resource_id: entry.resourceId,
+      outcome: entry.outcome,
+      reason: entry.reason,
+      created_at: entry.createdAt.toISOString(),
+    });
+    if (error) {
+      if (error.code === "23505") return false;
+      throw new Error(`RevenueCat event claim failed: ${error.message}`);
+    }
+    this.moderationAudit.set(entry.id, entry);
+    this.snap("moderation_audit", entry.id);
+    return true;
+  }
+
   private snap(table: string, id: string): void {
     if (!this.snapshot.has(table)) this.snapshot.set(table, new Set());
     this.snapshot.get(table)!.add(id);
@@ -447,6 +466,9 @@ export class SupabaseDataStore extends DataStore {
         status: r.status,
         stripeCustomerId: r.stripe_customer_id,
         stripeSubscriptionId: r.stripe_subscription_id,
+        tier: r.tier ?? undefined,
+        trialEndsAt: r.trial_ends_at ? new Date(r.trial_ends_at) : null,
+        expiresAt: r.expires_at ? new Date(r.expires_at) : null,
         updatedAt: new Date(r.updated_at),
       };
       this.subscriptions.set(sub.familyId, sub);
@@ -1138,6 +1160,9 @@ export class SupabaseDataStore extends DataStore {
       status: r.status,
       stripeCustomerId: r.stripe_customer_id,
       stripeSubscriptionId: r.stripe_subscription_id,
+      tier: r.tier ?? undefined,
+      trialEndsAt: r.trial_ends_at ? new Date(r.trial_ends_at) : null,
+      expiresAt: r.expires_at ? new Date(r.expires_at) : null,
       updatedAt: new Date(r.updated_at),
     };
   }
@@ -1417,6 +1442,9 @@ export class SupabaseDataStore extends DataStore {
           status: s.status,
           stripe_customer_id: s.stripeCustomerId,
           stripe_subscription_id: s.stripeSubscriptionId,
+          tier: s.tier ?? null,
+          trial_ends_at: s.trialEndsAt?.toISOString() ?? null,
+          expires_at: s.expiresAt?.toISOString() ?? null,
           updated_at: s.updatedAt.toISOString(),
         })),
         "family_id"

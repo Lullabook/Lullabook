@@ -30,6 +30,7 @@ describe("194 — R1 plan single source", () => {
     const files = [
       "src/services/entitlement.ts",
       "src/lib/paywall-config.ts",
+      "src/domain/plan.ts",
       "mobile/app/billing.tsx",
       "mobile/lib/purchase-controller.ts",
     ];
@@ -40,6 +41,9 @@ describe("194 — R1 plan single source", () => {
         expect(executable).toContain("getPlanEntitlement");
         expect(executable).toContain("R1_PLAN_DEFINITION");
       }
+      if (file === "src/domain/plan.ts") {
+        expect(executable).not.toMatch(/(?<!\d)(?:9\.99|79\.99)|storybooksPerMonth:\s*8/);
+      }
       if (file === "src/lib/paywall-config.ts") {
         expect(executable).toContain("R1_PLAN_DEFINITION");
         expect(executable).toContain("getR1VisiblePlans");
@@ -47,7 +51,7 @@ describe("194 — R1 plan single source", () => {
         expect(executable).toContain("monthlyPrice: R1_PLAN_DEFINITION.pricing.monthly");
         expect(executable).toContain("annualPrice: R1_PLAN_DEFINITION.pricing.annual");
       }
-      if (file !== "src/lib/paywall-config.ts") {
+      if (file !== "src/lib/paywall-config.ts" && file !== "src/domain/plan.ts") {
         expect(executable).not.toMatch(/(?:9\.99|79\.99)/);
       }
     }

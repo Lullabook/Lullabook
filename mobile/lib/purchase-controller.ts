@@ -61,6 +61,9 @@ export interface NativeRevenueCatClient {
   restorePurchases(): Promise<void>;
 }
 
+export const REVENUECAT_VERIFICATION_ATTEMPTS = 3;
+export const REVENUECAT_VERIFICATION_DELAY_MS = 250;
+
 export interface RevenueCatPurchaseControllerDeps extends PurchaseControllerDeps {
   nativePurchases: NativeRevenueCatClient;
   productId: string;
@@ -126,10 +129,21 @@ export class RevenueCatPurchaseController implements PurchaseController {
   }
 
   private async verifiedResult(): Promise<StartTrialResult> {
-    const result = await this.deps!.fetchVerifiedPurchase();
-    return result.ok && result.isActive
-      ? result
-      : { ok: false, error: "Purchase is pending server verification — no paid action was unlocked" };
+    const deps = this.deps!;
+    let result: StartTrialResult = { ok: false, error: "Purchase is pending server verification" };
+    for (let attempt = 0; attempt < REVENUECAT_VERIFICATION_ATTEMPTS; attempt += 1) {
+      result = await deps.fetchVerifiedPurchase();
+      if (result.ok && result.isActive) return result;
+      if (attempt < REVENUECAT_VERIFICATION_ATTEMPTS - 1) {
+        await new Promise((resolve) => setTimeout(resolve, REVENUECAT_VERIFICATION_DELAY_MS));
+      }
+    }
+    return {
+      ok: false,
+      error: result.ok
+        ? "Purchase is pending server verification — no paid action was unlocked"
+        : result.error || "Purchase is pending server verification — no paid action was unlocked",
+    };
   }
 
   private unavailable(): StartTrialResult {

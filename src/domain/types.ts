@@ -269,6 +269,8 @@ export interface Subscription {
    * SubscriptionStatus for trials.
    */
   trialEndsAt?: Date | null;
+  /** RevenueCat entitlement expiration; cancellation can retain access until this time. */
+  expiresAt?: Date | null;
   updatedAt: Date;
 }
 

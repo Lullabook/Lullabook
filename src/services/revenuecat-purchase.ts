@@ -37,6 +37,8 @@ const ACTIVE_EVENTS = new Set([
   "NON_RENEWING_PURCHASE",
   "RENEWAL",
   "PRODUCT_CHANGE",
+  "SUBSCRIPTION_EXTENDED",
+  "REFUND_REVERSED",
   "UNCANCELLATION",
   "RESTORE",
 ]);
@@ -49,15 +51,13 @@ function isTier(value: string | undefined): value is Tier {
 
 function evidenceTier(evidence: RevenueCatEntitlementEvidence): Tier | undefined {
   const productTier = r1TierFromRevenueCatProduct(evidence.productId);
-  if (evidence.productId && !productTier) return undefined;
-  if (productTier) return productTier;
-  return isTier(evidence.tier) ? evidence.tier : undefined;
+  return productTier;
 }
 
 function purchaseIsResolved(result: RevenueCatPurchaseResult): boolean {
   const verified = result.verified === true ||
     (result.verified === undefined && process.env.NODE_ENV !== "production");
-  return Boolean(result.entitlementId && verified);
+  return Boolean(result.entitlementId && verified && r1TierFromRevenueCatProduct(result.productId));
 }
 
 /**
@@ -108,7 +108,7 @@ export class RevenueCatPurchaseService {
    * Event receipts live in the hydrated Family audit inventory, so replaying an
    * event is a no-op after the request context is persisted.
    */
-  handleWebhookEvent(event: RevenueCatLifecycleEvent): RevenueCatWebhookResult {
+  async handleWebhookEvent(event: RevenueCatLifecycleEvent): Promise<RevenueCatWebhookResult> {
     const familyId = this.resolveFamilyId(event.appUserId);
     if (!familyId) {
       return { ok: false, duplicate: false, error: "RevenueCat app_user_id is not bound to a Family" };
@@ -118,15 +118,6 @@ export class RevenueCatPurchaseService {
     }
 
     const eventType = event.type.toUpperCase();
-    if ([...this.store.moderationAudit.values()].some(
-      (receipt) =>
-        receipt.familyId === familyId &&
-        receipt.resourceType === "revenuecat_lifecycle" &&
-        receipt.resourceId === event.eventId
-    )) {
-      return { ok: true, duplicate: true };
-    }
-
     const outOfOrder = this.isOlderThanRecordedEvent(familyId, event.eventTimestampMs);
     const tier = this.lifecycleTier(event);
     const known = KNOWN_EVENTS.has(eventType);
@@ -137,23 +128,32 @@ export class RevenueCatPurchaseService {
         : "deactivated";
 
     const receiptId = this.receiptId(familyId, event.eventId);
-    this.store.moderationAudit.set(receiptId, {
+    const receipt = {
       id: receiptId,
       familyId,
       resourceType: "revenuecat_lifecycle",
       resourceId: event.eventId,
-      outcome: action === "ignored" ? "blocked" : "allowed",
+      outcome: action === "ignored" ? "blocked" as const : "allowed" as const,
       reason: `${eventType}:${event.eventTimestampMs ?? ""}`,
       createdAt: new Date(),
-    });
+    };
+    if (!(await this.store.claimRevenueCatEvent(receipt))) {
+      return { ok: true, duplicate: true };
+    }
+    this.store.moderationAudit.set(receiptId, receipt);
 
     if (action === "ignored") return { ok: true, duplicate: false, action };
 
-    if (action === "activated") {
+    const retainsAccessThroughExpiration =
+      (eventType === "CANCELLATION" || eventType === "BILLING_ISSUE") &&
+      tier &&
+      event.expirationAtMs !== undefined &&
+      event.expirationAtMs > Date.now();
+    if (action === "activated" || retainsAccessThroughExpiration) {
       this.subscriptions.handleRevenueCatActivated(
         familyId,
         event.subscriptionId ?? `rc_${event.eventId}`,
-        tier!,
+        tier ?? this.currentTier(familyId),
         {
           isTrial: event.isTrial === true,
           expirationAtMs: event.expirationAtMs,
@@ -204,11 +204,14 @@ export class RevenueCatPurchaseService {
     return { entitlement: this.getEntitlement(familyId), degraded: true };
   }
 
+  private currentTier(familyId: string): Tier {
+    const existing = this.store.getSubscription(familyId)?.tier;
+    return existing && isTier(existing) ? existing : "normal";
+  }
+
   private lifecycleTier(event: RevenueCatLifecycleEvent): Tier | undefined {
     const productTier = r1TierFromRevenueCatProduct(event.productId);
-    if (event.productId && !productTier) return undefined;
-    if (productTier) return productTier;
-    return isTier(event.tier) ? event.tier : "normal";
+    return productTier;
   }
 
   private resolveFamilyId(appUserId: string): string | undefined {

@@ -15,13 +15,17 @@ function normalizeEvent(body: Record<string, unknown>): RevenueCatLifecycleEvent
   const source = (body.event && typeof body.event === "object" ? body.event : body) as Record<string, unknown>;
   const type = typeof source.type === "string" ? source.type.toUpperCase() : "";
   const appUserId = typeof source.app_user_id === "string" ? source.app_user_id : "";
-  const eventId = source.id ?? source.event_id ?? source.transaction_id;
+  const eventId = source.id ?? source.event_id;
   const purchasedAtMs = source.purchased_at_ms ?? source.event_timestamp_ms;
   return {
-    eventId: typeof eventId === "string" && eventId ? eventId : `${type}:${appUserId}`,
+    eventId: typeof eventId === "string" && eventId ? eventId : "",
     type,
     appUserId,
-    productId: typeof source.product_id === "string" ? source.product_id : undefined,
+    productId: typeof source.new_product_id === "string"
+      ? source.new_product_id
+      : typeof source.product_id === "string"
+        ? source.product_id
+        : undefined,
     subscriptionId:
       typeof source.original_transaction_id === "string"
         ? source.original_transaction_id
@@ -74,7 +78,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     await store.hydrateByAuthUser(event.appUserId);
   }
 
-  const result = ctx.revenuecatPurchases.handleWebhookEvent(event);
+  const result = await ctx.revenuecatPurchases.handleWebhookEvent(event);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
