@@ -13,30 +13,32 @@ function validAuthorization(provided: string | null, secret: string | undefined)
 
 function normalizeEvent(body: Record<string, unknown>): RevenueCatLifecycleEvent {
   const source = (body.event && typeof body.event === "object" ? body.event : body) as Record<string, unknown>;
-  const type = typeof source.type === "string" ? source.type.toUpperCase() : "";
-  const appUserId = typeof source.app_user_id === "string" ? source.app_user_id : "";
-  const eventId = source.id ?? source.event_id;
-  const purchasedAtMs = source.purchased_at_ms ?? source.event_timestamp_ms;
+  const stringValue = (...values: unknown[]) => values.find(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  )?.trim();
+  const numberValue = (...values: unknown[]) => values.find(
+    (value): value is number => typeof value === "number" && Number.isFinite(value),
+  );
+  const type = stringValue(source.type)?.toUpperCase() ?? "";
+  const appUserId = stringValue(source.app_user_id) ?? "";
+  const eventId = stringValue(source.id, source.event_id) ?? "";
+  const purchasedAtMs = numberValue(source.purchased_at_ms, source.event_timestamp_ms);
+  const productId = stringValue(source.new_product_id, source.product_id);
+  const subscriptionId = stringValue(source.original_transaction_id, source.transaction_id);
+  const periodType = stringValue(source.period_type)?.toUpperCase();
   return {
-    eventId: typeof eventId === "string" && eventId ? eventId : "",
+    eventId,
     type,
     appUserId,
-    productId: typeof source.new_product_id === "string"
-      ? source.new_product_id
-      : typeof source.product_id === "string"
-        ? source.product_id
-        : undefined,
-    subscriptionId:
-      typeof source.original_transaction_id === "string"
-        ? source.original_transaction_id
-        : typeof source.transaction_id === "string"
-          ? source.transaction_id
-          : undefined,
-    expirationAtMs: typeof source.expiration_at_ms === "number" ? source.expiration_at_ms : undefined,
-    eventTimestampMs: typeof purchasedAtMs === "number" ? purchasedAtMs : undefined,
-    isTrial: source.period_type === "TRIAL" || source.period_type === "trial",
+    productId,
+    subscriptionId,
+    expirationAtMs: numberValue(source.expiration_at_ms),
+    eventTimestampMs: purchasedAtMs,
+    isTrial: periodType === "TRIAL",
     entitlementIds: Array.isArray(source.entitlement_ids)
-      ? source.entitlement_ids.filter((id): id is string => typeof id === "string")
+      ? source.entitlement_ids
+        .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+        .map((id) => id.trim())
       : undefined,
   };
 }
