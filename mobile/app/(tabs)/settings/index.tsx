@@ -7,8 +7,8 @@ import { usePressFeedback } from "@/lib/use-press-feedback";
 import { C, F } from "@/constants/theme";
 
 import { fetchHome, hardDeleteAccount, type HomeResponse } from "@/lib/api";
-import { supabase } from "@/lib/supabase";
-import { isR1MultiFamilyEnabled, isR1AudioEnabled, R1_CUT_MESSAGE } from "@/lib/r1-flags";
+import { signOutAndClearPrivateCaches } from "@/lib/supabase";
+import { isR1MultiFamilyEnabled, isR1AudioEnabled } from "@/lib/r1-flags";
 
 const AnimatedPressable = createAnimatedComponent(Pressable);
 
@@ -54,7 +54,7 @@ export default function AccountScreen() {
   }, []);
 
   async function signOut() {
-    await supabase.auth.signOut();
+    await signOutAndClearPrivateCaches();
     router.replace("/sign-in");
   }
 
@@ -72,7 +72,7 @@ export default function AccountScreen() {
             setNotice(null);
             try {
               await hardDeleteAccount();
-              await supabase.auth.signOut();
+              await signOutAndClearPrivateCaches();
               router.replace("/sign-in");
             } catch (e) {
               setNotice(e instanceof Error ? e.message : "Could not delete account");
@@ -85,7 +85,7 @@ export default function AccountScreen() {
     );
   }
 
-  if (loading) {
+  if (loading && home === null) {
     return (
       <Screen>
         <SkeletonRow />

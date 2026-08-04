@@ -20,8 +20,9 @@ function planToTier(plan: Plan): Tier {
  */
 function subscriptionIsLive(sub: Subscription | undefined, now: Date): boolean {
   if (sub?.status !== "active") return false;
-  if (sub.trialEndsAt === undefined || sub.trialEndsAt === null) return true;
-  return now.getTime() < sub.trialEndsAt.getTime();
+  if (sub.trialEndsAt !== undefined && sub.trialEndsAt !== null && now.getTime() >= sub.trialEndsAt.getTime()) return false;
+  if (sub.expiresAt !== undefined && sub.expiresAt !== null && now.getTime() >= sub.expiresAt.getTime()) return false;
+  return true;
 }
 
 function devForcedSubscription(): "active" | "inactive" | undefined {
@@ -52,21 +53,54 @@ export class SubscriptionService {
       stripeSubscriptionId,
       // Real purchase converts/overrides any trial — clear the window (issue 168).
       trialEndsAt: null,
+      expiresAt: null,
       updatedAt: new Date(),
     });
   }
 
-  handleRevenueCatActivated(familyId: string, revenueCatSubscriptionId: string) {
+  handleRevenueCatActivated(
+    familyId: string,
+    revenueCatSubscriptionId: string,
+    tier?: Tier,
+    options: { isTrial?: boolean; expirationAtMs?: number } = {}
+  ) {
     const existing = this.store.getSubscription(familyId);
+    const trialEndsAt = options.isTrial
+      ? new Date(options.expirationAtMs ?? Date.now() + TRIAL_DAYS * DAY_MS)
+      : null;
+    const expiresAt = options.expirationAtMs !== undefined
+      ? new Date(options.expirationAtMs)
+      : null;
     this.store.saveSubscription({
       familyId,
       status: "active",
       stripeCustomerId: existing?.stripeCustomerId ?? null,
-      stripeSubscriptionId: existing?.stripeSubscriptionId ?? revenueCatSubscriptionId,
-      // Real purchase converts/overrides any trial — clear the window (issue 168).
-      trialEndsAt: null,
+      stripeSubscriptionId: revenueCatSubscriptionId,
+      tier: tier ?? existing?.tier ?? "normal",
+      trialEndsAt,
+      expiresAt,
       updatedAt: new Date(),
     });
+    this.store.purgeScheduled.delete(familyId);
+  }
+
+  handleRevenueCatInactive(
+    familyId: string,
+    revenueCatSubscriptionId?: string,
+    status: "canceled" | "past_due" = "canceled"
+  ) {
+    const existing = this.store.getSubscription(familyId);
+    this.store.saveSubscription({
+      familyId,
+      status,
+      stripeCustomerId: existing?.stripeCustomerId ?? null,
+      stripeSubscriptionId: revenueCatSubscriptionId ?? existing?.stripeSubscriptionId ?? null,
+      tier: existing?.tier ?? "normal",
+      trialEndsAt: null,
+      expiresAt: existing?.expiresAt ?? null,
+      updatedAt: new Date(),
+    });
+    if (status === "canceled") this.schedulePurge(familyId);
   }
 
   cancel(familyId: string) {
@@ -77,6 +111,10 @@ export class SubscriptionService {
       status: "canceled",
       updatedAt: new Date(),
     });
+    this.schedulePurge(familyId);
+  }
+
+  private schedulePurge(familyId: string) {
     const purgeAt = new Date();
     purgeAt.setDate(purgeAt.getDate() + 30);
     this.store.purgeScheduled.set(familyId, { familyId, purgeAt });
@@ -117,6 +155,7 @@ export class SubscriptionService {
       stripeSubscriptionId: existing?.stripeSubscriptionId ?? `rc_trial_${familyId}`,
       tier: planToTier(plan),
       trialEndsAt: new Date(now.getTime() + TRIAL_DAYS * DAY_MS),
+      expiresAt: new Date(now.getTime() + TRIAL_DAYS * DAY_MS),
       updatedAt: now,
     };
     this.store.saveSubscription(sub);

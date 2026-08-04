@@ -2,6 +2,7 @@ import type { DataStore } from "@/db/store";
 import type { Plan, Tier } from "@/domain/types";
 import type { SubscriptionService } from "@/services/subscription";
 import { isR1MultiFamilyEnabled } from "@/lib/r1-config";
+import { isR1OnePlan } from "@/lib/paywall-config";
 import { LEGACY_TIER_COMPATIBILITY, R1_PLAN_DEFINITION } from "@/domain/plan";
 
 /**
@@ -60,8 +61,9 @@ export const TIER_ENTITLEMENTS: Record<Tier, Entitlement> = {
   },
   normal: {
     tier: "normal",
-    storyCap: 8,
-    memberCap: 4,
+    // Legacy compatibility only; R1 gates resolve PLAN_ENTITLEMENTS below.
+    storyCap: R1_PLAN_DEFINITION.limits.storybooksPerMonth * 2,
+    memberCap: R1_PLAN_DEFINITION.limits.personas + 1,
     canNarrate: true,
     canVideo: false,
     canCustomStyle: false,
@@ -84,9 +86,7 @@ export const PLAN_ENTITLEMENTS: Record<Plan, PlanEntitlement> = {
     storyCap: R1_PLAN_DEFINITION.limits.storybooksPerMonth,
     memberCap: R1_PLAN_DEFINITION.limits.personas,
     memberLoginCap: R1_PLAN_DEFINITION.limits.memberLogins,
-    canNarrate: false,
-    canVideo: false,
-    canCustomStyle: false,
+    ...R1_PLAN_DEFINITION.capabilities,
   },
   our_whole_family: {
     plan: "our_whole_family",
@@ -151,7 +151,10 @@ export class EntitlementService {
   getPlan(familyId: string): Plan | "none" {
     const tier = this.getTier(familyId);
     if (tier === "none") return "none";
-    return tierToPlan(tier as Tier);
+    // R1 has one sellable plan. Legacy Plus rows remain readable for R2
+    // compatibility, but cannot unlock cut multi-family capabilities by
+    // merely surviving a migration.
+    return isR1OnePlan() ? "just_us" : tierToPlan(tier as Tier);
   }
 
   /** The two-plan entitlement bundle (ADR-0025). */
@@ -217,11 +220,14 @@ export class EntitlementService {
     return sub?.tier ?? "normal";
   }
 
-  /** The entitlement bundle for the Household's tier. */
+  /** Canonical R1 projection used by paid server surfaces. */
   getEntitlement(familyId: string): Entitlement {
-    const tier = this.getTier(familyId);
-    if (tier === "none") return { ...NO_ENTITLEMENT };
-    return TIER_ENTITLEMENTS[tier];
+    return this.getPlanEntitlement(familyId);
+  }
+
+  /** Compatibility name for callers that explicitly need the R1 projection. */
+  getR1Entitlement(familyId: string): PlanEntitlement {
+    return this.getPlanEntitlement(familyId);
   }
 
   /** Gate: the Household must have an active (paid or trial) subscription. */
@@ -234,9 +240,15 @@ export class EntitlementService {
     }
   }
 
-  /** Gate: the Household's tier must grant the capability, else 403. */
+  /** Gate: the Household's legacy tier must grant the capability, else 403. */
   requireCapability(familyId: string, capability: Capability): void {
-    const ent = this.getEntitlement(familyId);
+    const plan = this.getPlan(familyId);
+    const tier = this.getTier(familyId);
+    const ent = plan === "none"
+      ? NO_ENTITLEMENT
+      : isR1OnePlan()
+        ? this.getPlanEntitlement(familyId)
+        : TIER_ENTITLEMENTS[tier as Tier];
     if (!ent[CAPABILITY_FLAG[capability]]) {
       const required = CAPABILITY_TIER[capability];
       throw new EntitlementError(

@@ -12,6 +12,7 @@ import type { PersonaStatus } from "@domain/types";
 /** Parent-facing likeness-training labels — raw enums never reach the screen. */
 const STATUS_LABEL: Record<PersonaStatus, string> = {
   training: "✨ Learning their look…",
+  review: "👀 Reviewing their likeness",
   ready: "Ready to star in stories",
   failed: "Training needs a retry",
 };
@@ -180,7 +181,7 @@ export default function FamilyMemberDetailScreen() {
 
   const recordingRef = { current: null as import("expo-av").Audio.Recording | null };
 
-  if (loading) {
+  if (loading && home === null) {
     return (
       <Screen>
         <SkeletonRow />

@@ -79,7 +79,7 @@ describe("162 — Story generation → viewable placeholder-art draft", () => {
       expect(pages.every((p) => p.text.length > 0)).toBe(true);
     });
 
-    it("placeholder art uses the default LoRA key (no persona likeness) when personas is empty", async () => {
+    it("a Character-only Brief uses deterministic placeholder art with zero fal calls", async () => {
       const ctx = createTestContext();
       const { guardian, character } = await guardianWithCharacter(ctx);
 
@@ -91,30 +91,32 @@ describe("162 — Story generation → viewable placeholder-art draft", () => {
       });
       await ctx.workflow.drain();
 
-      // I3.1: placeholder art calls fal with "lora/default" (no persona LoRA).
-      // Before the fix, personas[0]! threw and fal was never called.
-      expect(ctx.fal.imageCalls).toBeGreaterThan(0);
+      // PRD v22 / FAIL-3: Character-only Briefs use deterministic local
+      // placeholder art — ZERO fal image calls, never lora/default.
+      expect(ctx.fal.imageCalls).toBe(0);
 
       const books = [...ctx.store.storybooks.values()];
       const book = books[books.length - 1];
       const pages = ctx.store.getPagesForStorybook(book.id);
-      // Pages should have ready illustrations (placeholder art, not all failed).
+      // Pages carry the deterministic placeholder blob (ready), not failed holes.
       const readyCount = pages.filter((p) => p.generationStatus === "ready").length;
       expect(readyCount).toBeGreaterThan(0);
+      expect(pages.some((p) => p.illustrationBlobKey !== null)).toBe(true);
     });
 
-    it("a Character-only Brief with fal failing still reaches text-viewable `draft`", async () => {
+    it("a Persona Brief with fal failing still reaches text-viewable `draft`", async () => {
       const ctx = createTestContext();
-      const { guardian, character } = await guardianWithCharacter(ctx);
-      // Make every image generation throw — simulates fal unavailable.
+      // A real ready Persona means fal IS attempted (placeholder art is only
+      // for Character-only Briefs). Simulate fal unavailable.
+      const { guardian, babyPersona } = await householdWithBaby(ctx, "Maya");
       ctx.fal.failImageOnPage = 0;
       ctx.fal.failPages = new Set(Array.from({ length: 12 }, (_, i) => i + 1));
 
       const book = await ctx.storybooks.generate(guardian.id, {
-        starringPersonaIds: [],
-        starringCharacterIds: [character.id],
+        starringPersonaIds: [babyPersona.id],
+        starringCharacterIds: [],
         storyType: "bedtime",
-        theme: "fal-down character story",
+        theme: "fal-down persona story",
       });
       await ctx.workflow.drain();
 

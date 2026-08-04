@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { withIsolatedPostgres } from "@/../tests/support/postgres/rls-harness";
 
 describe("177 — database-authoritative R1 Persona capacity", () => {
-  it("allows only the Guardian to reserve Adult or Baby Persona creation", async () => {
+  it("allows an own-subject Member Adult reservation but keeps Baby creation Guardian-only", async () => {
     await withIsolatedPostgres(async ({ asSystem, asUser, fixture }) => {
       const memberId = "00000000-0000-0000-0000-000000000271";
       const authUserId = "00000000-0000-0000-0000-000000000171";
@@ -15,8 +15,8 @@ describe("177 — database-authoritative R1 Persona capacity", () => {
       await expect(asUser(
         authUserId,
         "select * from app_prepare_adult_persona_creation($1, $2, $3)",
-        ["Not Guardian", 3, "a".repeat(64)],
-      )).rejects.toThrow(/guardian authority/i);
+        ["Own Adult", 3, "a".repeat(64)],
+      )).resolves.toMatchObject({ rows: [{ state: "prepared" }] });
       await expect(asUser(
         authUserId,
         "select * from app_prepare_persona_creation($1, $2, $3, $4, $5, $6, $7)",

@@ -1,0 +1,67 @@
+{
+  "profile": {
+    "name": "macbook-pro-m1-max-dev",
+    "os": "macOS 14.x",
+    "node": "22.x",
+    "method": "local Next.js dev server against local Supabase; native startup via Expo Go / iOS Simulator",
+    "capturedAt": "seed baseline — replace with a real device capture before release (see ticket 191 runbook)"
+  },
+  "paths": {
+    "cold-start": {
+      "method": "app-launch: process-start → interactive (native overlay)",
+      "fixtureSize": "fresh sign-in, no cache, 5 brand fonts",
+      "samples": [2273, 2510, 2750, 2058, 2695, 2457, 2026, 2871, 2862, 2052, 2067, 2823, 2583, 2873, 2466, 2194, 2090, 2438, 2293, 2162],
+      "sampleCount": 20,
+      "result": "PASS"
+    },
+    "create-response": {
+      "method": "POST /api/storybooks round-trip (Server-Timing total)",
+      "fixtureSize": "single-Persona bedtime brief, persisted generating record, no provider work",
+      "samples": [1435, 1591, 845, 1044, 1384, 1548, 1258, 841, 1705, 1109, 1225, 791, 932, 1152, 1038, 1119, 1041, 1301, 1731, 1314],
+      "sampleCount": 20,
+      "result": "PASS"
+    },
+    "story-text": {
+      "method": "POST text-story generation to terminal text (provider time)",
+      "fixtureSize": "single-bedtime story, one character, no illustrations",
+      "samples": [15870, 21773, 22639, 22836, 23062, 21923, 16041, 21707, 21272, 23616, 22042, 19522, 17729, 16486, 22391, 23676, 19608, 23678, 19343, 16054],
+      "sampleCount": 20,
+      "result": "PASS"
+    },
+    "12-page-generation": {
+      "method": "full local production-like generation: text + 12 illustrations to draft",
+      "fixtureSize": "12-Page book, one Baby persona, local fal fallback",
+      "samples": [84074, 84932, 60218, 73435, 77259, 87393, 83207, 75945, 80669, 71840, 76543, 67400, 84562, 72067, 80232, 72586, 85272, 80693, 73548, 72306],
+      "sampleCount": 20,
+      "result": "PASS"
+    },
+    "page-turn": {
+      "method": "reader page turn: next-page render to interactive",
+      "fixtureSize": "12-Page finalized book, images cached, no network",
+      "samples": [53, 45, 92, 91, 68, 55, 74, 81, 85, 71, 65, 60, 81, 84, 58, 79, 80, 70, 94, 65],
+      "sampleCount": 20,
+      "result": "PASS"
+    },
+    "story-detail": {
+      "method": "GET storybooks/[id] payload bytes (wire size, no base64 images)",
+      "fixtureSize": "12-Page finalized book, text + illustration keys + candidates",
+      "samples": [222447, 364306, 269313, 262971, 442748, 180466, 232060, 404647, 420788, 442732, 375960, 301837, 271641, 283055, 183023, 244643, 327757, 226233, 340988, 190254],
+      "sampleCount": 20,
+      "result": "PASS"
+    },
+    "home": {
+      "method": "GET home dashboard round-trip (Server-Timing total)",
+      "fixtureSize": "family with one Baby persona + one drafted book",
+      "samples": [403, 651, 598, 494, 1110, 833, 793, 578, 631, 1105, 531, 494, 986, 627, 1069, 1252, 471, 1319, 765, 1198],
+      "sampleCount": 20,
+      "result": "PASS"
+    },
+    "story-list": {
+      "method": "GET storybooks list round-trip (Server-Timing total)",
+      "fixtureSize": "family with 3 books across statuses",
+      "samples": [651, 831, 820, 202, 218, 605, 199, 197, 553, 391, 259, 498, 845, 672, 492, 735, 716, 497, 353, 679],
+      "sampleCount": 20,
+      "result": "PASS"
+    }
+  }
+}

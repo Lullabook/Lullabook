@@ -282,9 +282,43 @@ export interface RevenueCatPurchaseResult {
   entitlementId: string;
   /** Whether this was a trial start vs a direct purchase. */
   isTrial: boolean;
+  /**
+   * Server-side adapters must mark an unresolved native transaction false.
+   * The optional shape keeps the deterministic legacy fake source-compatible;
+   * production adapters never treat a pending transaction as entitlement proof.
+   */
+  verified?: boolean;
+  subscriptionId?: string;
+  productId?: string;
+  expirationAtMs?: number;
 }
 
-/** RevenueCat adapter for IAP purchase + entitlement sync (issue 92). */
+export interface RevenueCatEntitlementEvidence {
+  tier: string;
+  isTrial: boolean;
+  /** RevenueCat/Apple evidence has been verified by the adapter. */
+  verified?: boolean;
+  subscriptionId?: string;
+  productId?: string;
+  expirationAtMs?: number;
+}
+
+/** Normalized RevenueCat lifecycle event consumed by the server service. */
+export interface RevenueCatLifecycleEvent {
+  eventId: string;
+  type: string;
+  appUserId: string;
+  productId?: string;
+  subscriptionId?: string;
+  expirationAtMs?: number;
+  eventTimestampMs?: number;
+  isTrial?: boolean;
+  /** Legacy deterministic fakes may provide the normalized tier directly. */
+  tier?: string;
+  entitlementIds?: string[];
+}
+
+/** RevenueCat adapter for IAP + entitlement reconciliation (issue 194). */
 export interface RevenueCatPurchaseAdapter {
   /** Start a trial for the given tier; requires card-on-file. */
   startTrial(
@@ -299,5 +333,7 @@ export interface RevenueCatPurchaseAdapter {
     options: { hasPaymentMethod: boolean }
   ): Promise<RevenueCatPurchaseResult>;
   /** Sync the current entitlement from RevenueCat; returns null on outage. */
-  fetchEntitlement(familyId: string): Promise<{ tier: string; isTrial: boolean } | null>;
+  fetchEntitlement(familyId: string): Promise<RevenueCatEntitlementEvidence | null>;
+  /** Native restore is optional until the native SDK profile is installed. */
+  restorePurchases?(familyId: string): Promise<RevenueCatEntitlementEvidence | null>;
 }

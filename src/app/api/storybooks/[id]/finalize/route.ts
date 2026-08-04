@@ -20,7 +20,7 @@ export async function POST(
   }
   const { ctx, member } = authed;
   try {
-    const book = ctx.storybooks.finalize(member.id, id);
+    const book = await ctx.storybooks.finalizeAsync(member.id, id);
     await ctx.persist();
     return NextResponse.json({ finalized: true, status: book.status });
   } catch (err) {

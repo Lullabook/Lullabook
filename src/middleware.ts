@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
+import { formatTimingDurationMs } from "@/lib/request-timing";
 
 /**
  * Refreshes the Supabase auth session on every request and rewrites the
@@ -16,6 +17,11 @@ export async function middleware(request: NextRequest) {
   if (!url || !anon) return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
+
+  // Issue 191: time the Supabase session refresh and surface it as a
+  // Server-Timing header — deterministic request instrumentation, numbers
+  // only (never session content).
+  const started = performance.now();
 
   const supabase = createServerClient(url, anon, {
     cookies: {
@@ -36,6 +42,11 @@ export async function middleware(request: NextRequest) {
 
   // Touching getUser() triggers a token refresh and the setAll cookie write.
   await supabase.auth.getUser();
+
+  response.headers.set(
+    "Server-Timing",
+    `session-refresh;dur=${formatTimingDurationMs(performance.now() - started)}`
+  );
 
   return response;
 }

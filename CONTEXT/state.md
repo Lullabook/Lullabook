@@ -1,38 +1,18 @@
-# state — what survives between sessions
-
-Short-lived working memory. Read at the start of a session, written at the end.
-Not a log — when something here becomes durable truth, move it into an ADR, a
-planning doc, or the glossary and delete it from here.
-
-Keep it under ~40 lines. Trim aggressively.
-
 ## Now
 
-- 2026-08-01 live run: brought the app up against real Supabase + real
-  Anthropic. Five production blockers found and fixed test-first; verify PASS
-  (172 files / 971 tests). R1 core loop works end to end for the first time
-  (Brief → 12-Page `draft`, real text, persisted). Handoff
-  `SESSION-HANDOFF-2026-08-01-live-run-five-blockers.md`. **Does not clear the
-  six blockers in `DEBUG-AUDIT-2026-07-21-r1-176-185.md`** — 179 (unsigned fal
-  webhook) and 178 (photos persisted before moderation) are next.
-- Not verified after those fixes: Persona creation / photo upload, real
-  illustrations, PDF export, share links, hard-delete, Journal, audio.
-- Previous /part2 run built the two release-gate slices recorded in
-  `SESSION-HANDOFF-2026-07-31-part2-LUL-105-110.md`; before the next stage, map the
-  remaining work into the configured GitHub Project and read back each item's
-  `Status`.
-- Gotchas: GitHub Project writes require `gh auth`'s `project` scope and live
-  project/item/field IDs. `.env.example` is gitignored but the Sentry check
-  requires it — fresh worktrees fail verify until copied in.
-  Metro binds `[::1]` only on this machine — run
-  `mobile/scripts/ipv4-metro-proxy.mjs` alongside `expo start` or Expo Go
-  cannot connect. `npm run db:migrate` + `RUN-LOCAL.md` are **stale** (stop at
-  migration 012 of 022); use `CONTEXT/local-dev/schema-catchup-012-022.sql`.
-  Supabase keys were rotated to the `sb_publishable_`/`sb_secret_` format — a
-  dead key surfaces as a misleading "hostname could not be found".
-- Retrieval graph added to `CONTEXT/` (ROUTER + generated indexes + this file).
-  Measured against the raw-vault baseline on 2026-07-29 — see Recently tried.
-
+- 2026-08-03 part2 parallel batch: ALL 12 PRD v22 child tickets (#194-#205) built on
+  `feat/prd-v22-186-205` and moved out of Coding — #194/#195/#196/#204 Done (part4),
+  #197-#200 in the grader loop, #201/#202/#203/#205 Debugger Ready. Full
+  `npm run verify` green. Handoff `SESSION-HANDOFF-2026-08-02-part2-prd-v22-parallel-wave.md`.
+- #203/#205 live-evidence parts (native smoke, real provider IDs, billing
+  reconciliation, real RLS/hard-delete, human sign-offs) report BLOCKED by design;
+  require wayfinder #135/#150 + fresh approvals.
+- #193 (parent index) is doc-only — flagged for /part4 or a human to close.
+- #206-#209 (iPhone device dev build) planned by a parallel part1 on the same
+  branch — user-owned, do not build without instruction.
+- Gotchas unchanged: `.env.example` needed for verify; Metro binds `[::1]` on this
+  machine (ipv4-metro-proxy); verify now has a 30s vitest test timeout (pg-embedded)
+  and Playwright SKIPs honestly on ETIMEDOUT.
 ## Recently tried
 
 - **Token benchmark, graph vs raw `CONTEXT/`** (2026-07-29, cl100k). Three

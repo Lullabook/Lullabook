@@ -1,5 +1,6 @@
 import type { createRequestContext } from "@/lib/context";
 import type { PersonaCreatePayload } from "@/adapters/types";
+import type { Persona } from "@/domain/types";
 
 export type { PersonaCreatePayload };
 
@@ -21,6 +22,7 @@ export async function runPersonaCreateBody(
   const selfie = payload.selfieKey
     ? ((await ctx.blobs.get(payload.selfieKey)) ?? undefined)
     : undefined;
+  let createdPersona: Persona | undefined;
 
   try {
     if (payload.mode === "promote-character") {
@@ -32,18 +34,30 @@ export async function runPersonaCreateBody(
         selfie,
       });
     } else if (payload.mode === "adult") {
-      await ctx.personas.createAdult({
+      createdPersona = await ctx.personas.createAdult({
         memberId: payload.memberId,
         displayName: payload.displayName,
         photos,
         selfie,
       });
     } else {
-      await ctx.personas.createBaby({
+      createdPersona = await ctx.personas.createBaby({
         memberId: payload.memberId,
         displayName: payload.displayName,
         photos,
       });
+    }
+
+    // This workflow predates the reservation/outbox/callback protocol. It may
+    // still be invoked by a stale event, but its local completion must never
+    // report a Story-ready Persona. The durable production path is
+    // `runPersonaCreationActionBoundary` -> finalized outbox -> signed callback.
+    if (createdPersona) {
+      createdPersona.status = "failed";
+      createdPersona.likenessConfirmed = false;
+      createdPersona.failureReason = "Legacy Persona creation workflow is disabled";
+      ctx.store.savePersona(createdPersona);
+      throw new Error("Legacy Persona creation workflow is disabled; use the durable creation protocol");
     }
   } catch (err) {
     const failedPersona = [...ctx.store.personas.values()].find(
@@ -52,9 +66,14 @@ export async function runPersonaCreateBody(
         p.displayName === payload.displayName &&
         p.status === "training"
     );
-    if (failedPersona) {
+    if (failedPersona && failedPersona.status !== "failed") {
       failedPersona.status = "failed";
+      failedPersona.likenessConfirmed = false;
+      failedPersona.failureReason = "Legacy Persona creation workflow failed";
       ctx.store.savePersona(failedPersona);
+    }
+    for (const key of [...payload.photoKeys, payload.selfieKey ?? ""]) {
+      if (key) await ctx.blobs.delete(key);
     }
     if (member) {
       await ctx.notifications.sendEmail(

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   FAL_FLUX_1_LORA_ENDPOINT,
@@ -11,6 +11,9 @@ import type { Tier } from "@/domain/types";
 import { CustomStyleService } from "@/services/custom-style";
 import { CostThreshold, ProviderCostMeteringService, SpendBlockedError } from "@/services/provider-cost-metering";
 import { createTestContext, goodPhoto, subscribedGuardian } from "@/test/fixtures";
+
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 function setTier(ctx: ReturnType<typeof createTestContext>, familyId: string, tier: Tier): void {
   const existing = ctx.store.getSubscription(familyId);

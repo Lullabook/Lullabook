@@ -15,7 +15,7 @@ export interface FirstOpenState {
   demoRenderable: boolean;
 }
 
-export type FirstOpenRoute = "/(tabs)" | "/demo" | "/sign-up";
+export type FirstOpenRoute = "/(tabs)" | "/demo" | "/sign-up" | "/sign-in";
 
 export function resolveFirstOpenRoute(state: FirstOpenState): FirstOpenRoute {
   // A live session always wins — returning users never re-see the funnel.

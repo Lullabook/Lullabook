@@ -76,6 +76,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         photoCount: sourcePhotos.length,
         photos: sourcePhotos,
         selfie: selfieBytes,
+        // C2/C4: the service seam denies missing subject self-consent and
+        // applies the jurisdiction-configured liveness gate before staging.
+        selfConsent: mode === "adult" ? formData.get("selfConsent") === "true" : undefined,
+        jurisdiction: member.jurisdiction,
         ...(mode === "baby"
           ? {
               baby: { displayName },

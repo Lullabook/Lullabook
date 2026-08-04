@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestContext, seedMayaWorld, subscribedGuardian } from "@/test/fixtures";
 import { familyMemberStatus } from "@/lib/v2-theme";
 
 describe("47 — seedMayaWorld demo dataset", () => {
+  beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+  afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
   it("builds 5 family members, 4 characters, and 6 stories for the baby", async () => {
     const ctx = createTestContext();
     const guardian = await subscribedGuardian(ctx);

@@ -8,7 +8,7 @@ export async function POST(
   const { pageId } = await params;
   return withBearerAuth(request, async (ctx, member) => {
     try {
-      ctx.storybooks.rerollImage(member.id, pageId);
+      ctx.storybooks.rerollImage(member.id, pageId, request.headers.get("Idempotency-Key") ?? undefined);
       await ctx.persist();
       return jsonOk({ rerolled: true });
     } catch (err) {

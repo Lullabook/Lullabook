@@ -165,9 +165,14 @@ describe("178 — atomic consent-safe Family persona creation", () => {
     expect(ctx.fal.trainCalls).toBe(0);
 
     ctx.moderation.blockedImages.length = 0;
-    ctx.workflow.waitForEvent = (async () => ({
-      status: "failed",
-    })) as typeof ctx.workflow.waitForEvent;
+    // A failed completion webhook would cause the legacy retry helper to
+    // submit an empty photo list. Strict payable-unit validation correctly
+    // rejects that malformed test payload before the intended training
+    // failure. Fail at the provider wait boundary instead: photos were already
+    // moderated/staged and the atomic rollback contract is still exercised.
+    ctx.workflow.waitForEvent = (async () => {
+      throw new Error("training provider failed");
+    }) as typeof ctx.workflow.waitForEvent;
     await expect(ctx.personas.createAtomic({
       memberId: guardian.id,
       kind: "baby",

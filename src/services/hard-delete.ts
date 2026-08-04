@@ -86,6 +86,9 @@ export class HardDeleteService {
     const costLedgerEntries = [...this.store.providerCostLedgerEntries.values()].filter(
       (entry) => entry.owningEntityIds.familyId === familyId
     );
+    const creditLedgerEntries = [...this.store.creditLedgerEntries.values()].filter(
+      (entry) => entry.familyId === familyId
+    );
 
     const limitations: HardDeleteLimitation[] = [];
     const deletedProviderArtifacts: string[] = [];
@@ -127,6 +130,7 @@ export class HardDeleteService {
       }
     };
     await listOwned(`photos/${familyId}/`);
+    await listOwned(`photos-staging/${familyId}/`);
     await listOwned(`persona-creation/${familyId}/`);
     await listOwned(`lora/${familyId}/`);
     await listOwned(`training-inputs/${familyId}/`);
@@ -134,6 +138,9 @@ export class HardDeleteService {
     await listOwned(`styles/${familyId}/`);
     for (const persona of personas) {
       await listOwned(`photos/${persona.id}/`);
+      // Legacy replacements omitted familyId from the staging prefix; clean
+      // those persona-owned paths too while current writes use the scoped form.
+      await listOwned(`photos-staging/${persona.id}/`);
       await listOwned(`voice/${persona.id}/`);
       await listOwned(`avatars/${familyId}/${persona.id}/`);
       await listOwned(`likeness-samples/${familyId}/${persona.id}/`);
@@ -182,7 +189,7 @@ export class HardDeleteService {
         moderationAudit: moderationAuditIds.length,
         providerKillSwitches: providerKillSwitches.length,
         sourcePhotos: [...ownedBlobKeys].filter(
-          (key) => key.startsWith("photos/") || key.startsWith("persona-creation/"),
+          (key) => key.startsWith("photos/") || key.startsWith("photos-staging/") || key.startsWith("persona-creation/"),
         ).length,
         reviewSamples: [...ownedBlobKeys].filter((key) => key.startsWith("likeness-samples/")).length,
         avatars: [...ownedBlobKeys].filter((key) => key.startsWith("avatars/")).length,
@@ -194,6 +201,8 @@ export class HardDeleteService {
         storybooks: storybooks.length,
         pages: pages.length,
         providerCostLedger: costLedgerEntries.length,
+        creditLedger: creditLedgerEntries.length,
+        creditPurchasedBalance: this.store.creditPurchasedBalances.has(familyId) ? 1 : 0,
       },
       deleted: {
         database: {
@@ -212,6 +221,8 @@ export class HardDeleteService {
           storybooks: storybooks.length,
           pages: pages.length,
           providerCostLedger: costLedgerEntries.length,
+          creditLedger: creditLedgerEntries.length,
+          creditPurchasedBalance: this.store.creditPurchasedBalances.has(familyId) ? 1 : 0,
         },
         blobKeys: deletedBlobKeys,
         providerArtifacts: deletedProviderArtifacts,

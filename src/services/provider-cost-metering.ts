@@ -1,5 +1,7 @@
 import { v4 as uuid } from "uuid";
 import type { DataStore } from "@/db/store";
+import { R1_MARGIN_THRESHOLDS, R1_PLAN_DEFINITION } from "@/domain/plan";
+import { estimateProviderCostUsd } from "@/lib/provider-prices";
 
 export type ProviderAttemptType =
   | "text"
@@ -90,6 +92,32 @@ export interface ThresholdInput {
   p95FullCapMarginPercent?: number;
 }
 
+/**
+ * Margin evidence (COST-3): net subscription revenue and attributable COGS.
+ * Margin = (net subscription revenue − attributable COGS) / net subscription
+ * revenue × 100. Missing evidence fails closed at the authorization boundary.
+ */
+export interface MarginEvidence {
+  netSubscriptionRevenueUsd: number;
+  attributableCogsUsd: number;
+}
+
+/**
+ * Issue 190 — margin formula: (net subscription revenue − attributable COGS)
+ * / net subscription revenue × 100. Invalid revenue (missing evidence) or
+ * negative COGS throws: never divide by zero, never compute a fake margin.
+ */
+export function computeMarginPercent(
+  netSubscriptionRevenueUsd: number,
+  attributableCogsUsd: number
+): number {
+  if (!Number.isFinite(netSubscriptionRevenueUsd) || netSubscriptionRevenueUsd <= 0) {
+    throw new Error("netSubscriptionRevenueUsd must be a finite positive number");
+  }
+  assertFiniteNonNegative(attributableCogsUsd, "attributableCogsUsd");
+  return ((netSubscriptionRevenueUsd - attributableCogsUsd) / netSubscriptionRevenueUsd) * 100;
+}
+
 export type KillSwitchScope = "all" | "provider" | "model" | "endpoint" | "provider-model";
 
 export interface ProviderKillSwitch {
@@ -111,6 +139,21 @@ export interface SpendRoute {
   provider: string;
   model: string;
   endpoint?: string;
+}
+
+export interface PayableAttemptInput extends SpendAuthorizationInput {
+  /** Exact billable units used to price this attempt before the boundary. */
+  units: Record<string, number>;
+  /** Stable operation key. It is persisted as request_id for DB uniqueness. */
+  attemptKey: string;
+}
+
+export interface PayableAttemptAuthorization {
+  threshold: CostThreshold;
+  pricingVersion: string;
+  estimatedCostUsd: number;
+  attemptKey: string;
+  units: Record<string, number>;
 }
 
 export class SpendBlockedError extends Error {
@@ -148,12 +191,21 @@ function assertFiniteNonNegative(value: number, field: string): void {
   }
 }
 
+function assertFinitePositive(value: number, field: string): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${field} must be a finite positive number`);
+  }
+}
+
 function assertUnits(units: Record<string, number>): Record<string, number> {
   const safeUnits: Record<string, number> = {};
   for (const [key, value] of Object.entries(units)) {
     if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(key)) throw new Error("Invalid unit name");
     assertFiniteNonNegative(value, `units.${key}`);
     safeUnits[key] = value;
+  }
+  if (Object.values(safeUnits).every((value) => value === 0)) {
+    throw new Error("A payable attempt must carry a non-zero unit count");
   }
   return safeUnits;
 }
@@ -203,9 +255,67 @@ export class ProviderCostMeteringService {
     ].includes(input.outcome)) {
       throw new Error("Invalid provider attempt outcome");
     }
-    assertFiniteNonNegative(input.estimatedCostUsd, "estimatedCostUsd");
-    if (input.actualCostUsd !== undefined) assertFiniteNonNegative(input.actualCostUsd, "actualCostUsd");
+    const units = assertUnits(input.units);
+    let estimatedCostUsd = input.estimatedCostUsd;
+    let pricingVersion = input.pricingVersion;
+    if (estimatedCostUsd === 0) {
+      // A few legacy callers still pass a placeholder zero. Do not persist it:
+      // recover the exact non-zero versioned estimate from the route and units;
+      // unknown routes or zero units throw before a row can be written.
+      // Their training seam reports the number of moderated source images, but
+      // the provider bills one training job. Price that legacy shape as one
+      // job while retaining the observed units in the ledger for auditability.
+      const pricingUnits =
+        input.attemptType === "training" &&
+        ((units.training_images ?? 0) > 0 || (units.training_steps ?? 0) > 0)
+          ? { trainings: 1 }
+          : units;
+      const price = estimateProviderCostUsd({
+        provider: input.provider,
+        endpoint: input.endpoint,
+        model: input.model,
+        units: pricingUnits,
+      });
+      estimatedCostUsd = price.estimatedCostUsd;
+      pricingVersion = price.pricingVersion;
+    } else {
+      assertFinitePositive(estimatedCostUsd, "estimatedCostUsd");
+    }
+    if (input.actualCostUsd !== undefined) assertFinitePositive(input.actualCostUsd, "actualCostUsd");
     assertFiniteNonNegative(input.latencyMs, "latencyMs");
+
+    const providerRequestId = input.providerRequestId ?? requestId;
+    if (!providerRequestId) throw new Error("providerRequestId must be non-empty");
+
+    // The operation key is the idempotency boundary, not the random ledger row
+    // id. A replay returns the existing row and may only fill in reconciliation
+    // data that was unavailable on the first terminal observation.
+    const existing = [...this.store.providerCostLedgerEntries.values()].find(
+      (entry) =>
+        entry.owningEntityIds.familyId === input.owningEntityIds.familyId &&
+        entry.requestId === requestId
+    );
+    if (existing) {
+      if (
+        existing.provider !== input.provider ||
+        existing.endpoint !== input.endpoint ||
+        existing.model !== input.model ||
+        existing.attemptType !== input.attemptType ||
+        existing.outcome !== input.outcome ||
+        JSON.stringify(existing.owningEntityIds) !== JSON.stringify(input.owningEntityIds)
+      ) {
+        throw new Error("Attempt key was reused for a different payable operation");
+      }
+      if (input.actualCostUsd !== undefined) {
+        existing.actualCostUsd ??= input.actualCostUsd;
+        if (existing.actualCostUsd !== input.actualCostUsd) {
+          throw new Error("Attempt reconciliation reported conflicting actual cost");
+        }
+      }
+      if (input.providerRequestId) existing.providerRequestId = input.providerRequestId;
+      this.store.providerCostLedgerEntries.set(existing.id, existing);
+      return existing;
+    }
 
     // Construct from an allow-list. In particular, never spread input: callers
     // may have accidentally supplied prompts, photo bytes, or credentials.
@@ -214,13 +324,13 @@ export class ProviderCostMeteringService {
       provider: input.provider,
       endpoint: input.endpoint,
       model: input.model,
-      pricingVersion: input.pricingVersion,
-      units: assertUnits(input.units),
-      estimatedCostUsd: input.estimatedCostUsd,
+      pricingVersion,
+      units,
+      estimatedCostUsd,
       actualCostUsd: input.actualCostUsd ?? null,
       latencyMs: input.latencyMs,
       requestId,
-      providerRequestId: requestId,
+      providerRequestId,
       owningEntityIds: {
         familyId: input.owningEntityIds.familyId,
         ...(input.owningEntityIds.personaId ? { personaId: input.owningEntityIds.personaId } : {}),
@@ -239,7 +349,7 @@ export class ProviderCostMeteringService {
   }
 
   recordTrainingAmortization(input: TrainingAmortizationInput): ProviderCostLedgerEntry {
-    assertFiniteNonNegative(input.costUsd, "costUsd");
+    assertFinitePositive(input.costUsd, "costUsd");
     const entry = this.recordAttempt({
       ...input,
       estimatedCostUsd: input.costUsd,
@@ -319,13 +429,20 @@ export class ProviderCostMeteringService {
     ) {
       throw new Error("p95FullCapMarginPercent must be a valid percentage");
     }
-    if (input.p95FullCapMarginPercent !== undefined && input.p95FullCapMarginPercent < 70) {
+    if (
+      input.p95FullCapMarginPercent !== undefined &&
+      input.p95FullCapMarginPercent < R1_MARGIN_THRESHOLDS.fullCapP95MarginFloorPercent
+    ) {
       return CostThreshold.RED;
     }
     const variance = Math.abs(input.actualCostUsd - input.budgetUsd) / input.budgetUsd;
     const epsilon = Number.EPSILON * 16;
-    if (variance <= 0.05 + epsilon) return CostThreshold.GREEN;
-    if (variance <= 0.1 + epsilon) return CostThreshold.AMBER;
+    if (variance <= R1_MARGIN_THRESHOLDS.greenVarianceMaxPercent / 100 + epsilon) {
+      return CostThreshold.GREEN;
+    }
+    if (variance <= R1_MARGIN_THRESHOLDS.amberVarianceMaxPercent / 100 + epsilon) {
+      return CostThreshold.AMBER;
+    }
     return CostThreshold.RED;
   }
 
@@ -389,33 +506,153 @@ export class ProviderCostMeteringService {
     if (killSwitch) throw new SpendBlockedError(killSwitch);
   }
 
-  /** Budget gate used immediately before a payable invocation, never merely enqueue. */
-  authorizeSpend(route: SpendRoute & ThresholdInput): CostThreshold {
-    this.assertSpendAllowed(route);
-    if (route.p95FullCapMarginPercent === undefined) {
+  /**
+   * Issue 190 — the pre-attempt authorization gate. Always enforces persisted
+   * kill switches; then requires margin evidence (P95 full-cap margin or
+   * net-revenue/COGS) and fails CLOSED when it is missing; then enforces the
+   * red variance band when budget evidence is supplied. Returns green/amber;
+   * any red condition throws {@link SpendBlockedError} before the caller can
+   * reach a provider boundary.
+   */
+  authorizeSpend(input: SpendAuthorizationInput): CostThreshold {
+    this.assertSpendAllowed(input);
+    const margin = this.resolveMarginPercent(input);
+    if (margin < R1_MARGIN_THRESHOLDS.fullCapP95MarginFloorPercent) {
       throw new SpendBlockedError({
-        id: "missing-p95-margin-evidence",
-        scope: "all",
-        threshold: CostThreshold.RED,
-        reason: "Missing P95 full-cap margin evidence",
-        createdAt: this.now(),
-        active: true,
-      });
-    }
-    const threshold = this.evaluateThreshold(route);
-    if (threshold === CostThreshold.RED) {
-      throw new SpendBlockedError({
-        id: "budget-threshold",
+        id: "margin-threshold",
         scope: "provider-model",
-        provider: route.provider,
-        model: route.model,
-        threshold,
-        reason: "Budget variance exceeded the red threshold",
+        provider: input.provider,
+        model: input.model,
+        threshold: CostThreshold.RED,
+        reason: `Full-cap/P95 delivery margin (${margin.toFixed(2)}%) is below the ${R1_MARGIN_THRESHOLDS.fullCapP95MarginFloorPercent}% floor`,
         createdAt: this.now(),
         active: true,
       });
     }
-    return threshold;
+    if (input.budgetUsd !== undefined || input.actualCostUsd !== undefined) {
+      if (input.budgetUsd === undefined || input.actualCostUsd === undefined) {
+        throw new Error("budgetUsd and actualCostUsd must be supplied together");
+      }
+      const threshold = this.evaluateThreshold({
+        budgetUsd: input.budgetUsd,
+        actualCostUsd: input.actualCostUsd,
+      });
+      if (threshold === CostThreshold.RED) {
+        throw new SpendBlockedError({
+          id: "budget-threshold",
+          scope: "provider-model",
+          provider: input.provider,
+          model: input.model,
+          threshold,
+          reason: "Budget variance exceeded the red threshold",
+          createdAt: this.now(),
+          active: true,
+        });
+      }
+      return threshold;
+    }
+    return CostThreshold.GREEN;
+  }
+
+  /**
+   * Full payable-boundary gate. The caller cannot authorize a provider/storage
+   * operation without a known route, non-zero exact units, stable attempt key,
+   * kill-switch clearance, and margin evidence.
+   */
+  authorizePayableAttempt(input: PayableAttemptInput): PayableAttemptAuthorization {
+    if (!input.attemptKey.trim()) throw new Error("attemptKey must be non-empty");
+    if (!input.endpoint) throw new Error("A payable route requires an endpoint");
+    const units = assertUnits(input.units);
+    const price = estimateProviderCostUsd({
+      provider: input.provider,
+      endpoint: input.endpoint,
+      model: input.model,
+      units,
+    });
+    const threshold = this.authorizeSpend({
+      ...input,
+      marginEvidence:
+        input.marginEvidence ??
+        (input.familyId ? this.deriveMarginEvidence(input.familyId) ?? undefined : undefined),
+    });
+    return {
+      threshold,
+      pricingVersion: price.pricingVersion,
+      estimatedCostUsd: price.estimatedCostUsd,
+      attemptKey: input.attemptKey,
+      units,
+    };
+  }
+
+  private resolveMarginPercent(input: SpendAuthorizationInput): number {
+    if (input.p95FullCapMarginPercent !== undefined) {
+      if (
+        !Number.isFinite(input.p95FullCapMarginPercent) ||
+        input.p95FullCapMarginPercent < 0
+      ) {
+        throw new Error("p95FullCapMarginPercent must be a valid percentage");
+      }
+      return input.p95FullCapMarginPercent;
+    }
+    if (input.marginEvidence) {
+      if (
+        !Number.isFinite(input.marginEvidence.netSubscriptionRevenueUsd) ||
+        input.marginEvidence.netSubscriptionRevenueUsd <= 0
+      ) {
+        throw new SpendBlockedError({
+          id: "missing-margin-evidence",
+          scope: "all",
+          threshold: CostThreshold.RED,
+          reason: "Missing net subscription revenue evidence",
+          createdAt: this.now(),
+          active: true,
+        });
+      }
+      return computeMarginPercent(
+        input.marginEvidence.netSubscriptionRevenueUsd,
+        input.marginEvidence.attributableCogsUsd
+      );
+    }
+    // Missing margin evidence fails closed: no P95 margin, no revenue/COGS.
+    throw new SpendBlockedError({
+      id: "missing-margin-evidence",
+      scope: "all",
+      threshold: CostThreshold.RED,
+      reason: "Missing margin evidence (P95 margin or revenue/COGS)",
+      createdAt: this.now(),
+      active: true,
+    });
+  }
+
+  /**
+   * Issue 190 — deterministic margin evidence derived from persisted state:
+   * the Family's subscription revenue (R1 plan, monthly-equivalent) and the
+   * attributable COGS recorded in the provider ledger. Returns null when the
+   * Family has no active subscription — upstream authorization fails closed
+   * rather than spending without revenue evidence.
+   */
+  deriveMarginEvidence(familyId: string): MarginEvidence | null {
+    const subscription = this.store.getSubscription(familyId);
+    if (!subscription || subscription.status !== "active") return null;
+    const pricing = R1_PLAN_DEFINITION.pricing;
+    const netSubscriptionRevenueUsd = pricing.annualDefault
+      ? pricing.annual / 12
+      : pricing.monthly;
+    const attributableCogsUsd = [...this.store.providerCostLedgerEntries.values()]
+      .filter((entry) => entry.owningEntityIds.familyId === familyId)
+      .reduce((sum, entry) => {
+        const cost = entry.actualCostUsd ?? entry.estimatedCostUsd;
+        // Persona training is a reusable Family asset, not a per-Story charge.
+        // Attribute one monthly Story-cap share at each payable Story boundary;
+        // retain the full non-zero amount in the ledger and in Persona cost
+        // reports. This keeps margin evidence attributable without charging the
+        // same one-time training run four times in a single monthly cohort.
+        if (entry.attemptType === "training" && !entry.owningEntityIds.storybookId) {
+          return sum + cost / R1_PLAN_DEFINITION.limits.storybooksPerMonth;
+        }
+        return sum + cost;
+      }, 0);
+    return { netSubscriptionRevenueUsd, attributableCogsUsd };
   }
 
   getControls(): { canCreateSpend: boolean; canViewDrafts: true; canHardDelete: true } {
@@ -431,6 +668,19 @@ export class ProviderCostMeteringService {
     this.store.providerCostLedgerEntries.clear();
     this.store.providerKillSwitches.clear();
   }
+}
+
+export interface SpendAuthorizationInput extends SpendRoute {
+  /**
+   * Budget variance evidence: cumulative spend vs the monthly budget. The
+   * variance band is enforced only when BOTH are supplied.
+   */
+  budgetUsd?: number;
+  actualCostUsd?: number;
+  /** P95 full-cap delivery margin, expressed as a percentage (e.g. 69.9). */
+  p95FullCapMarginPercent?: number;
+  /** Alternative margin evidence: net subscription revenue + attributable COGS. */
+  marginEvidence?: MarginEvidence;
 }
 
 /** Readable aliases for callers that describe this component as a ledger. */

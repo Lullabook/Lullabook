@@ -1,5 +1,5 @@
 import type { DataStore } from "@/db/store";
-import type { Baby, Character, Persona, Storybook } from "@/domain/types";
+import type { Baby, Character, Persona, PersonaStatus, Storybook } from "@/domain/types";
 import type { BabyService } from "@/services/baby";
 import type { FamilyRosterService } from "@/services/family-roster";
 
@@ -11,7 +11,7 @@ export interface WorldAvatar {
   badge: string;
   avBg: string;
   kind: "baby" | "adult" | "character";
-  personaStatus?: "training" | "ready" | "failed";
+  personaStatus?: PersonaStatus;
   avatarKey?: string | null;
 }
 

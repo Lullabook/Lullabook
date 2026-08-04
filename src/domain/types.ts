@@ -2,7 +2,7 @@ export type MemberRole = "guardian" | "member";
 
 export type PersonaKind = "baby" | "adult";
 
-export type PersonaStatus = "training" | "ready" | "failed";
+export type PersonaStatus = "training" | "review" | "ready" | "failed";
 
 export type StoryType =
   | "everyday"
@@ -193,6 +193,8 @@ export interface Persona {
    * explicitly confirmed (persisted on the personas row — issue 125).
    */
   likenessConfirmed?: boolean;
+  /** Redacted terminal reason set when a real training failure marks the Persona `failed` (ticket 188). */
+  failureReason?: string;
   promotedFromCharacterId?: string;
   questionnaire?: TraitQuestionnaire;
   createdAt: Date;
@@ -267,6 +269,8 @@ export interface Subscription {
    * SubscriptionStatus for trials.
    */
   trialEndsAt?: Date | null;
+  /** RevenueCat entitlement expiration; cancellation can retain access until this time. */
+  expiresAt?: Date | null;
   updatedAt: Date;
 }
 
@@ -444,6 +448,8 @@ export interface JurisdictionConfig {
   noticeVersion: string;
   residencyRegion: string;
   enabled: boolean;
+  /** Adult Persona creation/retrain requires a successful liveness/self-match (ticket 188). */
+  requiresLiveness?: boolean;
 }
 
 export interface Scene {

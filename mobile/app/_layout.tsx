@@ -14,8 +14,10 @@ import {
 } from "@expo-google-fonts/nunito";
 
 import { BackPill } from "@/components/BackPill";
+import { StartupTimingOverlay } from "@/components/startup-timing-overlay";
 import { C, F } from "@/constants/theme";
 import { initMobileSentry } from "@/lib/sentry-init";
+import { recordStartup, startupTimingEnabled } from "@/lib/startup-timing";
 
 export { ErrorBoundary } from "expo-router";
 
@@ -27,6 +29,10 @@ SplashScreen.preventAutoHideAsync();
 
 // Issue 151 — Sentry crash capture (fail-open; no DSN in test/dev → no-op).
 initMobileSentry();
+
+// Issue 191 — earliest JS execution point the app entry controls; the
+// process-start → interactive delta is the native cold-start measure.
+recordStartup("process-start");
 
 export default function RootLayout() {
   // Only the brand fonts (Baloo 2 + Nunito weights the theme actually uses)
@@ -44,7 +50,10 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
-    if (loaded) SplashScreen.hideAsync();
+    if (loaded) {
+      SplashScreen.hideAsync();
+      recordStartup("interactive");
+    }
   }, [loaded]);
 
   if (!loaded) return null;
@@ -92,6 +101,8 @@ function RootLayoutNav() {
           options={{ title: "Choose your plan", presentation: "modal", ...stackHeader }}
         />
       </Stack>
+      {/* Issue 191: dev-only cold-start timing overlay (no-op in prod). */}
+      {startupTimingEnabled() && <StartupTimingOverlay />}
     </ThemeProvider>
   );
 }

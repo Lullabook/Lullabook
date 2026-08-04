@@ -1,5 +1,14 @@
 import { getApiUrl } from "@/lib/env";
 import { getAccessToken } from "@/lib/supabase";
+import { createSharedRequestCache, registerPrivateCache } from "@/lib/private-cache";
+import {
+  ApiSignInRequiredError,
+  ApiStatusError,
+  CREATE_REQUEST_TIMEOUT_MS,
+  CreateRequestTimeoutError,
+  STORYBOOK_READ_TIMEOUT_MS,
+  StorybookReadTimeoutError,
+} from "@/lib/generation-flow";
 import {
   classifyConsentRequiredError,
   classifyEntitlementError,
@@ -7,33 +16,72 @@ import {
 import type { Character, Persona, StoryType } from "@domain/types";
 
 const apiBase = getApiUrl();
+const homeCache = createSharedRequestCache<HomeResponse>();
+let homeCacheIdentity: string | null | undefined;
+registerPrivateCache(() => {
+  homeCacheIdentity = undefined;
+  homeCache.clear();
+});
 
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await getAccessToken();
-  const res = await fetch(`${apiBase}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-    // Issue 171 (SEC-1): a 403 carrying a known entitlement code is the
-    // server's paywall boundary — surface it typed so callers route to
-    // billing.tsx. Non-entitlement 403s stay plain errors (never hijacked).
-    const entitlementErr = classifyEntitlementError(res.status, body);
-    if (entitlementErr) throw entitlementErr;
-    // Issue 173: the 172 consent gate's 403 routes to the consent flow.
-    const consentErr = classifyConsentRequiredError(res.status, body);
-    if (consentErr) throw consentErr;
-    throw new Error(body.error ?? `Request failed (${res.status})`);
+async function getHomeCache(identity: string | null, refresh: boolean) {
+  if (identity !== homeCacheIdentity) {
+    homeCacheIdentity = identity;
+    homeCache.clear();
   }
-  return res.json() as Promise<T>;
+  return refresh ? homeCache.refresh(() => apiFetch("/api/home")) : homeCache.get(() => apiFetch("/api/home"));
+}
+
+async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs?: number
+): Promise<T> {
+  if (init.method && init.method.toUpperCase() !== "GET") homeCache.clear();
+  const token = await getAccessToken();
+  // Issue 187 — a bounded request is the only thing that keeps a slow create
+  // from freezing the Generate control. Abort on the budget; the caller gets
+  // a typed timeout error (never a hung promise).
+  const controller = new AbortController();
+  const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+  try {
+    const res = await fetch(`${apiBase}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init.headers ?? {}),
+      },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      // Issue 171 (SEC-1): a 403 carrying a known entitlement code is the
+      // server's paywall boundary — surface it typed so callers route to
+      // billing.tsx. Non-entitlement 403s stay plain errors (never hijacked).
+      const entitlementErr = classifyEntitlementError(res.status, body);
+      if (entitlementErr) throw entitlementErr;
+      // Issue 173: the 172 consent gate's 403 routes to the consent flow.
+      const consentErr = classifyConsentRequiredError(res.status, body);
+      if (consentErr) throw consentErr;
+      // Issue 187: 401s and other statuses are typed so screens route by kind
+      // (sign-in) instead of message-sniffing.
+      if (res.status === 401) throw new ApiSignInRequiredError();
+      throw new ApiStatusError(res.status, body.error ?? `Request failed (${res.status})`);
+    }
+    return res.json() as Promise<T>;
+  } catch (err) {
+    if (timer && err instanceof Error && err.name === "AbortError") {
+      throw new CreateRequestTimeoutError();
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function apiFormData<T>(path: string, body: FormData): Promise<T> {
+  homeCache.clear();
   const token = await getAccessToken();
   return new Promise<T>((resolve, reject) => {
     // Issue 163: Expo SDK 56's "winter" fetch polyfill throws
@@ -108,8 +156,12 @@ export interface HomeResponse {
   trainingExpectationCopy: string;
 }
 
-export function fetchHome(): Promise<HomeResponse> {
-  return apiFetch("/api/home");
+export async function fetchHome(): Promise<HomeResponse> {
+  return getHomeCache(await getAccessToken(), false);
+}
+
+export async function refreshHome(): Promise<HomeResponse> {
+  return getHomeCache(await getAccessToken(), true);
 }
 
 /** ADR-0028 — the paywall consumes the same canonical R1 plan as entitlement. */
@@ -268,7 +320,13 @@ export function createStorybook(brief: import("@domain/types").Brief): Promise<{
   storybookId: string;
   status: string;
 }> {
-  return apiFetch("/api/storybooks", { method: "POST", body: JSON.stringify(brief) });
+  // Issue 187 — a create stalled >20s must not leave the Generate control
+  // frozen: the request aborts and the caller renders a typed retry card.
+  return apiFetch(
+    "/api/storybooks",
+    { method: "POST", body: JSON.stringify(brief) },
+    CREATE_REQUEST_TIMEOUT_MS
+  );
 }
 
 export function listStorybooks(babyId?: string): Promise<{ storybooks: StorybookSummary[] }> {
@@ -281,10 +339,10 @@ export interface StorybookPageWire {
   index: number;
   text: string;
   generationStatus: import("@domain/types").PageGenerationStatus;
-  illustrationBlobKey: string | null;
+  illustrationUrl: string | null;
   hasIllustration: boolean;
   voiceClipId: string | null;
-  candidates: { id: string; kind: string; content: string; selected: boolean }[];
+  candidates: { id: string; kind: string; selected: boolean }[];
 }
 
 export interface StorybookDetailWire {
@@ -294,11 +352,50 @@ export interface StorybookDetailWire {
   storyType: StoryType;
   rerollBudgetRemaining: number;
   rerollCredits: number;
+  /** Issue 187 — server-derived generation progress (phase + ready/total Pages). */
+  progress: import("@/lib/generation-flow").GenerationProgress;
   pages: StorybookPageWire[];
 }
 
-export function getStorybook(id: string): Promise<StorybookDetailWire> {
-  return apiFetch(`/api/storybooks/${encodeURIComponent(id)}`);
+export async function getStorybookSnapshot(
+  id: string,
+  etag?: string | null
+): Promise<{ data: StorybookDetailWire | null; etag: string | null; notModified: boolean }> {
+  const token = await getAccessToken();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STORYBOOK_READ_TIMEOUT_MS);
+  const headers: Record<string, string> = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(etag ? { "If-None-Match": etag } : {}),
+  };
+  try {
+    const res = await fetch(`${apiBase}/api/storybooks/${encodeURIComponent(id)}`, {
+      headers,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const nextEtag = res.headers.get("ETag");
+    if (res.status === 304) return { data: null, etag: nextEtag ?? etag ?? null, notModified: true };
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      if (res.status === 401) throw new ApiSignInRequiredError();
+      throw new ApiStatusError(res.status, body.error ?? `Request failed (${res.status})`);
+    }
+    return { data: (await res.json()) as StorybookDetailWire, etag: nextEtag, notModified: false };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new StorybookReadTimeoutError();
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function getStorybook(id: string): Promise<StorybookDetailWire> {
+  const snapshot = await getStorybookSnapshot(id);
+  if (!snapshot.data) throw new Error("Storybook response was not modified without a previous snapshot");
+  return snapshot.data;
 }
 
 /**
@@ -451,10 +548,10 @@ export function fetchEntitlementSnapshot(): Promise<
   return apiFetch("/api/entitlement");
 }
 
-export async function illustrationSource(blobKey: string): Promise<{ uri: string; headers?: Record<string, string> }> {
+export async function illustrationSource(url: string): Promise<{ uri: string; headers?: Record<string, string> }> {
   const token = await getAccessToken();
   return {
-    uri: `${apiBase}/api/images?key=${encodeURIComponent(blobKey)}`,
+    uri: `${apiBase}${url}`,
     ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
   };
 }

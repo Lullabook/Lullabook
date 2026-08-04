@@ -223,6 +223,9 @@ create table subscriptions (
   status text not null check (status in ('none', 'active', 'canceled', 'past_due')),
   stripe_customer_id text,
   stripe_subscription_id text,
+  tier text check (tier is null or tier in ('basic', 'normal', 'plus')),
+  trial_ends_at timestamptz,
+  expires_at timestamptz,
   updated_at timestamptz not null default now()
 );
 
@@ -426,6 +429,10 @@ create table moderation_audit (
   reason text,
   created_at timestamptz not null default now()
 );
+
+create unique index moderation_audit_revenuecat_event_uidx
+  on moderation_audit (resource_type, resource_id)
+  where resource_type = 'revenuecat_lifecycle';
 
 alter table moderation_audit enable row level security;
 -- No policies: RLS with no policy denies all client access by design.

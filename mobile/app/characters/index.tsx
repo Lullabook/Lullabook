@@ -2,11 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, EmptyState, PrimaryButton, SkeletonCard, BrandGradient } from "@/components/maya-ui";
+import { ListScreen, Eyebrow, PageTitle, Lead, Card, EmptyState, PrimaryButton, SkeletonCard, BrandGradient } from "@/components/maya-ui";
 import { emoji as emojiFor } from "@/components/character-form";
 import { usePressFeedback } from "@/lib/use-press-feedback";
-import { fetchHome, type HomeResponse } from "@/lib/api";
+import { fetchHome, refreshHome, type HomeResponse } from "@/lib/api";
 import { C, F, R } from "@/constants/theme";
+import { shouldShowInitialSkeleton } from "@/lib/render-state";
 import type { Character } from "@domain/types";
 
 const AnimatedPressable = createAnimatedComponent(Pressable);
@@ -69,11 +70,11 @@ export default function CharactersScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     try {
-      setHome(await fetchHome());
+      setHome(await (force ? refreshHome() : fetchHome()));
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not load characters";
       if (message.includes("Unauthorized") || message.includes("Missing bearer")) {
@@ -90,37 +91,42 @@ export default function CharactersScreen() {
     load();
   }, [load]);
 
-  if (loading) {
+  if (shouldShowInitialSkeleton(loading, home !== null)) {
     return (
-      <Screen>
-        <SkeletonCard lines={2} />
-        <SkeletonCard lines={2} />
-      </Screen>
+      <ListScreen
+        data={[]}
+        keyExtractor={() => "loading"}
+        renderItem={() => null}
+        ListHeaderComponent={<><SkeletonCard lines={2} /><SkeletonCard lines={2} /></>}
+      />
     );
   }
 
   const babyName = home?.selectedBaby?.displayName ?? "your little one";
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
-      <View>
-        <Eyebrow>🐻 Made-up friends</Eyebrow>
-        <PageTitle>Characters</PageTitle>
-        <Lead>
-          Imaginary friends you invent for {babyName}&apos;s world — a brave little dragon, a sleepy moon, a cat
-          who talks. Free to create from a few traits.
-        </Lead>
-      </View>
-
-      {error ? (
-        <Card style={st.errorCard}>
-          <Text style={st.errorText}>{error}</Text>
-        </Card>
-      ) : null}
-
-      {home?.characters.length ? (
-        home.characters.map((character, i) => <CharacterCard key={character.id} character={character} index={i} />)
-      ) : (
+    <ListScreen
+      data={home?.characters ?? []}
+      keyExtractor={(character) => character.id}
+      renderItem={({ item: character, index }) => <CharacterCard character={character} index={index ?? 0} />}
+      ListHeaderComponent={
+        <>
+          <View>
+            <Eyebrow>🐻 Made-up friends</Eyebrow>
+            <PageTitle>Characters</PageTitle>
+            <Lead>
+              Imaginary friends you invent for {babyName}&apos;s world — a brave little dragon, a sleepy moon, a cat
+              who talks. Free to create from a few traits.
+            </Lead>
+          </View>
+          {error ? (
+            <Card style={st.errorCard}>
+              <Text style={st.errorText}>{error}</Text>
+            </Card>
+          ) : null}
+        </>
+      }
+      ListEmptyComponent={
         <EmptyState
           emoji="🧸"
           title="Describe someone your little one loves"
@@ -128,12 +134,15 @@ export default function CharactersScreen() {
           cta="Create your first character"
           onCta={() => router.push("/characters/new" as never)}
         />
-      )}
-
-      {home?.characters.length ? (
-        <PrimaryButton title="✨ Invent a character" onPress={() => router.push("/characters/new" as never)} />
-      ) : null}
-    </Screen>
+      }
+      ListFooterComponent={
+        home?.characters.length ? (
+          <PrimaryButton title="✨ Invent a character" onPress={() => router.push("/characters/new" as never)} />
+        ) : null
+      }
+      onRefresh={() => load(true)}
+      refreshing={loading}
+    />
   );
 }
 

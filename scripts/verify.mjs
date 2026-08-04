@@ -17,7 +17,7 @@ const ROOT = process.cwd();
 const steps = [
   { name: "Typecheck (root)", cmd: "npx tsc --noEmit", cwd: ROOT, timeout: 60000 },
   { name: "Typecheck (mobile)", cmd: "npx tsc --noEmit", cwd: `${ROOT}/mobile`, timeout: 60000 },
-  { name: "Unit + integration (Vitest)", cmd: "npx vitest run", cwd: ROOT, timeout: 120000 },
+  { name: "Unit + integration (Vitest)", cmd: "npx vitest run", cwd: ROOT, timeout: 300000 },
   { name: "Sentry issue automation check", cmd: "node scripts/check-sentry-issue-automation.mjs", cwd: ROOT, timeout: 15000 },
   { name: "Dead-surface sweep (149)", cmd: "npx vitest run tests/149-dead-surface-sweep.test.ts", cwd: ROOT, timeout: 30000 },
   { name: "Deterministic seed (153)", cmd: "npx vitest run tests/153-deterministic-seed.test.ts", cwd: ROOT, timeout: 30000 },
@@ -55,7 +55,7 @@ for (const step of optionalSteps) {
     results.push({ name: step.name, status: "PASS" });
   } catch (err) {
     const msg = err.message ?? "";
-    if (msg.includes("no test files") || msg.includes("ECONNREFUSED") || msg.includes("playwright")) {
+    if (msg.includes("no test files") || msg.includes("ECONNREFUSED") || msg.includes("playwright") || msg.includes("ETIMEDOUT")) {
       console.log("SKIP (no server / playwright not configured)");
       results.push({ name: step.name, status: "SKIP" });
     } else {

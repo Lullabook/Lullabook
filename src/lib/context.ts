@@ -15,6 +15,7 @@ import { PdfLibAdapter } from "@/adapters/pdf";
 import { RealStripeAdapter } from "@/adapters/stripe";
 import { RealRevenueCatPurchaseAdapter } from "@/adapters/revenuecat-purchase";
 import { SupabaseDataStore } from "@/db/supabase-store";
+import { instrumentClient, RequestRecorder } from "@/lib/request-timing";
 import { createServiceClient } from "@/lib/supabase";
 import { BabyService } from "@/services/baby";
 import { CharacterService } from "@/services/character";
@@ -38,6 +39,7 @@ import { PastStorySummaryService } from "@/services/past-story-summary";
 import { EntitlementService } from "@/services/entitlement";
 import { RevenueCatPurchaseService } from "@/services/revenuecat-purchase";
 import { StoryCapService } from "@/services/story-cap";
+import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
 import { CreditLedgerService } from "@/services/credit-ledger";
 import { CustomStyleService } from "@/services/custom-style";
 import { HomeDashboardService } from "@/services/home-dashboard";
@@ -52,8 +54,13 @@ export type RequestContext = ReturnType<typeof createRequestContext>;
  * responding (which also flushes any Inngest event sends buffered by
  * `enqueue`).
  */
-export function createRequestContext() {
-  const store = new SupabaseDataStore(createServiceClient());
+export function createRequestContext(timing = new RequestRecorder()) {
+  // Issue 191: the client wrapper counts every awaited Supabase query and
+  // detects sequential waves on the recorder, so `ctx.timing` exposes
+  // request-level query/wave instrumentation at the composition seam without
+  // touching the store's business logic.
+  const storeClient = instrumentClient(createServiceClient(), timing);
+  const store = new SupabaseDataStore(storeClient);
 
   const anthropic = new RealAnthropicAdapter();
   const classicCatalog = new CuratedClassicCatalog();
@@ -94,7 +101,44 @@ export function createRequestContext() {
     new RealRevenueCatPurchaseAdapter(),
     entitlements
   );
-  const storyCap = new StoryCapService(store, entitlements);
+  const costMeter = new ProviderCostMeteringService(store);
+  const storyCap = new StoryCapService(store, entitlements, {
+    reserve: async ({ storybookId, familyId, actorMemberId }) => {
+      const { data, error } = await storeClient.rpc("app_reserve_story_allowance", {
+        p_storybook_id: storybookId,
+        p_family_id: familyId,
+        p_actor_member_id: actorMemberId,
+      });
+      if (error) throw new Error(`Story allowance reservation failed: ${error.message}`);
+      const row = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+      if (!row) throw new Error("Story allowance reservation returned no result");
+      const count = Number(row.count);
+      const cap = Number(row.cap);
+      if (
+        typeof row.reserved !== "boolean" ||
+        !Number.isInteger(count) ||
+        !Number.isInteger(cap) ||
+        typeof row.reset_date !== "string"
+      ) {
+        throw new Error("Story allowance reservation returned an invalid result");
+      }
+      return {
+        reserved: row.reserved,
+        count,
+        cap,
+        errorCode: typeof row.error_code === "string" ? row.error_code : null,
+        resetDate: row.reset_date,
+        createdAt: typeof row.created_at === "string" ? new Date(row.created_at) : undefined,
+      };
+    },
+    release: async ({ storybookId, familyId }) => {
+      const { error } = await storeClient.rpc("app_release_story_allowance", {
+        p_storybook_id: storybookId,
+        p_family_id: familyId,
+      });
+      if (error) throw new Error(`Story allowance release failed: ${error.message}`);
+    },
+  });
   const credits = new CreditLedgerService(store, entitlements);
   const customStyles = new CustomStyleService(store, fal, workflow, blobs, entitlements, credits);
 
@@ -134,7 +178,10 @@ export function createRequestContext() {
     null,
     null,
     pastStorySummary,
-    entitlements
+    entitlements,
+    {},
+    costMeter,
+    storyCap
   );
   const sharing = new SharingService(store);
   const family = new FamilyService(store, notifications);
@@ -148,11 +195,15 @@ export function createRequestContext() {
   });
   const onboarding = new OnboardingService(store);
   const roster = new PersonaRosterService(store);
-  const textStories = new TextStoryService(store, anthropic, childSafety);
+  const textStories = new TextStoryService(store, anthropic, childSafety, costMeter);
+  // Issue 191: mark when the composition root finished building so auth seams
+  // can time the hydration phase (hydration runs right after this returns).
+  timing.mark("ctx");
   const homeDashboard = new HomeDashboardService(store, moments, storybooks);
 
   return {
     store,
+    timing,
     workflow,
     blobs,
     notifications,

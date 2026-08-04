@@ -36,6 +36,17 @@ export interface PendingBriefClaimResult {
   claimedNow: boolean;
 }
 
+/**
+ * Hydration scope for SupabaseDataStore (issue 192).
+ *  - `full` (default): every Family table, including append-only ledgers and
+ *    worker registers — required for write/RLS/Hard-delete paths.
+ *  - `read`: ordinary authenticated reads — no append-only ledgers, one
+ *    flattened parallel wave (≤2 sequential waves with the member lookup).
+ *  - `minimal`: the authenticated Member row only — image/avatar routes that
+ *    only need the Family boundary for a blob-key prefix check.
+ */
+export type HydrationProfile = "full" | "read" | "minimal";
+
 export class DataStore {
   families = new Map<string, Family>();
   members = new Map<string, Member>();
@@ -562,6 +573,13 @@ export class DataStore {
     this.moderationAudit.set(entry.id, entry);
   }
 
+  /** Durable webhook inbox seam; Supabase overrides this with an atomic insert. */
+  async claimRevenueCatEvent(entry: ModerationAuditEntry): Promise<boolean> {
+    if (this.moderationAudit.has(entry.id)) return false;
+    this.moderationAudit.set(entry.id, entry);
+    return true;
+  }
+
   savePendingBrief(key: string, brief: PendingBrief): void {
     this.pendingBriefs.set(key, brief);
   }
@@ -774,6 +792,11 @@ export class DataStore {
     for (const [id, reservation] of this.storyAllowanceReservations) {
       if (reservation.familyId === familyId) this.storyAllowanceReservations.delete(id);
     }
+
+    for (const [id, entry] of this.creditLedgerEntries) {
+      if (entry.familyId === familyId) this.creditLedgerEntries.delete(id);
+    }
+    this.creditPurchasedBalances.delete(familyId);
 
     // Hard-delete is the explicit exception to normal append-only financial
     // audit retention: all Family-scoped cost evidence and controls are erased.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   createReadyAdult,
   createTestContext,
@@ -11,6 +11,9 @@ import {
 import type { Tier } from "@/domain/types";
 import { StoryCapService, StoryCapError } from "@/services/story-cap";
 import { EntitlementError } from "@/services/entitlement";
+
+beforeAll(() => { process.env.R1_MULTI_FAMILY_ENABLED = "true"; });
+afterAll(() => { delete process.env.R1_MULTI_FAMILY_ENABLED; });
 
 function setTier(
   ctx: ReturnType<typeof createTestContext>,

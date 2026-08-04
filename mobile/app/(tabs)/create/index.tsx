@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Screen, Eyebrow, PageTitle, Lead, Card, Chip, PrimaryButton, SkeletonCard } from "@/components/maya-ui";
+import { Screen, Eyebrow, PageTitle, Lead, Card, Chip, PrimaryButton, GhostButton, SkeletonCard } from "@/components/maya-ui";
 import { createStorybook, fetchHome, type HomeResponse } from "@/lib/api";
 import { isEntitlementError } from "@/lib/entitlement-error";
+import {
+  classifyGenerationError,
+  type GenerationFailure,
+} from "@/lib/generation-flow";
 import { isR1MultiStoryTypeEnabled } from "@/lib/r1-flags";
 import { C, F } from "@/constants/theme";
 import type { StoryType } from "@domain/types";
@@ -38,7 +42,8 @@ export default function NewStorybookScreen() {
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Issue 187 — typed failure, never a raw provider/domain error string.
+  const [error, setError] = useState<GenerationFailure | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,12 +55,12 @@ export default function NewStorybookScreen() {
       setSelectedPersonaIds(readyPersonas.slice(0, 1));
       setSelectedCharacterIds(data.characters[0]?.id ? [data.characters[0].id] : []);
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not load story setup";
-      if (message.includes("Unauthorized") || message.includes("Missing bearer")) {
+      const failure = classifyGenerationError(e);
+      if (failure.kind === "sign-in") {
         router.replace("/sign-in");
         return;
       }
-      setError(message);
+      setError(failure);
     } finally {
       setLoading(false);
     }
@@ -99,18 +104,29 @@ export default function NewStorybookScreen() {
       // the paywall boundary — route to billing instead of message-sniffing.
       // The client never decides entitlement locally.
       if (isEntitlementError(e)) {
-        setError("Illustrated Stories need an active plan.");
+        setError({ kind: "paywall", message: "Illustrated Stories need an active plan.", retryable: false });
         router.push("/billing" as never);
         return;
       }
-      const message = e instanceof Error ? e.message : "Could not generate Storybook";
-      setError(message.includes("subscription") ? "Illustrated Stories need an active plan." : message);
+      // Issue 187 — every other failure classifies to a typed action; raw
+      // provider/domain text never renders. A >20s stall is a retryable
+      // failure that shows the retry card without freezing Generate.
+      const failure = classifyGenerationError(e);
+      if (failure.kind === "consent") {
+        router.push("/consent" as never);
+      } else if (failure.kind === "sign-in") {
+        router.replace("/sign-in");
+        return;
+      }
+      setError(failure);
     } finally {
+      // Issue 187 — the control always releases: a stalled request never
+      // leaves the Generate button frozen.
       setGenerating(false);
     }
   }
 
-  if (loading) {
+  if (loading && home === null) {
     return (
       <Screen>
         <SkeletonCard lines={2} />
@@ -136,7 +152,23 @@ export default function NewStorybookScreen() {
 
       {error ? (
         <Card style={st.errorCard}>
-          <Text style={st.errorText}>{error}</Text>
+          <Text style={st.errorText}>{error.message}</Text>
+          {/* Issue 187 — every displayed failure carries a typed action: a
+              retryable failure (incl. a >20s create stall) renders a retry
+              card, never a dead error line. */}
+          {error.retryable ? (
+            <View style={st.retryRow}>
+              <PrimaryButton
+                title={generating ? "Starting…" : "↻ Try again"}
+                disabled={generating}
+                onPress={generate}
+              />
+            </View>
+          ) : error.kind === "support" ? (
+            <View style={st.retryRow}>
+              <GhostButton title="← Back to the library" onPress={() => router.replace("/stories" as never)} />
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
@@ -268,4 +300,5 @@ const st = StyleSheet.create({
   },
   errorCard: { borderColor: C.dangerBorder, backgroundColor: C.dangerBg },
   errorText: { color: C.danger, fontFamily: F.bodyBold },
+  retryRow: { flexDirection: "row", justifyContent: "flex-end", marginTop: 12 },
 });

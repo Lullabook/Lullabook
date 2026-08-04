@@ -15,6 +15,8 @@ export interface FalTrainingCallbackCompletion {
   loraWeightKey?: string;
   configurationKey?: string;
   error?: string;
+  /** Family-owned likeness-review sample keys persisted with a `ready` completion (ticket 188). */
+  reviewSampleKeys?: string[];
 }
 
 export interface FalTrainingLifecycleRepository {
@@ -72,7 +74,7 @@ export class PostgresFalTrainingLifecycleRepository implements FalTrainingLifecy
 
   async completeCallback(completion: FalTrainingCallbackCompletion): Promise<void> {
     await this.query(
-      "select app_complete_fal_training_callback($1::text, $2::text, $3::text, $4::text, $5::text, $6::text)",
+      "select app_complete_fal_training_callback($1::text, $2::text, $3::text, $4::text, $5::text, $6::text, $7::jsonb)",
       [
         completion.requestId,
         completion.fingerprint,
@@ -80,6 +82,7 @@ export class PostgresFalTrainingLifecycleRepository implements FalTrainingLifecy
         completion.loraWeightKey ?? null,
         completion.configurationKey ?? null,
         completion.error ?? null,
+        completion.reviewSampleKeys ? JSON.stringify(completion.reviewSampleKeys) : null,
       ],
     );
   }
@@ -118,6 +121,7 @@ export class SupabaseFalTrainingLifecycleRepository implements FalTrainingLifecy
       p_lora_weight_key: completion.loraWeightKey ?? null,
       p_configuration_key: completion.configurationKey ?? null,
       p_error: completion.error ?? null,
+      p_review_sample_keys: completion.reviewSampleKeys ?? null,
     });
     if (error) throw new Error(`Complete fal callback failed: ${error.message}`);
   }
@@ -178,6 +182,21 @@ export class DataStoreFalTrainingLifecycleRepository implements FalTrainingLifec
         request.error = undefined;
       } else if (completion.status === "failed") {
         request.error = completion.error;
+      }
+      // Ticket 188: the Persona lifecycle moves with the fal request completion
+      // (training -> review / training -> failed), mirroring the SQL transaction.
+      const persona = this.store.personas.get(request.personaId);
+      if (persona && persona.status === "training") {
+        if (completion.status === "ready") {
+          persona.status = "review";
+          persona.loraWeightKey = completion.loraWeightKey ?? null;
+          persona.reviewSampleKeys = completion.reviewSampleKeys ?? [];
+          persona.failureReason = undefined;
+        } else if (completion.status === "failed") {
+          persona.status = "failed";
+          persona.failureReason = completion.error;
+        }
+        this.store.savePersona(persona);
       }
     }
     receipt.status = "completed";

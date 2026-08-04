@@ -39,8 +39,9 @@
 - [[docs/adr/apple-app-review-packet.md|Apple App Review Packet — Lullabook]] — Lullabook lets a parent generate illustrated AI bedtime storybooks starring their own baby and family.
 - [[docs/adr/r1-market-legal-review-checklist.md|R1 Market Legal-Review Checklist]] — For each market (US, IN, …), confirm and record the reviewer + date:
 
-## Planning (PRDs, stack, scope) (29)
+## Planning (PRDs, stack, scope) (30)
 
+- [[planning/device-dev-build-iphone.md|Device Dev Build — run Lullabook on a physical iPhone]] [active] — Local tickets: 198–201 · GitHub issues: see index-issues.md
 - [[planning/onboarding-and-personas.md|Onboarding & Persona Creation Flow]] [superseded in part — the original web funnel (sign up → pay → consent) is] — replaced on iOS by the Email-Plus VPC flow (PRD v3/v14), decoupled from payment.
 - [[planning/prd-v1.md|PRD — Lullabook v1 (Text + Illustration Storybook)]] [superseded. domain model (family/persona) superseded by prd v5] — (Household/Baby/World/Family-roster/Character); platform (web) superseded by PRD v3 (native iOS).
 - [[planning/prd-v10-hitl-smoke-verification.md|PRD v10 — HITL full-app smoke verification]] [superseded/executed. this wave's owed-verification issues (82-88) were run;] — later automated verify gate (PRD v17) replaces most of this manual process.

@@ -96,6 +96,9 @@ export function familyMemberStatus(
   if (personaStatus === "ready") {
     return { label: "✓ Illustrated & voiced", dot: "#5FB389", key: "ready" };
   }
+  if (personaStatus === "review") {
+    return { label: "👀 Reviewing likeness", dot: "#E79A3C", key: "training" };
+  }
   return { label: "Unavailable", dot: "#C9A9A9", key: "failed" };
 }
 

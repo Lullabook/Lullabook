@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
+import { FlatList, StyleSheet, Text, View, Pressable } from "react-native";
 import { createAnimatedComponent } from "react-native-reanimated";
 import { router } from "expo-router";
 import { BrandGradient, HERO_GRAD, Screen, Card, Float, Twinkle, SkeletonCard, SkeletonRow } from "@/components/maya-ui";
-import { fetchHome, type HomeResponse } from "@/lib/api";
+import { fetchHome, refreshHome, type HomeResponse } from "@/lib/api";
 import { usePressFeedback } from "@/lib/use-press-feedback";
 import { C, F, R } from "@/constants/theme";
+import { shouldShowInitialSkeleton } from "@/lib/render-state";
 
 const AnimatedPressable = createAnimatedComponent(Pressable);
 
@@ -124,11 +125,11 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchHome();
+      const data = await (force ? refreshHome() : fetchHome());
       setHome(data);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to load";
@@ -146,7 +147,7 @@ export default function HomeScreen() {
     load();
   }, [load]);
 
-  if (loading) {
+  if (shouldShowInitialSkeleton(loading, home !== null)) {
     return (
       <Screen>
         <SkeletonCard />
@@ -194,7 +195,7 @@ export default function HomeScreen() {
   ];
 
   return (
-    <Screen onRefresh={load} refreshing={loading}>
+    <Screen onRefresh={() => load(true)} refreshing={loading}>
       {/* Hero — brand 3-stop dusk gradient (REFERENCE.md §1.3), ported from
           v2-hero: bigger floating star + twinkling background dots. */}
       <BrandGradient colors={HERO_GRAD} fallback={C.primary} style={st.hero}>
@@ -317,11 +318,16 @@ export default function HomeScreen() {
         {worldAvatars.length === 0 ? (
           <Text style={st.emptyRosterText}>Add family members and characters to fill this world.</Text>
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.avatarRow}>
-            {worldAvatars.map((item, i) => (
-              <AvatarChip key={item.id} item={item} index={i} onPress={() => router.push("/family")} />
-            ))}
-          </ScrollView>
+          <FlatList
+            horizontal
+            data={worldAvatars}
+            keyExtractor={(item) => item.id}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={st.avatarRow}
+            renderItem={({ item, index }) => (
+              <AvatarChip item={item} index={index} onPress={() => router.push("/family")} />
+            )}
+          />
         )}
       </View>
 
