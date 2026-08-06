@@ -36,6 +36,58 @@ if (!process.env.EXPO_PUBLIC_API_URL) {
   process.env.EXPO_PUBLIC_API_URL = apiUrl;
 }
 
+// Issue 206 — free Apple ID personal teams cannot sign builds that declare
+// com.apple.developer.applesignin or com.apple.developer.associated-domains.
+// Only the exact string "1" enables the free-team branch; every other value
+// (unset, "true", "0") is the production configuration. Never set this flag
+// for a production or TestFlight build.
+const freeTeam = process.env.LULLABOOK_FREE_TEAM === "1";
+
+const plugins: ExpoConfig["plugins"] = [
+  "expo-router",
+  "expo-secure-store",
+  ...(freeTeam ? [] : ["expo-apple-authentication"]),
+  [
+    "expo-splash-screen",
+    {
+      image: "./assets/images/splash-icon.png",
+      resizeMode: "contain",
+      backgroundColor: "#FBF4E7",
+    },
+  ],
+];
+
+// Keep the production object shape untouched so the unset config stays
+// byte-for-byte identical to the pre-flag config.
+const iosConfig: ExpoConfig["ios"] = freeTeam
+  ? {
+      supportsTablet: true,
+      bundleIdentifier: "com.lullabook.app",
+      buildNumber: "1",
+      infoPlist: {
+        NSCameraUsageDescription:
+          "Lullabook uses the camera so guardians can photograph family members to create illustrated Storybooks starring their child.",
+        NSPhotoLibraryUsageDescription:
+          "Lullabook accesses your photo library so guardians can choose reference photos for Persona creation.",
+        NSPhotoLibraryAddUsageDescription:
+          "Lullabook saves exported Storybook PDFs to your photo library when you choose to keep a copy.",
+      },
+    }
+  : {
+      supportsTablet: true,
+      bundleIdentifier: "com.lullabook.app",
+      buildNumber: "1",
+      associatedDomains: ["applinks:lullabook.app"],
+      infoPlist: {
+        NSCameraUsageDescription:
+          "Lullabook uses the camera so guardians can photograph family members to create illustrated Storybooks starring their child.",
+        NSPhotoLibraryUsageDescription:
+          "Lullabook accesses your photo library so guardians can choose reference photos for Persona creation.",
+        NSPhotoLibraryAddUsageDescription:
+          "Lullabook saves exported Storybook PDFs to your photo library when you choose to keep a copy.",
+      },
+    };
+
 const config: ExpoConfig = {
   name: "Lullabook",
   slug: "lullabook",
@@ -44,33 +96,8 @@ const config: ExpoConfig = {
   icon: "./assets/images/icon.png",
   scheme: "com.lullabook",
   userInterfaceStyle: "light",
-  ios: {
-    supportsTablet: true,
-    bundleIdentifier: "com.lullabook.app",
-    buildNumber: "1",
-    associatedDomains: ["applinks:lullabook.app"],
-    infoPlist: {
-      NSCameraUsageDescription:
-        "Lullabook uses the camera so guardians can photograph family members to create illustrated Storybooks starring their child.",
-      NSPhotoLibraryUsageDescription:
-        "Lullabook accesses your photo library so guardians can choose reference photos for Persona creation.",
-      NSPhotoLibraryAddUsageDescription:
-        "Lullabook saves exported Storybook PDFs to your photo library when you choose to keep a copy.",
-    },
-  },
-  plugins: [
-    "expo-router",
-    "expo-secure-store",
-    "expo-apple-authentication",
-    [
-      "expo-splash-screen",
-      {
-        image: "./assets/images/splash-icon.png",
-        resizeMode: "contain",
-        backgroundColor: "#FBF4E7",
-      },
-    ],
-  ],
+  ios: iosConfig,
+  plugins,
   experiments: { typedRoutes: true },
   extra: {
     eas: { projectId: "YOUR_EAS_PROJECT_ID" },
