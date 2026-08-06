@@ -33,7 +33,7 @@ async function main() {
     console.log("Family already has storybooks — seed skipped (idempotent).");
   } else {
     console.log(
-      `Seeded Maya's World: ${result.personas} personas, ${result.characters} characters, ${result.books} stories.`
+      `Seeded Lullabook demo: ${result.personas} personas, ${result.characters} characters, ${result.books} stories.`
     );
   }
 }

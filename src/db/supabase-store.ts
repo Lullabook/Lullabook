@@ -1331,6 +1331,43 @@ export class SupabaseDataStore extends DataStore {
   // Sync-back
   // -------------------------------------------------------------------------
 
+  /**
+   * Durable pre-provider flush (issue 204). Called by the live fal boundary
+   * AFTER reserve() writes the reservation row but BEFORE the provider await,
+   * so a crash mid-call cannot lose the spend hold. Persists only the current
+   * provider-cost rows (the reservation) — the same shape the final sync
+   * persists. Idempotent: the end-of-request sync re-upserts the (possibly
+   * settled) row, so the terminal outcome is never lost.
+   */
+  override async persistProviderSpendState(): Promise<void> {
+    const rows = this.providerCostLedgerRows();
+    if (rows.length === 0) return;
+    const { error } = await this.client.from("provider_cost_ledger").upsert(rows);
+    if (error) throw new Error(`durable provider reservation flush failed: ${error.message}`);
+  }
+
+  private providerCostLedgerRows(): Record<string, unknown>[] {
+    return [...this.providerCostLedgerEntries.values()].map((entry) => ({
+      id: entry.id,
+      family_id: entry.owningEntityIds.familyId,
+      provider: entry.provider,
+      endpoint: entry.endpoint,
+      model: entry.model,
+      pricing_version: entry.pricingVersion,
+      units: entry.units,
+      estimated_cost_usd: entry.estimatedCostUsd,
+      actual_cost_usd: entry.actualCostUsd,
+      latency_ms: entry.latencyMs,
+      request_id: entry.requestId,
+      provider_request_id: entry.providerRequestId,
+      owning_entity_ids: entry.owningEntityIds,
+      attempt_type: entry.attemptType,
+      outcome: entry.outcome,
+      cost_category: entry.costCategory,
+      created_at: entry.createdAt.toISOString(),
+    }));
+  }
+
   /** Persist every in-memory change since hydration back to Postgres. */
   async sync(): Promise<void> {
     const upsert = async (
@@ -1552,28 +1589,7 @@ export class SupabaseDataStore extends DataStore {
       // Cost evidence is append-only. Never schedule deletions from the
       // unit-of-work diff: a provider attempt must remain auditable even when
       // its Storybook later fails or is retried.
-      () => upsert(
-        "provider_cost_ledger",
-        [...this.providerCostLedgerEntries.values()].map((entry) => ({
-          id: entry.id,
-          family_id: entry.owningEntityIds.familyId,
-          provider: entry.provider,
-          endpoint: entry.endpoint,
-          model: entry.model,
-          pricing_version: entry.pricingVersion,
-          units: entry.units,
-          estimated_cost_usd: entry.estimatedCostUsd,
-          actual_cost_usd: entry.actualCostUsd,
-          latency_ms: entry.latencyMs,
-          request_id: entry.requestId,
-          provider_request_id: entry.providerRequestId,
-          owning_entity_ids: entry.owningEntityIds,
-          attempt_type: entry.attemptType,
-          outcome: entry.outcome,
-          cost_category: entry.costCategory,
-          created_at: entry.createdAt.toISOString(),
-        }))
-      ),
+      () => upsert("provider_cost_ledger", this.providerCostLedgerRows()),
       () => upsert(
         "provider_kill_switches",
         [...this.providerKillSwitches.values()].map((killSwitch) => ({

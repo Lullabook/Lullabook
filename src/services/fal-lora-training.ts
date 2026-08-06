@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { BlobStore, FalAdapter, FalTrainingRequestRecord, FalTrainingSubmission } from "@/adapters/types";
 import type { DataStore } from "@/db/store";
+import { LiveFalSpendCapService } from "@/services/live-fal-spend-cap";
 import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
 
 export interface ModeratedTrainingImage {
@@ -290,6 +291,7 @@ export class FalLoraTrainingService {
     private readonly routing: FalRoutingDecision = DEFAULT_ROUTING,
     private readonly now: () => Date = () => new Date(),
     private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store),
+    private readonly liveFalCap: LiveFalSpendCapService = new LiveFalSpendCapService(store),
   ) {}
 
   async submit(input: FalTrainingInput): Promise<{ requestId: string; status: "queued" }> {
@@ -310,6 +312,29 @@ export class FalLoraTrainingService {
       idempotencyKey: input.idempotencyKey,
     };
     const startedAt = Date.now();
+    // Only a real (non dev-only) provider is a billable boundary and therefore
+    // must pass the $20 live-fal cap + LIVE opt-in (issue 204). A live run with
+    // no cap service is a misconfiguration — fail closed rather than spend
+    // unbudgeted.
+    const liveProvider = this.canSatisfyReleaseEvidence();
+    let reservation: { estimatedCostUsd: number; pricingVersion: string } | null = null;
+    if (liveProvider) {
+      // Reserve the exact route estimate and flush it to durable storage before
+      // the provider await, so a crash mid-call still holds the spend against
+      // the ceiling. settle() then moves the hold to succeeded (keep) or
+      // failed (release). A failed flush aborts before the boundary.
+      reservation = this.liveFalCap.reserve({
+        familyId: input.familyId,
+        personaId: input.personaId,
+        provider: "fal.ai",
+        endpoint: routing.endpoint,
+        model: routing.model,
+        units: { training_steps: routing.steps },
+        idempotencyKey: input.idempotencyKey,
+      });
+      await this.store.persistProviderSpendState();
+    }
+    // Kill switches + margin authorization gate both live and dev boundaries.
     this.costMeter.assertSpendAllowed({
       familyId: input.familyId,
       provider: "fal.ai",
@@ -319,34 +344,53 @@ export class FalLoraTrainingService {
     let result: Awaited<ReturnType<FalAdapter["submitTraining"]>>;
     try {
       result = await this.fal!.submitTraining(submission);
+    } catch (error) {
+      if (liveProvider && reservation) {
+        this.liveFalCap.settle({
+          familyId: input.familyId,
+          idempotencyKey: input.idempotencyKey,
+          outcome: "failed",
+          latencyMs: Math.max(0, Date.now() - startedAt),
+        });
+      } else {
+        this.costMeter.recordAttempt({
+          provider: "fal.ai",
+          endpoint: routing.endpoint,
+          model: routing.model,
+          pricingVersion: reservation?.pricingVersion ?? "r1-training-v1",
+          units: { training_steps: routing.steps },
+          estimatedCostUsd: reservation?.estimatedCostUsd ?? 0,
+          latencyMs: Math.max(0, Date.now() - startedAt),
+          requestId: input.idempotencyKey,
+          owningEntityIds: { familyId: input.familyId, personaId: input.personaId },
+          attemptType: "training",
+          outcome: "failed",
+        });
+      }
+      throw error;
+    }
+    if (liveProvider && reservation) {
+      this.liveFalCap.settle({
+        familyId: input.familyId,
+        idempotencyKey: input.idempotencyKey,
+        outcome: "succeeded",
+        providerRequestId: result.jobId,
+        latencyMs: Math.max(0, Date.now() - startedAt),
+      });
+    } else {
       this.costMeter.recordAttempt({
         provider: "fal.ai",
         endpoint: routing.endpoint,
         model: routing.model,
-        pricingVersion: "r1-training-v1",
+        pricingVersion: reservation?.pricingVersion ?? "r1-training-v1",
         units: { training_steps: routing.steps },
-        estimatedCostUsd: 0,
+        estimatedCostUsd: reservation?.estimatedCostUsd ?? 0,
         latencyMs: Math.max(0, Date.now() - startedAt),
         requestId: result.jobId,
         owningEntityIds: { familyId: input.familyId, personaId: input.personaId },
         attemptType: "training",
         outcome: "succeeded",
       });
-    } catch (error) {
-      this.costMeter.recordAttempt({
-        provider: "fal.ai",
-        endpoint: routing.endpoint,
-        model: routing.model,
-        pricingVersion: "r1-training-v1",
-        units: { training_steps: routing.steps },
-        estimatedCostUsd: 0,
-        latencyMs: Math.max(0, Date.now() - startedAt),
-        requestId: input.idempotencyKey,
-        owningEntityIds: { familyId: input.familyId, personaId: input.personaId },
-        attemptType: "training",
-        outcome: "failed",
-      });
-      throw error;
     }
     const timestamp = this.now();
     const record: FalTrainingRequestRecord = {

@@ -23,6 +23,11 @@
 - Gotchas unchanged: `.env.example` needed for verify; Metro binds `[::1]` on this
   machine (ipv4-metro-proxy); verify now has a 30s vitest test timeout (pg-embedded)
   and Playwright SKIPs honestly on ETIMEDOUT.
+- **Expo Go is dead for SDK 56** (mobile/ is on Expo SDK 56; the App Store Expo Go
+  build refuses the project and no newer Expo Go exists). The physical-device path
+  is `npm run ios:device` (native dev build, free Apple ID, 7-day re-signing) — see
+  `CONTEXT/local-dev/RUN-ON-IPHONE.md`. The Simulator path (`npm run ios`) is
+  unaffected.
 ## Recently tried
 
 - **Token benchmark, graph vs raw `CONTEXT/`** (2026-07-29, cl100k). Three

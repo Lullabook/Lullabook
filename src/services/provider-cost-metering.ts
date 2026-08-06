@@ -13,6 +13,7 @@ export type ProviderAttemptType =
   | "retry"
   | "repair";
 export type ProviderAttemptOutcome =
+  | "reserved"
   | "succeeded"
   | "failed"
   | "unknown"
@@ -246,6 +247,7 @@ export class ProviderCostMeteringService {
       throw new Error("Invalid provider attempt type");
     }
     if (![
+      "reserved",
       "succeeded",
       "failed",
       "unknown",
@@ -346,6 +348,39 @@ export class ProviderCostMeteringService {
     };
     this.store.providerCostLedgerEntries.set(entry.id, entry);
     return entry;
+  }
+
+  /**
+   * Move a held (`reserved`) cost-ledger row to a terminal outcome. The row is
+   * created by {@link reserve} before the payable boundary; settling to
+   * `succeeded` keeps the spend against the cap (with the provider job id) and
+   * settling to `failed`/`cancelled` releases it so failures cannot exhaust the
+   * budget. A settled row is terminal — it can never be rewritten or double
+   * settled, and an unknown key throws instead of inventing history.
+   */
+  settleAttempt(input: {
+    familyId: string;
+    requestId: string;
+    outcome: "succeeded" | "failed" | "cancelled";
+    providerRequestId?: string;
+    latencyMs?: number;
+  }): ProviderCostLedgerEntry {
+    if (!input.familyId || typeof input.requestId !== "string" || !input.requestId) {
+      throw new Error("familyId and requestId are required");
+    }
+    const held = [...this.store.providerCostLedgerEntries.values()].find(
+      (row) =>
+        row.owningEntityIds.familyId === input.familyId && row.requestId === input.requestId
+    );
+    if (!held) throw new Error("No reserved attempt to settle");
+    if (held.outcome !== "reserved") {
+      throw new Error("Attempt is not in the reserved state");
+    }
+    held.outcome = input.outcome;
+    if (input.providerRequestId) held.providerRequestId = input.providerRequestId;
+    if (input.latencyMs !== undefined) held.latencyMs = Math.max(0, input.latencyMs);
+    this.store.providerCostLedgerEntries.set(held.id, held);
+    return held;
   }
 
   recordTrainingAmortization(input: TrainingAmortizationInput): ProviderCostLedgerEntry {

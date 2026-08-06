@@ -127,6 +127,40 @@ export class SubscriptionService {
   }
 
   /**
+   * Issue 217 — prod-guarded demo Pro grant (ENT-1). Writes the SAME active
+   * Subscription shape a real RevenueCat purchase writes (status `active`,
+   * the full `plus` / Our-Whole-Family tier, no trial or expiry window), so
+   * the entitlement gate reads the grant back through the identical
+   * `isActive` → `subscriptionIsLive` → `getTier` path a paying Guardian
+   * exercises. Server-authoritative: the caller never supplies an entitlement
+   * value, and there is no `DEV_FORCE_SUBSCRIPTION` dependency — this is a
+   * real persisted subscription row, not a dev override.
+   */
+  grantDemoPro(familyId: string): Subscription {
+    const subscription: Subscription = {
+      familyId,
+      status: "active",
+      stripeCustomerId: null,
+      stripeSubscriptionId: `demo_pro_${familyId}`,
+      tier: "plus",
+      trialEndsAt: null,
+      expiresAt: null,
+      updatedAt: new Date(),
+    };
+    this.store.saveSubscription(subscription);
+    return subscription;
+  }
+
+  /**
+   * Issue 217 — revoke the demo Pro grant. Removing the subscription row
+   * returns the Household to the free tier on the next gated read, because
+   * `isActive` → `subscriptionIsLive` finds no row. No dev override.
+   */
+  revokeDemoPro(familyId: string): void {
+    this.store.subscriptions.delete(familyId);
+  }
+
+  /**
    * Issue 168 (ADR-0027) — activate the 7-day trial, writing the SAME
    * subscription shape the RevenueCat webhook writes (status `active`, Just-Us
    * tier via the legacy field, `trialEndsAt = now + 7d`). Idempotent: a call

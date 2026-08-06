@@ -270,9 +270,9 @@ export default function FamilyTab() {
           <MotionCard delay={220}>
             <Text style={st.sectionTitle}>🧪 Dev tools</Text>
             <Text style={st.emptyNote}>
-              Populate the Maya&apos;s World demo dataset for this Household (idempotent). Requires the paid backend running with DEV_DEMO_SEED=true.
+              Populate the Lullabook demo dataset for this Household (idempotent). Requires the paid backend running with DEV_DEMO_SEED=true.
             </Text>
-            <AddPill title={seeding ? "Seeding…" : "🧪 Seed Maya's World"} onPress={handleSeed} disabled={seeding} />
+            <AddPill title={seeding ? "Seeding…" : "🧪 Seed demo data"} onPress={handleSeed} disabled={seeding} />
             {seedMsg ? <Text style={st.emptyNote}>{seedMsg}</Text> : null}
           </MotionCard>
         ) : null
