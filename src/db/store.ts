@@ -445,6 +445,16 @@ export class DataStore {
     return this.subscriptions.get(familyId);
   }
 
+  /**
+   * Durable persistence seam for the pre-provider cost reservation (issue
+   * 204). The base in-memory store keeps everything in memory, so this is a
+   * no-op; SupabaseDataStore overrides it to flush reserved cost-ledger rows
+   * to durable storage AFTER {@link LiveFalSpendCapService.reserve} writes
+   * the hold but BEFORE the provider await, so a crash mid-call cannot lose
+   * the spend cap.
+   */
+  async persistProviderSpendState(): Promise<void> {}
+
   saveSubscription(sub: Subscription): void {
     this.subscriptions.set(sub.familyId, sub);
   }

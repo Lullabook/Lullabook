@@ -47,7 +47,8 @@
     "proxy:8081": "node scripts/ipv4-metro-proxy.mjs",
     "ios": "expo start --ios",
     "ios:paid": "EXPO_PUBLIC_API_URL=http://127.0.0.1:3001 EXPO_PUBLIC_DEV_EMAIL=simulator@lullabook.dev EXPO_PUBLIC_DEV_PASSWORD=SimulatorDev1! REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1 expo start --ios --host localhost",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "ios:device": "node scripts/ios-device.mjs"
   },
   "private": true
 }
