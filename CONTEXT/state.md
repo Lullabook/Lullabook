@@ -1,5 +1,18 @@
 ## Now
 
+- 2026-08-06 **planner published PRD v23 — full-likeness family demo.** Spec
+  `CONTEXT/planning/prd-v23-full-likeness-demo.md`; handoff
+  `SESSION-HANDOFF-2026-08-06-planner-prd-v23.md`. 16 tickets, local 202–217 =
+  GitHub #213–#228. **Agent Ready:** #213 (reproduce live failures), #214
+  (Vercel callback URL), #215 ($20 fal cap), #225 (branding audit), #228 (demo
+  Pro grant). Everything else Planned behind blockers. Next agent starts at
+  #213. Root cause of "the app doesn't work": the live provider path has never
+  run — no LoRA ever trained, `LIVE_PROVIDER_RUN_APPROVED` never set, no
+  callback ever received. **Guardian-owned blocker:** the photo folder
+  `lullabook family testing` + handover doc gate ticket 206 onward.
+  **fal.ai budget is $20**, fail-closed; only the Guardian raises it.
+  Prime Intellect is off the critical path (`prime train` is LLM RL, it cannot
+  train a FLUX LoRA).
 - 2026-08-04 reviewer drained Review Ready: #202 (RevenueCat lifecycle) and #205 (hard-delete/RLS evidence) both **PASS → Done**. Queue empty. Handoff `SESSION-HANDOFF-2026-08-04-reviewer-202-205.md`. PRD v22 implementation tickets on the board are Done; live/human release evidence remains BLOCKED by design.
 - #203/#205 live-evidence parts (native smoke, real provider IDs, billing
   reconciliation, real RLS/hard-delete, human sign-offs) report BLOCKED by design;

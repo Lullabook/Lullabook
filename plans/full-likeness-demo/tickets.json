@@ -1,0 +1,269 @@
+[
+ {
+  "num": 202,
+  "slug": "reproduce-live-demo-failures",
+  "title": "Reproduce and record every live demo failure with the Guardian",
+  "build": "Sit with the Guardian and run the app in the iOS Simulator. Walk the five demo flows: sign-in, Family roster, Persona creation, Story generation, and the reader. For each flow capture the FIRST failure only: the exact screen, the exact error text, the server log line, and the request that failed. Do not fix anything in this ticket. Write the findings to `CONTEXT/handoffs/DEMO-FAILURE-REPRODUCTION.md` with one section per flow, each naming a root-cause hypothesis and the ticket that will own the fix.",
+  "ac": [
+   "`CONTEXT/handoffs/DEMO-FAILURE-REPRODUCTION.md` exists and contains a `## Sign-in`, `## Roster`, `## Persona creation`, `## Story generation`, and `## Reader` section.",
+   "Each of the five sections records either an observed failure with its verbatim error text, or the literal word `WORKS` with the evidence that proves it.",
+   "Each observed failure names one owning ticket number from PRD v23.",
+   "No application source file is modified by this ticket; only the findings document is added."
+  ],
+  "ver": "npx vitest run tests/202-reproduction-doc.test.ts && npm run verify",
+  "blocked": "none",
+  "inv": "LAT-4",
+  "extra": "The Guardian participates directly. This ticket replaces a `/wayfinder` pass, so it is timeboxed: if a flow cannot be reproduced in 45 minutes, record that fact and move on."
+ },
+ {
+  "num": 203,
+  "slug": "vercel-public-callback-url",
+  "title": "Deploy to Vercel and prove a stable public callback URL",
+  "build": "Deploy the Next.js app to Vercel and configure `NEXT_PUBLIC_APP_URL` plus the fal.ai callback base URL to that origin. Provider secrets are set as Vercel server-side environment variables. Add a reachability preflight the training submission path calls before it spends money.",
+  "ac": [
+   "The training submission path calls a reachability preflight against the configured public callback base URL before any fal.ai call is made.",
+   "When the preflight fails, submission returns a failure naming the unreachable callback URL and no fal.ai request is sent and no spend is reserved (`FAIL-6`).",
+   "`FAL_API_KEY` and `ANTHROPIC_API_KEY` are absent from every client bundle and every API response body (`SEC-1`).",
+   "The callback base URL is read from configuration, never hardcoded, and a missing value fails closed at startup.",
+   "The deployed origin is recorded in `CONTEXT/planning/prd-v23-full-likeness-demo.md` under a `Deployed callback origin` heading."
+  ],
+  "ver": "npx vitest run tests/203-public-callback-url.test.ts && npm run verify",
+  "blocked": "none",
+  "inv": "FAIL-6, SEC-1",
+  "extra": "A tunnel is not acceptable here: it dies when the Mac sleeps and strands overnight training callbacks."
+ },
+ {
+  "num": 204,
+  "slug": "live-fal-spend-cap-20",
+  "title": "Enforce the $20 live fal.ai spend cap fail-closed",
+  "build": "Make the authorized `$20` live fal.ai budget a hard, enforced ceiling rather than a dashboard number. Every payable fal.ai attempt reserves its estimated cost from `PROVIDER_PRICE_TABLE` before the provider boundary. Cumulative reserved spend is persisted. Crossing the cap blocks the attempt. Crossing a `$18` warning threshold emits an observable checkpoint telling the Guardian to raise the cap.",
+  "ac": [
+   "A payable fal.ai attempt whose estimated cost would push cumulative live spend above `$20` is rejected before the provider boundary and reserves nothing (`COST-1`).",
+   "An attempt on a route absent from `PROVIDER_PRICE_TABLE` is rejected, never priced as zero (`COST-1`).",
+   "Cumulative live spend at or above `$18` emits a `spend_checkpoint` observability event naming the remaining budget.",
+   "A live fal.ai call attempted without `LIVE_PROVIDER_RUN_APPROVED` set is rejected before the provider boundary (`COST-2`).",
+   "A failed provider attempt releases its reservation, so failures cannot silently exhaust the cap.",
+   "The cap value is read from configuration, so raising it needs a deliberate change, not a code edit."
+  ],
+  "ver": "npx vitest run tests/204-live-spend-cap.test.ts && npm run verify",
+  "blocked": "none",
+  "inv": "COST-1, COST-2",
+  "extra": "This ticket exists because the budget is `$20`, not because the burn is expected to be large. Five trainings plus a few Storybooks is roughly `$10`; the cap protects against a retry loop."
+ },
+ {
+  "num": 205,
+  "slug": "live-fal-training-auth-jwks",
+  "title": "Complete live fal.ai training submission and JWKS-verified callbacks",
+  "build": "Finish the remaining live half of local issue 179: wire `PersonaService.startTraining()` to the real fal.ai queue endpoint and verify callbacks against fal.ai's live JWKS public keys. Build the training ZIP from moderated images only, persist the request identifier, and copy the returned weights into Family-owned storage.",
+  "ac": [
+   "Training submission uploads one ZIP containing only moderated images plus captions, and persists the fal.ai request id, model, and step count.",
+   "A callback is rejected before any business data is parsed unless its timestamp, body hash, and signature verify against fal.ai's live JWKS keys (`SEC-4`).",
+   "A duplicate, stale, or out-of-order callback leaves state and spend unchanged (`FAIL-5`).",
+   "A verified callback advances the Persona within 30 seconds of receipt (`LAT-6`).",
+   "`diffusers_lora_file` and the configuration artifact are copied into Family-owned storage; no provider temporary URL is stored as an owned blob key.",
+   "A fal.ai 4xx, 5xx, timeout, or malformed artifact drives the Persona to a durable `failed` state with a redacted reason and leaves no orphaned blob (`FAIL-3`)."
+  ],
+  "ver": "npx vitest run tests/205-live-fal-training-auth.test.ts && npm run verify",
+  "blocked": "203, 204",
+  "inv": "SEC-4, FAIL-3, FAIL-5, LAT-6",
+  "extra": "Live JWKS was the blocker that kept local issue 179 open. Deterministic tests fake the JWKS endpoint; the live key fetch is proven in ticket 208."
+ },
+ {
+  "num": 206,
+  "slug": "family-photo-intake",
+  "title": "Import and curate the Guardian's photo folder into training sets",
+  "build": "The Guardian supplies a folder named `lullabook family testing` on the Mac plus a handover document mapping each subfolder to a person, an age, and whether that person is a minor. Build the intake path that reads that document, validates each person's photo set against a documented quality checklist, and reports what is unusable before any upload happens.",
+  "ac": [
+   "Intake refuses to run when the handover document is missing, and names the expected path in the error.",
+   "Each person in the handover document is validated for count (10 to 20 photos), and a person outside that range is reported as unusable with the reason.",
+   "A photo containing more than one detectable face is reported as unusable, because group shots train a poor LoRA.",
+   "Every person is labelled `minor` or `adult` from the handover document, and an unlabelled person is rejected rather than defaulted.",
+   "Intake writes a machine-readable report of accepted and rejected photos per person, and uploads nothing in this ticket (`SEC-2`)."
+  ],
+  "ver": "npx vitest run tests/206-photo-intake.test.ts && npm run verify",
+  "blocked": "202",
+  "inv": "SEC-2",
+  "extra": "BLOCKED ON THE GUARDIAN. Training cannot start until the folder `lullabook family testing` and the handover document exist. This is user-owned work and it is the longest lead-time item in the plan."
+ },
+ {
+  "num": 207,
+  "slug": "five-persona-consent-roster",
+  "title": "Create the five-Persona roster behind two minor and three adult consent flows",
+  "build": "Create the real Family roster atomically: a 3-year-old daughter and a 14-year-old brother as minors, and a 43-year-old father, 38-year-old mother, and 27-year-old brother as adults. Each minor needs its own verified parental consent receipt. Each adult needs its own self-consent. Moderation runs before any durable photo persistence.",
+  "ac": [
+   "Creating either minor's Persona without that specific minor's own consent receipt is rejected, and one minor's receipt never satisfies the other (`SEC-2`).",
+   "An Adult Persona is rejected when the subject's self-consent is absent, and a Guardian attestation is never accepted in its place (`SEC-3`).",
+   "A source photo is moderated before it is durably persisted or sent to a provider, and a rejected photo leaves no owned blob (`FAIL-9`).",
+   "A rejected creation leaves no partial rows and no partial blobs; person, bonds, and Persona are created in one transaction.",
+   "The roster response returns generated avatars, never a raw uploaded source photo (`SEC-7`).",
+   "Row-level security denies a second Family read access to every row created here (`SEC-5`).",
+   "A five-Persona roster read returns p95 under 500ms with a payload under 500KB (`LAT-7`)."
+  ],
+  "ver": "npx vitest run tests/207-five-persona-consent-roster.test.ts && npm run verify",
+  "blocked": "206",
+  "inv": "SEC-2, SEC-3, SEC-5, SEC-7, FAIL-9, LAT-7",
+  "extra": "Two independent minor flows is the change from earlier estimates. Do not implement consent per Family."
+ },
+ {
+  "num": 208,
+  "slug": "five-real-lora-trainings",
+  "title": "Run five real fal.ai LoRA trainings with watchdog reconciliation",
+  "build": "Run the first real trainings this project has ever performed: one FLUX LoRA per Persona for all five roster members, against live fal.ai, under the `$20` cap. Add the watchdog that reconciles a training whose callback never arrives by polling fal.ai for terminal status.",
+  "ac": [
+   "Each of the five Personas completes or fails terminally within 25 minutes wall clock, and the app shows a bounded progress state throughout, never an unbounded spinner (`LAT-5`).",
+   "A training whose callback never arrives inside the budget is reconciled by polling fal.ai for terminal status, so training never depends on the callback alone (`FAIL-4`).",
+   "Total live fal.ai spend for the five trainings is recorded and stays under the `$20` cap, and the run halts at the `$18` checkpoint rather than continuing (`COST-1`).",
+   "A training failure produces a durable `failed` Persona with a redacted reason and a working retry control that does not double-spend (`FAIL-3`).",
+   "The live run records the fal.ai request ids and actual reconciled cost per Persona to an evidence file.",
+   "Deterministic tests cover the watchdog and the cap; the live run reports `BLOCKED` rather than `PASS` when `LIVE_PROVIDER_RUN_APPROVED` is unset (`COST-2`)."
+  ],
+  "ver": "npx vitest run tests/208-lora-training-watchdog.test.ts && npm run verify",
+  "blocked": "205, 207",
+  "inv": "LAT-5, FAIL-3, FAIL-4, COST-1, COST-2",
+  "extra": "This is the riskiest ticket in the plan: the live path has never run. Expect the first attempt to fail on credentials, ZIP shape, or callback signature. The `$20` cap and the retry budget are sized for that."
+ },
+ {
+  "num": 209,
+  "slug": "likeness-confirmation-crash-safe-resume",
+  "title": "Confirm five likenesses and resume a waiting Brief exactly once across restarts",
+  "build": "Turn owned training output into the review lifecycle for all five Personas, and fix the crash-safety gap left open in local issue 180: exactly-once Brief resume is currently in-memory, the native retrain button does not call `retrainLikeness()`, and derivative generation can orphan artifacts.",
+  "ac": [
+   "Training completion creates review samples and a generated Roster avatar, and does not by itself make a Persona Story-ready.",
+   "The native app exposes review, accept, and retrain states, and the retrain control actually invokes `retrainLikeness()`.",
+   "Acceptance is idempotent and authorized: a Guardian accepts each minor's Persona, and each adult subject's own self-consent boundary is preserved (`SEC-3`).",
+   "A Brief saved during training resumes exactly once after all five Personas are confirmed, and resumes exactly once when the process is restarted mid-wait (`FAIL-8`).",
+   "Retraining replaces prior derivatives without exposing a source photo and without orphaning an owned artifact (`SEC-7`).",
+   "No Storybook illustration spend occurs before every selected Persona's likeness is confirmed (`COST-1`)."
+  ],
+  "ver": "npx vitest run tests/209-likeness-confirmation-resume.test.ts && npm run verify",
+  "blocked": "208",
+  "inv": "FAIL-8, SEC-3, SEC-7, COST-1",
+  "extra": "Crash-safe resume means the exactly-once marker is persisted in the database, not held in process memory."
+ },
+ {
+  "num": 210,
+  "slug": "story-context-five-personas",
+  "title": "Generate the twelve-Page Story text with five-Persona Family context",
+  "build": "Feed the real five-person roster, with relationships and nicknames, into the Sonnet 4.6 Story Context so the Story text names and uses the real family. Harden the twelve-Page contract against a roster this size. Sonnet 4.6 stays the production model.",
+  "ac": [
+   "Generated Story text contains exactly twelve Pages and satisfies the existing semantic Page contract (`FAIL-2`).",
+   "The Story text references the selected Family members by their roster nicknames and relationships.",
+   "Story text generation completes p95 under 25 seconds (`LAT-2`).",
+   "Contract-violating text fails the Brief before any image spend is authorized (`FAIL-2`).",
+   "An Anthropic 5xx or rate-limit retries twice with backoff, then marks the Brief `failed` with reason `provider_unavailable`, and no image spend follows (`FAIL-7`).",
+   "The Story Context sent to the provider is bounded in size regardless of roster or Journal growth.",
+   "The production model remains `claude-sonnet-4-6` (D7)."
+  ],
+  "ver": "npx vitest run tests/210-story-context-five-personas.test.ts && npm run verify",
+  "blocked": "209",
+  "inv": "LAT-2, FAIL-2, FAIL-7",
+  "extra": "Do not swap the story-text model in this PRD. A cheap-model bake-off is filed separately for after the demo."
+ },
+ {
+  "num": 211,
+  "slug": "multi-persona-likeness-illustration",
+  "title": "Illustrate twelve Pages with real multi-Persona likeness",
+  "build": "Generate the twelve Page illustrations using the confirmed per-Persona LoRAs, including Pages containing two or more family members in one scene. This is the ADR-0005 composition gate, now with five real LoRAs. Repair only the Pages that fail, within budget.",
+  "ac": [
+   "Every Page reaches a terminal state, and the Storybook reaches `draft` or `failed` within the watchdog (`FAIL-1`).",
+   "At least one Page composes two or more confirmed Personas in a single scene, satisfying the ADR-0005 composition gate.",
+   "Full twelve-Page generation completes p95 under 90 seconds once Personas are ready (`LAT-3`).",
+   "A failed Page triggers bounded selective repair, and the repair count per Storybook is capped so a repair loop cannot exhaust the budget (`COST-1`).",
+   "A Storybook whose images partly fail still reaches a text-viewable `draft`, never an unbounded `generating` state (`FAIL-1`).",
+   "Total live fal.ai illustration spend per Storybook is recorded and priced from `PROVIDER_PRICE_TABLE` before the provider boundary (`COST-1`)."
+  ],
+  "ver": "npx vitest run tests/211-multi-persona-illustration.test.ts && npm run verify",
+  "blocked": "210",
+  "inv": "LAT-3, FAIL-1, COST-1",
+  "extra": "ADR-0005 calls multi-LoRA composition the riskiest, least-proven part of the pipeline. Budget repair attempts accordingly."
+ },
+ {
+  "num": 212,
+  "slug": "simulator-end-to-end-demo",
+  "title": "Prove the whole demo end to end in the iOS Simulator",
+  "build": "Run the complete Guardian journey in one Simulator session and record it: sign in, build the five-person roster through two minor consent flows and three adult flows, train five likenesses, confirm them, generate a twelve-Page illustrated Storybook with the real family recognisable, and read it. Record the evidence.",
+  "ac": [
+   "One recorded Simulator session shows the full journey from sign-in to a finished twelve-Page Storybook with real likeness art.",
+   "The evidence file records the five fal.ai request ids, the reconciled total live spend, and confirms it is under `$20` (`COST-1`).",
+   "Native cold start p95 is under 3 seconds and Page turn p95 is under 100 milliseconds, measured in the session (`LAT-4`).",
+   "Every invariant named in PRD v23 is listed in the evidence file with `held` or `violated`, and no invariant is left unstated.",
+   "The run reports `BLOCKED` rather than `PASS` if any live evidence is missing; a deterministic pass alone never counts as the demo.",
+   "The app is styled and framed as an iPhone app throughout, with correct safe areas (D2)."
+  ],
+  "ver": "npx vitest run tests/212-demo-evidence.test.ts && npm run verify",
+  "blocked": "211",
+  "inv": "all",
+  "extra": "This is the demo. Everything before it exists to make this session possible."
+ },
+ {
+  "num": 213,
+  "slug": "visible-design-polish",
+  "title": "Polish every visible screen to a shipped-app standard",
+  "build": "Audit and fix the visible surface of the app so it reads as a finished product, using the `better-ui`, `better-colors`, and `better-typography` skills together with the project design skills. Cover every screen the Guardian passes through, not only the demo five.",
+  "ac": [
+   "Every screen reachable in the Guardian journey is audited, and the audit list is recorded in the ticket evidence.",
+   "Colour, type scale, radius, shadow, and spacing match the project design tokens on every audited screen; each deviation is either fixed or recorded with a reason.",
+   "Text contrast meets WCAG AA on every audited screen.",
+   "Safe areas, notch, and home indicator are correct on an iPhone-shaped viewport (D2).",
+   "Loading, empty, and error states exist for the roster, Persona training, Story generation, and reader screens; no screen shows a bare unbounded spinner (`LAT-5`).",
+   "No layout shifts or clipped text at the default Dynamic Type size."
+  ],
+  "ver": "npm run lint && npx vitest run tests/213-design-tokens.test.ts && npm run verify",
+  "blocked": "202",
+  "inv": "LAT-5",
+  "extra": "The Guardian asked for full visible polish, not a five-screen pass. Run it in parallel with the training pipeline; it shares no files with it."
+ },
+ {
+  "num": 214,
+  "slug": "branding-audit-lullabook",
+  "title": "Remove every user-visible trace of the internal codename",
+  "build": "\"Maya's World\" was an internal codename for the design tokens. Audit every user-visible string, screen title, document title, and app metadata value, and make sure the product reads as Lullabook. The demo seed character named Maya is a character name and stays.",
+  "ac": [
+   "No user-visible string in the app or mobile bundle contains `Maya's World` as a brand or product name (D11).",
+   "App name, document titles, and native display name all read `Lullabook`.",
+   "A test asserts the absence of the codename in user-visible strings, so a regression fails the suite.",
+   "The demo seed character named `Maya` is preserved and is documented in the test as an intentional exception.",
+   "Internal token file names and code comments may keep the codename; only user-visible text is changed."
+  ],
+  "ver": "npx vitest run tests/214-branding-audit.test.ts && npm run verify",
+  "blocked": "none",
+  "inv": "none",
+  "extra": "Small ticket. It exists because the Guardian asked why the product appeared to have two names."
+ },
+ {
+  "num": 215,
+  "slug": "iphone-device-build",
+  "title": "Build and run the demo on the real iPhone",
+  "build": "Produce the EAS dev build and run the full demo journey on the Guardian's iPhone. This ticket starts ONLY on an explicit user signal that the Apple Developer Program membership and the EAS subscription are purchased. It must never be claimed on a date trigger.",
+  "ac": [
+   "The ticket is not started until the Guardian states that Apple Developer and EAS are purchased (D12).",
+   "An EAS dev build installs and launches on the Guardian's iPhone.",
+   "The full journey from ticket 212 is repeated on the device and recorded.",
+   "Provider secrets are absent from the device bundle (`SEC-1`).",
+   "Native cold start p95 is under 3 seconds on the device (`LAT-4`).",
+   "The runbook records the Apple approval lead time actually observed."
+  ],
+  "ver": "npx vitest run tests/215-device-build-config.test.ts && npm run verify",
+  "blocked": "212, plus an explicit user purchase signal",
+  "inv": "SEC-1, LAT-4",
+  "extra": "WARNING: Apple can take 24 to 48 hours or longer to approve a new developer account. Buy as early as the Guardian is willing, because the approval wait is outside anyone's control. Local issues 198 to 201 (GitHub #206 to #209) cover the device launch script, LAN detection, entitlement flag, and runbook, and remain separate."
+ },
+ {
+  "num": 216,
+  "slug": "prime-intellect-story-prompt-eval",
+  "title": "OPTIONAL, USER-OWNED: evaluate Prime Intellect GEPA on the Story prompt",
+  "build": "Off the critical path and outside the two-week demo. Prime Intellect v0.6.21 hosted training runs the `prime-rl` container over verifiers environments, which is reinforcement learning for language models; it cannot train a FLUX image LoRA, so it has no role in the likeness pipeline. Its genuine fit is `prime gepa` prompt optimization and `prime eval` scoring on the twelve-Page Story-text prompt. The Guardian owns this ticket and picks it up on his own cadence.",
+  "ac": [
+   "`prime login` is completed and `prime whoami` returns the account.",
+   "A golden set of Briefs plus expected twelve-Page contract outcomes exists as a verifiers environment or an eval dataset.",
+   "`prime eval` produces a baseline score for the current Sonnet 4.6 Story prompt on that golden set.",
+   "`prime gepa` runs one optimization pass and the resulting prompt is scored against the same baseline.",
+   "A findings document records the score delta, the Prime spend, and one recommendation: adopt, iterate, or drop.",
+   "Production Story routing is unchanged by this ticket."
+  ],
+  "ver": "prime whoami --plain && test -f CONTEXT/handoffs/PRIME-STORY-PROMPT-EVAL.md",
+  "blocked": "none (deliberately off the critical path)",
+  "inv": "none",
+  "extra": "DO NOT let this block or delay any PRD v23 ticket. It is filed because the Guardian asked for it to exist, not because the demo needs it. It also pairs with the deferred cheap-model bake-off."
+ }
+]
