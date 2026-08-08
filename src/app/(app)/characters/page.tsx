@@ -174,7 +174,7 @@ export default async function CharactersPage() {
                 width: 54,
                 height: 54,
                 borderRadius: "50%",
-                background: "#fff",
+                background: "#FFFDF9",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

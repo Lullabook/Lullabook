@@ -381,7 +381,7 @@ const st = StyleSheet.create({
     marginTop: 4,
     borderWidth: 4,
     borderColor: "rgba(255,255,255,0.5)",
-    shadowColor: "#000000",
+    shadowColor: "#3A2850",
     shadowOpacity: 0.22,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
