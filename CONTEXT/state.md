@@ -1,5 +1,38 @@
 ## Now
 
+- 2026-08-08 **coder max-parallel campaign (PRD v23).** Orchestrator Kimi K3 +
+  deepseek-v4-flash-0731 opencode workers in per-lane git worktrees + kimi-k3
+  gauntlet critics. Handoff: `SESSION-HANDOFF-2026-08-08-coder-prd-v23-max-parallel.md`.
+  **Debugger Ready:** #213 (repro doc — dev DB missing migration 023 is THE demo
+  blocker), #214 (callback preflight, fail-closed live path), #218 (consent roster),
+  #221 (story context), #222 (illustration), #227 (GEPA: v1 taskset can't load, DROP
+  rec). **Merged, gate green, critic pending:** #216, #217, #220-core, #223-r2, #224-r2.
+  **Open:** #219 (live trainings — `LIVE_PROVIDER_RUN_APPROVED` + real photos are
+  Guardian gates), #220-integration (native/API wiring), #226 (purchase signal),
+  #193 (doc-only, reviewer). **Guardian action needed:** apply migration
+  `023_moderation_audit_family_ownership.sql` to the hosted dev Supabase
+  (`pavdmqbwphqevaansxcs`) — all authenticated writes 500 until then.
+  Root+mobile `.env.example` are now tracked (tests depend on them).
+
+
+- 2026-08-07 **Prime Lab setup for Lullabook complete.** `prime lab doctor` all
+  PASS (workspace metadata, configs, skills, hygiene). New verifiers v1
+  taskset `environments/lullabook_story_v1` — the story-writer LLM env: model
+  produces the one-pass structured Story JSON (text/pages/scenes/styleBible,
+  mirroring `src/adapters/anthropic.ts` `GENERATED_STORY_SCHEMA` +
+  `validateGeneratedStoryContract`), scored by 9 deterministic rewards
+  (JSON parse, page/scene/styleBible contract, 1-3 sentences/page density,
+  Story Type arc, safety scan, cast usage, exact lullaby phrase) + optional
+  LLM judge (`taskset.task.enable_judge`, default off). 12 curated fictional
+  Briefs, all six Story Types; fictional cast only (privacy: no real-child
+  likeness, ADR-0007/0020/0021). Config `configs/eval/lullabook-story.toml`
+  (null chat harness, OpenRouter). Baseline: `openai/gpt-4.1-mini` ≈ 8.7/9;
+  `openai/gpt-5.4-nano` ≈ 1-2/9 (writes markdown, not the JSON contract).
+  **Gotcha:** v1 tasksets run via `uv run eval @ configs/eval/lullabook-story.toml`,
+  NOT `prime eval run` (that's the v0 bridge and fails on v1 packages). Prime
+  Inference balance is $0 — evals need `OPENROUTER_API_KEY` (or funds on the
+  Prime account). Prime still cannot train the FLUX LoRA; `prime rl` is for
+  the story-text LLM only. Env not yet pushed to Hub (visibility decision pending).
 - 2026-08-06 **planner published PRD v23 — full-likeness family demo.** Spec
   `CONTEXT/planning/prd-v23-full-likeness-demo.md`; handoff
   `SESSION-HANDOFF-2026-08-06-planner-prd-v23.md`. 16 tickets, local 202–217 =
