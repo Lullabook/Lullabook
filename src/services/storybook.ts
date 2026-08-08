@@ -49,6 +49,57 @@ import { isR1OnePlan } from "@/lib/paywall-config";
 const FREE_REROLL_BUDGET = 5;
 
 /**
+ * FAIL-7 — bounded retry for the Story-text provider call (ADR-0022 story
+ * context path only, never the illustration/page-image seam). A transient
+ * Anthropic 5xx (>=500) or rate-limit (429) retries `maxAttempts - 1` times
+ * ({@link STORY_TEXT_MAX_ATTEMPTS} total calls) with bounded exponential
+ * backoff, then throws {@link ProviderUnavailableError} so the Storybook is
+ * marked `failed` with no image spend. The retry count and backoff caps give
+ * the bounded-call structure that keeps Story-text generation p95 well under
+ * the LAT-2 budget regardless of provider latency.
+ */
+export const STORY_TEXT_MAX_ATTEMPTS = 3; // 1 initial + 2 retries
+export const STORY_TEXT_BACKOFF_BASE_MS = 250;
+export const STORY_TEXT_BACKOFF_MAX_MS = 1500;
+
+export interface StoryTextRetryConfig {
+  /** Total provider calls attempted, including the initial call. Default 3. */
+  maxAttempts?: number;
+  backoffBaseMs?: number;
+  backoffMaxMs?: number;
+  /** Injectable delay; defaults to a real bounded `setTimeout` sleep. */
+  sleeper?: (ms: number) => Promise<void>;
+  /** Decide whether an error is a retryable provider outage/rate-limit. */
+  isRetryable?: (error: unknown) => boolean;
+}
+
+const DEFAULT_SLEEPER = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** True for Anthropic 5xx or rate-limit (429) provider failures (FAIL-7). */
+export function isRetryableAnthropicError(error: unknown): boolean {
+  const candidate = error as { status?: number; statusCode?: number };
+  const status = candidate.status ?? candidate.statusCode;
+  if (typeof status === "number") {
+    // >=500 covers 5xx outages; 429 is the Anthropic rate limit.
+    if (status >= 500 || status === 429) return true;
+  }
+  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  return /rate\s*[-_]?limit|429|overloaded|temporarily unavailable|internal server|5\d\d|service unavailable/i.test(
+    message
+  );
+}
+
+/** Thrown when a retryable provider outage exhausts its retry budget (FAIL-7). */
+export class ProviderUnavailableError extends Error {
+  readonly code = "provider_unavailable" as const;
+  constructor(attempts: number) {
+    super(`Anthropic unavailable after ${attempts} attempts`);
+    this.name = "ProviderUnavailableError";
+  }
+}
+
+/**
  * Issue 125 / PRD v22 (FAIL-5a) — a Brief selecting a Persona that cannot
  * star (still training, in `review`, failed, or whose likeness was never
  * confirmed) is rejected with this typed error BEFORE any text or image
@@ -225,7 +276,8 @@ export class StorybookService {
     entitlements: EntitlementService | null = null,
     generationConfig: StorybookGenerationConfig = {},
     private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store),
-    storyCap: StoryCapService | null = null
+    storyCap: StoryCapService | null = null,
+    storyTextRetry: StoryTextRetryConfig = {}
   ) {
     this.autoContext = new AutoContextService(store);
     this.pastStorySummary = pastStorySummary ?? new PastStorySummaryService(store);
@@ -259,9 +311,49 @@ export class StorybookService {
         },
       },
     };
+    this.storyTextRetry = {
+      maxAttempts: storyTextRetry.maxAttempts ?? STORY_TEXT_MAX_ATTEMPTS,
+      backoffBaseMs: storyTextRetry.backoffBaseMs ?? STORY_TEXT_BACKOFF_BASE_MS,
+      backoffMaxMs: storyTextRetry.backoffMaxMs ?? STORY_TEXT_BACKOFF_MAX_MS,
+      sleeper: storyTextRetry.sleeper ?? DEFAULT_SLEEPER,
+      isRetryable: storyTextRetry.isRetryable ?? isRetryableAnthropicError,
+    };
   }
 
   private readonly generationConfig: Required<StorybookGenerationConfig>;
+  private readonly storyTextRetry: Required<StoryTextRetryConfig>;
+
+  /**
+   * Retry wrapper for the Story-text provider call (FAIL-7). Transient 5xx /
+   * rate-limit errors retry with bounded backoff; the wrapper rethrows the
+   * original error for non-retryable failures and throws
+   * {@link ProviderUnavailableError} when the retry budget is exhausted.
+   */
+  private retryStoryText(
+    generateStory: () => Promise<GeneratedStory>
+  ): () => Promise<GeneratedStory> {
+    const cfg = this.storyTextRetry;
+    return async () => {
+      let lastError: unknown;
+      for (let attempt = 0; attempt < cfg.maxAttempts; attempt++) {
+        try {
+          return await generateStory();
+        } catch (error) {
+          lastError = error;
+          if (!cfg.isRetryable(error)) throw error;
+          if (attempt === cfg.maxAttempts - 1) {
+            throw new ProviderUnavailableError(cfg.maxAttempts);
+          }
+          const delay = Math.min(
+            cfg.backoffBaseMs * 2 ** attempt,
+            cfg.backoffMaxMs
+          );
+          await cfg.sleeper(delay);
+        }
+      }
+      throw lastError;
+    };
+  }
 
   private authorizeAttempt(
     storybook: Storybook,
@@ -833,7 +925,12 @@ export class StorybookService {
             momentContext,
           });
 
-    await this.runGeneration(memberId, storybookId, brief, personas, generateStory, sourceManifest);
+    // FAIL-7: wrap ONLY the Story-text provider call with bounded retry (5xx /
+    // rate-limit → 2 backoff retries → ProviderUnavailableError). The
+    // illustration/page-image paths are untouched.
+    const retriedStoryText = this.retryStoryText(generateStory);
+
+    await this.runGeneration(memberId, storybookId, brief, personas, retriedStoryText, sourceManifest);
   }
 
   recoverPage(memberId: string, pageId: string): void {
