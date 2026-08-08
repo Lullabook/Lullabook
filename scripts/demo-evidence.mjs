@@ -12,14 +12,16 @@
  * a verdict section.
  *
  * Verdict semantics (the honest contract): PASS only if every required evidence
- * item is present AND valid AND no invariant is reported `violated`. Otherwise
- * BLOCKED, with each missing/invalid item named. Because no live session has
- * happened, a real run of this script reports BLOCKED by design; a deterministic
- * pass alone never counts as the demo.
+ * item is present AND valid AND no invariant is reported `violated` AND no
+ * invariant verdict is left `unproven`. Otherwise BLOCKED, with each
+ * missing/invalid item named and any unproven route gap surfaced. Because no
+ * live session has happened, a real run of this script reports BLOCKED by
+ * design; a deterministic pass alone never counts as the demo.
  *
  * Well-known evidence paths (documented; relative to origin/evidence dir root):
  *
- *   session.json          — recorded Simulator session reference + journey facts
+ *   session.json          — recorded Simulator session reference + journeyFacts
+ *                           ({ pages: 12, personas: 5, ... }) proving the demo path
  *   fal-requests.json     — array of the five fal.ai training request ids
  *   spend-ledger.json     — { capUsd, totalSpendUsd, requestIds[], reconciledAt }
  *   latency.json          — measured p95s: coldStart/pageTurn (native, LAT-4)
@@ -55,7 +57,7 @@ export const REQUIRED_EVIDENCE = [
   {
     id: "session-recording",
     file: "session.json",
-    desc: "a recorded Simulator session reference spanning sign-in to a finished 12-Page Storybook",
+    desc: "a recorded Simulator session spanning sign-in to a finished 12-Page Storybook, proving the 5-Persona Family journey facts",
   },
   {
     id: "fal-request-ids",
@@ -315,21 +317,28 @@ export function evaluateEvidence(evidence, demoProRouteSrc) {
 // ---------------------------------------------------------------------------
 // Required-item checks → PASS/BLOCKED.
 // ---------------------------------------------------------------------------
-export function evalRequiredItems(evidence, invariantVerdicts) {
+export function evalRequiredItems(evidence, invariantVerdicts, hasFiveRequests = false) {
   const checks = REQUIRED_EVIDENCE.map((req) => {
     let present = false;
     let valid = false;
     let value = null;
 
     switch (req.id) {
-      case "session-recording":
-        present = isRecord(evidence.session) && typeof evidence.session.recording === "string" && evidence.session.recording.length > 0;
-        valid = present;
-        value = evidence.session ?? null;
+      case "session-recording": {
+        const recording = evidence.session?.recording;
+        const facts = evidence.session?.journeyFacts;
+        present = isRecord(evidence.session) && typeof recording === "string" && recording.length > 0;
+        // journey facts: the session must prove a 12-Page Storybook and a
+        // 5-Persona Family journey, not merely carry a non-empty recording ref.
+        const pagesOk = isRecord(facts) && facts.pages === 12;
+        const personasOk = isRecord(facts) && facts.personas === 5;
+        valid = present && pagesOk && personasOk;
+        value = evidence.session;
         break;
+      }
       case "fal-request-ids":
         present = Array.isArray(evidence.falRequestIds);
-        valid = present && evidence.falRequestIds.length >= 5;
+        valid = present && hasFiveRequests === true;
         value = evidence.falRequestIds;
         break;
       case "spend-ledger-under-cap":
@@ -358,12 +367,13 @@ export function evalRequiredItems(evidence, invariantVerdicts) {
   });
 
   const anyViolated = invariantVerdicts.some((v) => v.verdict === VERDICT.VIOLATED);
+  const anyUnproven = invariantVerdicts.some((v) => v.verdict === VERDICT.UNPROVEN);
   const missingOrInvalid = checks.filter((c) => !c.valid);
-  const verdict = missingOrInvalid.length === 0 && !anyViolated ? "PASS" : "BLOCKED";
+  const verdict = missingOrInvalid.length === 0 && !anyViolated && !anyUnproven ? "PASS" : "BLOCKED";
   const missingItems = missingOrInvalid.map((c) =>
     c.present ? `invalid:${c.id}` : `missing:${c.id}`,
   );
-  return { checks, anyViolated, verdict, missingItems };
+  return { checks, anyViolated, anyUnproven, verdict, missingItems };
 }
 
 // ---------------------------------------------------------------------------
@@ -377,7 +387,7 @@ export function renderMarkdown(evidence, outcome) {
   lines.push(`- Generated: ${new Date().toISOString()}`);
   lines.push(`- Verdict: **${outcome.verdict}**`);
   lines.push("");
-  lines.push(`> ${outcome.verdict === "PASS" ? "PASS" : "BLOCKED"}: ${outcome.verdict === "PASS" ? "Every required live evidence item is present and valid, and no invariant is violated." : "This report is BLOCKED by design: no live Simulator session has produced the required evidence. A deterministic pass alone never counts as the demo."}`);
+  lines.push(`> ${outcome.verdict === "PASS" ? "PASS" : "BLOCKED"}: ${outcome.verdict === "PASS" ? "Every required live evidence item is present and valid, no invariant is violated, and no invariant verdict is left unproven." : "This report is BLOCKED: no live Simulator session has produced the complete evidence — or a required item is invalid, an invariant is violated, or an invariant verdict is left unproven. A deterministic pass alone never counts as the demo."}`);
   lines.push("");
 
   lines.push("## Required live evidence");
@@ -420,6 +430,13 @@ export function renderMarkdown(evidence, outcome) {
         lines.push(`- **${v.name}** — ${v.desc}`);
       }
     }
+    if (outcome.anyUnproven) {
+      lines.push("");
+      lines.push("Unproven invariant(s) — evidence still missing; never a PASS:");
+      for (const v of outcome.verdicts.filter((v) => v.verdict === "unproven")) {
+        lines.push(`- **${v.name}** — ${v.desc}`);
+      }
+    }
     lines.push("");
   }
 
@@ -431,8 +448,8 @@ export function renderMarkdown(evidence, outcome) {
 // ---------------------------------------------------------------------------
 export function runEvidenceCollector({ evidenceDir, out, write = true }) {
   const evidence = collectEvidence(evidenceDir);
-  const { verdicts } = evaluateEvidence(evidence, null);
-  const outcome = evalRequiredItems(evidence, verdicts);
+  const { verdicts, hasFiveRequests } = evaluateEvidence(evidence, null);
+  const outcome = evalRequiredItems(evidence, verdicts, hasFiveRequests);
   const markdown = renderMarkdown(evidence, { ...outcome, verdicts });
 
   if (write) {
@@ -452,6 +469,7 @@ function printFixture() {
       recording: "demo-evidence/simulator-2026-08-08.mov",
       simulatorSession: "iOS-Simulator-EFG-123",
       journey: "sign-in → 5-Persona roster → 5 LoRA trainings → 12-Page Storybook",
+      journeyFacts: { pages: 12, personas: 5, trainings: 5 },
     },
     "fal-requests.json": ["fal-rq-1", "fal-rq-2", "fal-rq-3", "fal-rq-4", "fal-rq-5"],
     "spend-ledger.json": {
@@ -502,10 +520,10 @@ function main() {
   console.log(`  wrote: ${out}`);
   console.log(`  invariants: ${held} held, ${violated} violated, ${unproven} unproven`);
   if (outcome.verdict === "PASS") {
-    console.log(`  VERDICT: PASS — every required live evidence item present and valid; no invariant violated.`);
+    console.log(`  VERDICT: PASS — every required live evidence item present and valid; no invariant violated or unproven.`);
     process.exit(0);
   }
-  console.log(`  VERDICT: BLOCKED — ${outcome.missingItems.length} missing/invalid item(s) or a violated invariant; a deterministic pass never counts as the demo.`);
+  console.log(`  VERDICT: BLOCKED — ${outcome.missingItems.length} missing/invalid item(s), ${violated} violated, or ${unproven} unproven; a deterministic pass never counts as the demo.`);
   for (const m of outcome.missingItems) console.log(`    - ${m}`);
   process.exit(1);
 }
