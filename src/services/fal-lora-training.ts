@@ -426,6 +426,9 @@ export class FalLoraTrainingService {
       idempotencyKey: input.idempotencyKey,
       status: "queued",
       inputZipKey: zipKey,
+      // Ticket 208 / FAIL-4: retain fal's queue status URL so reconciliation
+      // never depends on the callback arriving.
+      ...(result.statusUrl ? { statusUrl: result.statusUrl } : {}),
       createdAt: timestamp,
       updatedAt: timestamp,
     };

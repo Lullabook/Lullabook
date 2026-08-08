@@ -19,6 +19,26 @@ export interface FalTrainingCallbackCompletion {
   reviewSampleKeys?: string[];
 }
 
+/**
+ * Ticket 208 / FAIL-4 — how the reconciliation watchdog FINDS trainings whose
+ * callback never arrived: in-flight (`queued`/`running`) requests with no
+ * lifecycle progress since `idleSince`. This is the production seam; the
+ * DataStore implementation backs the deterministic tests.
+ */
+export interface FalTrainingInFlightQuery {
+  /** Requests whose `updatedAt` is at or before this instant are stale. */
+  idleSince: Date;
+  /**
+   * LAT-5 backstop: requests CREATED at or before this instant are listed even
+   * when they are not idle. A watchdog heartbeat refreshes `updatedAt`, so an
+   * idle-only listing could push a training's terminal transition past its
+   * wall-clock budget; this arm makes the bound hold.
+   */
+  deadlineBefore: Date;
+  /** Bound on one reconciliation pass (default 25). */
+  limit?: number;
+}
+
 export interface FalTrainingLifecycleRepository {
   claimCallback(
     requestId: string,
@@ -27,6 +47,18 @@ export interface FalTrainingLifecycleRepository {
   ): Promise<FalTrainingCallbackClaim>;
   completeCallback(completion: FalTrainingCallbackCompletion): Promise<void>;
   releaseCallback(requestId: string, fingerprint: string): Promise<void>;
+  /** Stale in-flight training requests, oldest first (ticket 208 / FAIL-4). */
+  listInFlight(query: FalTrainingInFlightQuery): Promise<FalTrainingRequestRecord[]>;
+}
+
+const DEFAULT_IN_FLIGHT_LIMIT = 25;
+
+function boundedLimit(limit: number | undefined): number {
+  if (limit === undefined) return DEFAULT_IN_FLIGHT_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error("Fal training in-flight limit must be an integer between 1 and 100");
+  }
+  return limit;
 }
 
 export interface SqlQueryResult<Row extends Record<string, unknown>> {
@@ -53,6 +85,7 @@ type ClaimRow = {
   lora_weight_key: string | null;
   configuration_key: string | null;
   error: string | null;
+  status_url?: string | null;
   created_at: string | Date;
   updated_at: string | Date;
 };
@@ -93,6 +126,14 @@ export class PostgresFalTrainingLifecycleRepository implements FalTrainingLifecy
       [requestId, fingerprint],
     );
   }
+
+  async listInFlight(query: FalTrainingInFlightQuery): Promise<FalTrainingRequestRecord[]> {
+    const result = await this.query<ClaimRow>(
+      "select * from app_list_stale_fal_training_requests($1::timestamptz, $2::timestamptz, $3::integer)",
+      [query.idleSince.toISOString(), query.deadlineBefore.toISOString(), boundedLimit(query.limit)],
+    );
+    return result.rows.map(recordFromRow);
+  }
 }
 
 export class SupabaseFalTrainingLifecycleRepository implements FalTrainingLifecycleRepository {
@@ -132,6 +173,16 @@ export class SupabaseFalTrainingLifecycleRepository implements FalTrainingLifecy
       p_fingerprint: fingerprint,
     });
     if (error) throw new Error(`Release fal callback failed: ${error.message}`);
+  }
+
+  async listInFlight(query: FalTrainingInFlightQuery): Promise<FalTrainingRequestRecord[]> {
+    const { data, error } = await this.client.rpc("app_list_stale_fal_training_requests", {
+      p_idle_since: query.idleSince.toISOString(),
+      p_deadline_before: query.deadlineBefore.toISOString(),
+      p_limit: boundedLimit(query.limit),
+    });
+    if (error) throw new Error(`List in-flight fal trainings failed: ${error.message}`);
+    return ((data ?? []) as ClaimRow[]).map(recordFromRow);
   }
 }
 
@@ -209,6 +260,28 @@ export class DataStoreFalTrainingLifecycleRepository implements FalTrainingLifec
       this.store.falWebhookReceipts.delete(fingerprint);
     }
   }
+
+  async listInFlight(query: FalTrainingInFlightQuery): Promise<FalTrainingRequestRecord[]> {
+    const limit = boundedLimit(query.limit);
+    const pastDeadline = (request: FalTrainingRequestRecord): boolean =>
+      request.createdAt.getTime() <= query.deadlineBefore.getTime();
+    return [...this.store.falTrainingRequests.values()]
+      .filter(
+        (request) =>
+          (request.status === "queued" || request.status === "running") &&
+          (request.updatedAt.getTime() <= query.idleSince.getTime() || pastDeadline(request)),
+      )
+      // Past-deadline requests first: a bounded pass must never drop the one
+      // request that is about to breach LAT-5 in favour of a merely idle one.
+      .sort(
+        (left, right) =>
+          Number(pastDeadline(right)) - Number(pastDeadline(left)) ||
+          left.updatedAt.getTime() - right.updatedAt.getTime() ||
+          left.requestId.localeCompare(right.requestId),
+      )
+      .slice(0, limit)
+      .map((request) => ({ ...request }));
+  }
 }
 
 export function asFalTrainingLifecycleRepository(
@@ -238,8 +311,13 @@ function claimFromRow(row: ClaimRow | undefined): FalTrainingCallbackClaim {
       loraWeightKey: row.lora_weight_key ?? undefined,
       configurationKey: row.configuration_key ?? undefined,
       error: row.error ?? undefined,
+      statusUrl: row.status_url ?? undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     },
   };
+}
+
+function recordFromRow(row: ClaimRow): FalTrainingRequestRecord {
+  return claimFromRow({ ...row, claimed: false, duplicate: false }).request;
 }

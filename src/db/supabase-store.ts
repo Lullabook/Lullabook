@@ -646,6 +646,7 @@ export class SupabaseDataStore extends DataStore {
         loraWeightKey: r.lora_weight_key ?? undefined,
         configurationKey: r.configuration_key ?? undefined,
         error: r.error ?? undefined,
+        statusUrl: r.status_url ?? undefined,
         createdAt: new Date(r.created_at),
         updatedAt: new Date(r.updated_at),
       };
@@ -1331,6 +1332,9 @@ export class SupabaseDataStore extends DataStore {
       loraWeightKey: r.lora_weight_key ?? undefined,
       configurationKey: r.configuration_key ?? undefined,
       error: r.error ?? undefined,
+      // Ticket 208 / FAIL-4: the retained fal queue status URL travels with the
+      // record so a watchdog in any process can poll the exact queue entry.
+      statusUrl: r.status_url ?? undefined,
       createdAt: new Date(r.created_at),
       updatedAt: new Date(r.updated_at),
     };
@@ -1457,6 +1461,7 @@ export class SupabaseDataStore extends DataStore {
           lora_weight_key: request.loraWeightKey ?? null,
           configuration_key: request.configurationKey ?? null,
           error: request.error ?? null,
+          status_url: request.statusUrl ?? null,
           created_at: request.createdAt.toISOString(),
           updated_at: request.updatedAt.toISOString(),
         })),

@@ -74,6 +74,13 @@ export interface FalTrainingSubmission {
 export interface FalTrainResult {
   jobId: string;
   status: "queued";
+  /**
+   * Ticket 208 / FAIL-4 — the fal queue `status_url` returned by the submit
+   * response. Retaining it lets the reconciliation watchdog poll the exact
+   * queue entry fal created instead of guessing a URL, so a training whose
+   * callback never arrives is still driven to a terminal state.
+   */
+  statusUrl?: string;
 }
 
 export interface FalTrainingFile {
@@ -98,8 +105,32 @@ export interface FalTrainingRequestRecord {
   loraWeightKey?: string;
   configurationKey?: string;
   error?: string;
+  /** Retained fal queue status URL (ticket 208 / FAIL-4 reconciliation seam). */
+  statusUrl?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/** Ticket 208 — what the watchdog asks fal about one in-flight training. */
+export interface FalTrainingStatusQuery {
+  requestId: string;
+  endpoint: string;
+  /** Retained submit-time `status_url`; the adapter derives one when absent. */
+  statusUrl?: string;
+}
+
+/**
+ * Normalised fal queue status, shaped exactly like the webhook body so the
+ * watchdog drives the SAME terminal transition as a signed callback.
+ */
+export interface FalTrainingStatusResult {
+  requestId: string;
+  status: "OK" | "ERROR" | "IN_PROGRESS";
+  payload?: {
+    diffusers_lora_file?: FalTrainingFile;
+    config_file?: FalTrainingFile;
+  };
+  error?: string;
 }
 
 export interface FalWebhookReceipt {
@@ -162,6 +193,13 @@ export interface FalPageRepairRequest extends FalPageImageRequest {
 export interface FalAdapter {
   startTraining(photos: Buffer[]): Promise<FalTrainResult>;
   submitTraining(input: FalTrainingSubmission): Promise<FalTrainResult>;
+  /**
+   * Ticket 208 / FAIL-4 — read one training's terminal status straight from
+   * fal's queue. This is the reconciliation seam: it makes training independent
+   * of the callback arriving. Optional so dev-only fakes need not implement it;
+   * the watchdog reports an unreconcilable request instead of guessing.
+   */
+  fetchTrainingStatus?(query: FalTrainingStatusQuery): Promise<FalTrainingStatusResult>;
   /** Development adapters are never valid release evidence. */
   readonly isDevOnly?: boolean;
   generateImage(

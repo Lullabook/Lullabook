@@ -5,6 +5,8 @@ import type {
   FalPageImageRequest,
   FalPageRepairRequest,
   FalTrainResult,
+  FalTrainingStatusQuery,
+  FalTrainingStatusResult,
   FalTrainingSubmission,
 } from "@/adapters/types";
 import { optionalEnv, requireEnv } from "@/adapters/env";
@@ -47,6 +49,25 @@ function authHeaders(): Record<string, string> {
   };
 }
 
+/**
+ * A fal queue URL we are willing to fetch. Status/response URLs can arrive from
+ * persisted provider data, so the origin is pinned to fal's queue host before
+ * any request leaves the process.
+ */
+function trustedFalQueueUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("fal queue URL is invalid");
+  }
+  const trustedHost = url.hostname === "queue.fal.run" || url.hostname.endsWith(".fal.run");
+  if (url.protocol !== "https:" || !trustedHost || url.username || url.password) {
+    throw new Error("fal queue URL is not a trusted fal origin");
+  }
+  return url.toString();
+}
+
 async function falFetch(url: string, init?: RequestInit): Promise<Response> {
   const res = await fetch(url, init);
   if (!res.ok) {
@@ -81,7 +102,79 @@ export class RealFalAdapter implements FalAdapter {
       }),
     });
     const queued = (await res.json()) as FalQueueSubmitResponse;
-    return { jobId: queued.request_id, status: "queued" };
+    // Ticket 208 / FAIL-4: retain the queue status URL so reconciliation can
+    // poll the exact entry fal created rather than depend on the callback.
+    return {
+      jobId: queued.request_id,
+      status: "queued",
+      ...(queued.status_url ? { statusUrl: queued.status_url } : {}),
+    };
+  }
+
+  /**
+   * Ticket 208 / FAIL-4 — GET the fal queue status for one training request and
+   * normalise it into the same shape a webhook body carries. A `COMPLETED`
+   * entry is resolved through its response URL so the caller receives the real
+   * artifacts; a failed/cancelled entry becomes a terminal ERROR. Only fal's
+   * queue origin is ever contacted — a persisted URL pointing anywhere else is
+   * rejected rather than fetched (no SSRF through a stored provider value).
+   */
+  async fetchTrainingStatus(query: FalTrainingStatusQuery): Promise<FalTrainingStatusResult> {
+    const statusUrl = trustedFalQueueUrl(
+      query.statusUrl ?? `${FAL_QUEUE_BASE}/${query.endpoint}/requests/${query.requestId}/status`,
+    );
+    const headers = { Authorization: `Key ${requireEnv("FAL_API_KEY")}` };
+    const statusRes = await falFetch(statusUrl, { headers });
+    const status = (await statusRes.json()) as {
+      status?: string;
+      response_url?: string;
+      error?: string;
+      detail?: string;
+    };
+    const state = (status.status ?? "").toUpperCase();
+    if (state === "IN_QUEUE" || state === "IN_PROGRESS") {
+      return { requestId: query.requestId, status: "IN_PROGRESS" };
+    }
+    if (state === "FAILED" || state === "CANCELLED" || state === "ERROR") {
+      return {
+        requestId: query.requestId,
+        status: "ERROR",
+        error: status.error ?? status.detail ?? `fal training ${state.toLowerCase()}`,
+      };
+    }
+    if (state !== "COMPLETED" && state !== "OK") {
+      return {
+        requestId: query.requestId,
+        status: "ERROR",
+        error: `fal queue reported an unknown status (${state || "missing"})`,
+      };
+    }
+    const responseUrl = trustedFalQueueUrl(
+      status.response_url ?? `${FAL_QUEUE_BASE}/${query.endpoint}/requests/${query.requestId}`,
+    );
+    const resultRes = await falFetch(responseUrl, { headers });
+    const payload = (await resultRes.json()) as FalTrainingStatusResult["payload"] & {
+      error?: string;
+      detail?: string;
+    };
+    if (!payload?.diffusers_lora_file?.url || !payload?.config_file?.url) {
+      return {
+        requestId: query.requestId,
+        status: "ERROR",
+        error:
+          payload?.error ??
+          payload?.detail ??
+          "fal training completed without LoRA/configuration artifacts",
+      };
+    }
+    return {
+      requestId: query.requestId,
+      status: "OK",
+      payload: {
+        diffusers_lora_file: payload.diffusers_lora_file,
+        config_file: payload.config_file,
+      },
+    };
   }
 
   async startTraining(photos: Buffer[]): Promise<FalTrainResult> {

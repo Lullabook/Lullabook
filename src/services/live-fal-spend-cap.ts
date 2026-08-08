@@ -66,8 +66,11 @@ export class LiveFalSpendCapBlockedError extends Error {
   }
 }
 
-const DEFAULT_CAP_USD = 20;
-const DEFAULT_WARNING_AT_USD = 18;
+/** Configuration defaults, exported so reporting reads ONE source of truth. */
+export const LIVE_FAL_DEFAULT_CAP_USD = 20;
+export const LIVE_FAL_DEFAULT_WARNING_AT_USD = 18;
+const DEFAULT_CAP_USD = LIVE_FAL_DEFAULT_CAP_USD;
+const DEFAULT_WARNING_AT_USD = LIVE_FAL_DEFAULT_WARNING_AT_USD;
 
 /** Default observability sink: a structured stderr line, safe to log verbatim. */
 function defaultCheckpointSink(checkpoint: LiveFalSpendCheckpoint): void {
