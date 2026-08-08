@@ -1,0 +1,20 @@
+# Lullabook story-writer baseline vs PRODUCTION Story model (Sonnet 4.6).
+# Ticket #216 (#227 GitHub) — Prime Intellect GEPA on the Story prompt.
+# Mirrors lullabook-story.toml but pins the production model + full golden set (12).
+# Run with: uv run eval @ configs/eval/lullabook-story-sonnet.toml
+
+taskset = { id = "lullabook-story-v1", num_examples = 12 }
+harness = { id = "null" }
+
+model = "anthropic/claude-sonnet-4-6"
+num_tasks = 12
+num_rollouts = 1
+max_output_tokens = 3000
+push = false
+
+[client]
+base_url = "https://openrouter.ai/api/v1"
+api_key_var = "OPENROUTER_API_KEY"
+
+[sampling]
+temperature = 0.4
