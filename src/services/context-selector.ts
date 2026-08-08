@@ -26,6 +26,16 @@ import { AutoContextService } from "@/services/auto-context";
  */
 export const STORY_CONTEXT_TOKEN_BUDGET = 2000;
 
+/**
+ * Hard character ceiling on the assembled context block (ADR-0022). The soft
+ * token budget above is a target enforced over droppable inputs (ordinary
+ * Moments, vision-text, Firsts) while cast/age/summary/significant Moments are
+ * protected. This hard cap is the ultimate fail-safe so the block handed to the
+ * provider is BOUNDED regardless of roster or Journal growth — even when the
+ * protected sources alone exceed the soft budget. Approx 3000 tokens.
+ */
+export const STORY_CONTEXT_HARD_MAX_CHARS = 12_000;
+
 /** A member of the cast assembled for a Baby's Story. */
 export interface CastMember {
   personaId: string;
@@ -312,6 +322,13 @@ export class StoryContextSelector implements ContextSelector {
         break; // Only protected content remains; cannot trim further.
       }
       block = build();
+    }
+
+    // Hard safety bound (ADR-0022): regardless of roster or Journal growth —
+    // including protected content that the soft budget cannot trim — never
+    // emit a provider-bound block that exceeds the hard character ceiling.
+    if (block.length > STORY_CONTEXT_HARD_MAX_CHARS) {
+      block = block.slice(0, STORY_CONTEXT_HARD_MAX_CHARS);
     }
 
     return block;
