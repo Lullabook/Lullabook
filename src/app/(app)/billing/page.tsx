@@ -36,7 +36,7 @@ export default async function BillingPage({
       </div>
 
       {status === "success" && (
-        <div className="v2-notice" style={{ background: "#EDE7FE", borderColor: "#d6cbf6", color: "#6A55C9" }}>
+        <div className="v2-notice" style={{ background: "#EDE7FE", borderColor: "#C9BDE8", color: "#6A55C9" }}>
           Welcome aboard! Your subscription is activating — this page updates as
           soon as Stripe confirms the payment.
         </div>

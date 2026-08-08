@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import { PrimaryButton, Screen } from "@/components/maya-ui";
+import { PrimaryButton, Screen, Skeleton } from "@/components/maya-ui";
+import { C } from "@/constants/theme";
 import { acceptLikeness, fetchLikenessSamples, likenessSampleUrl, retrainLikeness } from "@/lib/api";
 import { appendNativeFile } from "@/lib/form-data";
 
@@ -15,12 +16,14 @@ export default function LikenessReviewScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const personaId = Array.isArray(id) ? id[0] : id;
   const [samples, setSamples] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   const [state, setState] = useState<"review" | "accepting" | "accepted" | "retry" | "retraining">("review");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!personaId) return;
     setError(null);
+    setLoading(true);
     try {
       const response = await fetchLikenessSamples(personaId);
       setSamples(response.samples);
@@ -28,6 +31,8 @@ export default function LikenessReviewScreen() {
     } catch (cause) {
       setState("retry");
       setError(cause instanceof Error ? cause.message : "Samples are not available yet");
+    } finally {
+      setLoading(false);
     }
   }, [personaId]);
 
@@ -99,14 +104,25 @@ export default function LikenessReviewScreen() {
           Review these generated samples before a Storybook uses the trained likeness.
         </Text>
         <View style={styles.samples}>
-          {samples.map((sample) => (
-            <Image
-              key={sample}
-              source={{ uri: likenessSampleUrl(sample) }}
-              style={styles.sample}
-              accessibilityLabel="Likeness review sample"
-            />
-          ))}
+          {loading ? (
+            <>
+              <View style={styles.sample}>
+                <Skeleton style={styles.sampleFill} />
+              </View>
+              <View style={styles.sample}>
+                <Skeleton style={styles.sampleFill} />
+              </View>
+            </>
+          ) : (
+            samples.map((sample) => (
+              <Image
+                key={sample}
+                source={{ uri: likenessSampleUrl(sample) }}
+                style={styles.sample}
+                accessibilityLabel="Likeness review sample"
+              />
+            ))
+          )}
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {state === "accepted" ? (
@@ -136,6 +152,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: "700" },
   body: { fontSize: 16, lineHeight: 23 },
   samples: { gap: 12 },
-  sample: { width: "100%", height: 220, borderRadius: 18, backgroundColor: "#eee" },
-  error: { color: "#b42318" },
+  sample: { width: "100%", height: 220, borderRadius: 18, backgroundColor: C.borderSoft, overflow: "hidden" },
+  sampleFill: { width: "100%", height: "100%", borderRadius: 0 },
+  error: { color: C.danger },
 });
