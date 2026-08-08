@@ -183,7 +183,10 @@ function bootstrapSubmission(opts: { failSubmit?: boolean } = {}) {
     () => new Date("2026-08-06T00:00:00Z"),
     undefined,
     cap,
-    new CallbackReachabilityPreflight({ callbackBaseUrl: ORIGIN }),
+    new CallbackReachabilityPreflight({
+        callbackBaseUrl: ORIGIN,
+        fetchImpl: async () => new Response("ok", { status: 200 }),
+      }),
   );
   return { store, blobs, fal, calls, cap, train };
 }
