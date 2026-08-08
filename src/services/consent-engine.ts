@@ -1,4 +1,7 @@
-import type { JurisdictionConfig, MemberRole } from "@/domain/types";
+import { v4 as uuid } from "uuid";
+import type { DataStore } from "@/db/store";
+import { RlsViolationError } from "@/db/store";
+import type { ConsentReceipt, JurisdictionConfig, MemberRole } from "@/domain/types";
 import { isR1UsOnly, R1_US_MARKETS, isMarketEnabled } from "@/lib/r1-config";
 
 export type ConsentAction =
@@ -214,5 +217,110 @@ export class ConsentEngine {
     const config = JURISDICTIONS[jurisdiction];
     if (!config) throw new Error(`Unknown jurisdiction: ${jurisdiction}`);
     return config.residencyRegion;
+  }
+}
+
+/**
+ * Roster-scoped consent rules (ticket 207). Built on the jurisdiction-driven
+ * child-age threshold and the stored receipt graph:
+ *
+ *  - SEC-8: whether a person is a minor is read from the jurisdiction's
+ *    configured child-age threshold — never a hardcoded age. Routing a 14yo to
+ *    verified parental consent at threshold 18 and to self-consent at 13 is a
+ *    config change, not a code change.
+ *  - SEC-2: a minor's creation requires that specific minor's OWN verified
+ *    consent receipt; one minor's receipt never satisfies another (receipts
+ *    are bound per subject).
+ *  - SEC-9: a minor's consent receipt records the consenting adult's identity
+ *    (memberId), and that adult must be the account-holding parent (Guardian).
+ *  - SEC-3: an Adult Persona requires the subject's self-consent; a Guardian
+ *    attestation is never accepted in its place.
+ */
+export class RosterConsentEngine {
+  /** subjectId (minor persona/person) -> that minor's own verified receipt. */
+  private readonly subjectReceipts = new Map<string, ConsentReceipt>();
+
+  constructor(private readonly store: DataStore) {}
+
+  childAgeThreshold(jurisdiction: string): number {
+    return ConsentEngine.getJurisdiction(jurisdiction)?.childAgeThreshold ?? 18;
+  }
+
+  /** SEC-8: a person below the configured threshold is a minor; config governs. */
+  isChild(age: number, jurisdiction: string): boolean {
+    return age < this.childAgeThreshold(jurisdiction);
+  }
+
+  /**
+   * Register verified parental consent FOR ONE SPECIFIC minor subject. The
+   * consenting adult must be the account-holding parent (Guardian) of the
+   * Family — no other adult may give a minor's consent (SEC-9). Returns the
+   * durable receipt, which records the consenting adult's identity in
+   * `memberId`.
+   */
+  registerParentalConsent(input: {
+    subjectId: string;
+    memberId: string;
+    familyId: string;
+    jurisdiction: string;
+    method?: string;
+  }): ConsentReceipt {
+    const config = ConsentEngine.getJurisdiction(input.jurisdiction);
+    if (!config) throw new Error(`Unknown jurisdiction: ${input.jurisdiction}`);
+    const member = this.store.members.get(input.memberId);
+    if (!member || member.familyId !== input.familyId) {
+      throw new RlsViolationError("Consenting adult is not a member of this Family");
+    }
+    if (member.role !== "guardian") {
+      throw new Error("Only the account-holding parent (Guardian) may give verified parental consent");
+    }
+    const receipt: ConsentReceipt = {
+      id: uuid(),
+      familyId: input.familyId,
+      memberId: input.memberId,
+      jurisdiction: input.jurisdiction,
+      noticeVersion: config.noticeVersion,
+      method: input.method ?? config.consentMethod,
+      status: "verified",
+      consentedAt: new Date(),
+    };
+    this.store.saveConsentReceipt(receipt);
+    this.subjectReceipts.set(input.subjectId, receipt);
+    return receipt;
+  }
+
+  /**
+   * SEC-2: require THIS minor's own verified receipt. Receipts are keyed per
+   * subject, so one minor's receipt can never satisfy another — a caller that
+   * does not hold the specific subject's receipt is rejected.
+   */
+  requireMinorConsent(input: { subjectId: string; familyId: string }): ConsentReceipt {
+    const receipt = this.subjectReceipts.get(input.subjectId);
+    if (!receipt) {
+      throw new Error(`Verified parental consent is required for this child before their Persona is created`);
+    }
+    if (receipt.familyId !== input.familyId) {
+      throw new RlsViolationError("Consent receipt belongs to another Family");
+    }
+    if ((receipt.status ?? "verified") !== "verified") {
+      throw new Error("Verified parental consent is not in a verified state");
+    }
+    return receipt;
+  }
+
+  /**
+   * SEC-3: an Adult Persona requires the subject's own explicit self-consent.
+   * A Guardian attestation is deliberately never accepted as a substitute.
+   */
+  requireAdultSelfConsent(input: {
+    selfConsent: boolean;
+    guardianAttestation?: boolean;
+  }): void {
+    if (input.guardianAttestation === true) {
+      throw new Error("A Guardian attestation is never accepted in place of the Adult's own self-consent");
+    }
+    if (input.selfConsent !== true) {
+      throw new Error("An Adult Persona requires the subject's own self-consent");
+    }
   }
 }
