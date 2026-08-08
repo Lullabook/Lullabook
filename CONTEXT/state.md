@@ -1,5 +1,34 @@
 ## Now
 
+- 2026-08-08 **adversarial-loop campaign (PRD v23) — #219 and #224 → Debugger Ready.**
+  User-specified trio: Kimi K3 (OpenRouter), Grok 4.5 (OpenRouter), Opus 5 (Anthropic),
+  run as /adversarial-loop build (pipeline mode, 2 rounds per ticket, isolated git
+  worktrees). Handoff: `SESSION-HANDOFF-2026-08-08-adversarial-219-224.md`.
+  **#219 (watchdog) — Debugger Ready** at `d97e353`: `FalTrainingWatchdogService`
+  (FAIL-4 reconcile through the SAME claim→complete machinery as the signed webhook),
+  content-derived restart-safe claim fingerprints (round-2 caught + fixed a
+  process-local-counter defect that strands trainings in serverless), LAT-5
+  enforced in the find-seam SQL itself (deadline arm + past-deadline-first order +
+  bounded LIMIT), origin-pinned `fetchTrainingStatus` (round-2 SSRF/FAL_API_KEY
+  leak fixes), migration 028 (`status_url` + `app_list_stale_fal_training_requests`
+  SECURITY DEFINER RPC, embedded-PG proven), authorized `GET /api/personas/[id]`
+  trigger + bounded `trainingProgress`, `npm run report:live-lora-training` →
+  BLOCKED exit 2 without `LIVE_PROVIDER_RUN_APPROVED` (READY exits 3 — never a
+  false PASS). Gate: 28/28 named + PG integration + full `npm run verify` PASS.
+  **#224 (visible polish) — Debugger Ready** at `7ce857b`: FS-derived 92-file audit
+  (completeness + no-phantom both directions), **four real WCAG AA failures fixed**
+  (gold 3.98→4.65, green 4.34→4.64, rose 3.46→4.72, cozy 3.91→4.72) + design canon
+  synced (REFERENCE.md + design html), plum-shadow guard reaching globals.css
+  (both-direction pins), radius/spacing/safe-area/LAT-5/Dynamic-Type guards.
+  Gate: 13/13 + full verify PASS. **Still blocked by design:** #226 (iPhone —
+  needs the Apple Developer + EAS purchase signal, D12, never claim on a date),
+  #193 (doc-only PRD v22 parent index — for /reviewer or human close). **Guardian
+  action still needed:** apply migration 023 to hosted dev Supabase
+  (`pavdmqbwphqevaansxcs`); #219's live five-training run needs
+  `LIVE_PROVIDER_RUN_APPROVED=true` + real photos + deployed callback origin.
+  PRD v23 board: #213–#218, #220–#225, #227–#228 all Debugger Ready; #219/#224
+  now too; #226 Planned (blocked); #193 Agent Ready (doc-only).
+
 - 2026-08-08 **coder max-parallel campaign (PRD v23).** Orchestrator Kimi K3 +
   deepseek-v4-flash-0731 opencode workers in per-lane git worktrees + kimi-k3
   gauntlet critics. Handoff: `SESSION-HANDOFF-2026-08-08-coder-prd-v23-max-parallel.md`.
