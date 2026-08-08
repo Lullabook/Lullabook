@@ -240,7 +240,7 @@ export function DailyLifeClient({
               >
                 <p style={{ margin: "0 0 8px", fontWeight: 800, fontSize: "0.78rem", color: "#9A8A78" }}>{day.label}</p>
                 {day.moments.length === 0 ? (
-                  <p style={{ margin: 0, fontSize: "0.78rem", color: "#C4B8A8" }}>—</p>
+                  <p style={{ margin: 0, fontSize: "0.78rem", color: "#9A8A78" }}>—</p>
                 ) : (
                   day.moments.map((m) => (
                     <p
@@ -320,13 +320,13 @@ export function DailyLifeClient({
                 type="button"
                 onClick={addMoment}
                 disabled={!draft.trim() || pending}
-                style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 20px", borderRadius: 999, border: "none", background: draft.trim() && !pending ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#E7DCCB", color: draft.trim() && !pending ? "#fff" : "#9A8A78", fontWeight: 800, fontSize: "0.92rem", cursor: draft.trim() && !pending ? "pointer" : "not-allowed", boxShadow: draft.trim() && !pending ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
+                style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 8, padding: "11px 20px", borderRadius: 999, border: "none", background: draft.trim() && !pending ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#ECE1CE", color: draft.trim() && !pending ? "#fff" : "#9A8A78", fontWeight: 800, fontSize: "0.92rem", cursor: draft.trim() && !pending ? "pointer" : "not-allowed", boxShadow: draft.trim() && !pending ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
               >
                 ＋ Add moment
               </button>
             </div>
             {error ? (
-              <p role="alert" style={{ margin: "12px 0 0", color: "#B5618A", fontSize: "0.88rem", fontWeight: 700 }}>
+              <p role="alert" style={{ margin: "12px 0 0", color: "#B23A48", fontSize: "0.88rem", fontWeight: 700 }}>
                 {error}
               </p>
             ) : null}
@@ -402,7 +402,7 @@ export function DailyLifeClient({
                         next[i] = { ...next[i], time: e.target.value };
                         setRoutineDraft(next);
                       }}
-                      style={{ fontSize: "0.82rem", padding: "8px", borderRadius: 10, border: "1px solid #ECE1CE", background: "#FBF4E7", color: "#2E2438" }}
+                      style={{ fontSize: "0.82rem", padding: "8px", borderRadius: 12, border: "1px solid #ECE1CE", background: "#FBF4E7", color: "#2E2438" }}
                     />
                     <input
                       value={r.icon}
@@ -413,7 +413,7 @@ export function DailyLifeClient({
                         next[i] = { ...next[i], icon: e.target.value };
                         setRoutineDraft(next);
                       }}
-                      style={{ width: 40, textAlign: "center", fontSize: "1rem", padding: "6px 0", borderRadius: 10, border: "1px solid #ECE1CE", background: "#FBF4E7" }}
+                      style={{ width: 40, textAlign: "center", fontSize: "1rem", padding: "6px 0", borderRadius: 12, border: "1px solid #ECE1CE", background: "#FBF4E7" }}
                     />
                     <input
                       value={r.label}
@@ -422,7 +422,7 @@ export function DailyLifeClient({
                         next[i] = { ...next[i], label: e.target.value };
                         setRoutineDraft(next);
                       }}
-                      style={{ fontSize: "0.88rem", padding: "8px 10px", borderRadius: 10, border: "1px solid #ECE1CE", background: "#FBF4E7", color: "#2E2438" }}
+                      style={{ fontSize: "0.88rem", padding: "8px 10px", borderRadius: 12, border: "1px solid #ECE1CE", background: "#FBF4E7", color: "#2E2438" }}
                     />
                     <button
                       type="button"
@@ -464,7 +464,7 @@ export function DailyLifeClient({
             ) : (
             <div style={{ display: "flex", flexDirection: "column" }}>
               {routine.map((r) => (
-                <div key={`${r.time}-${r.label}`} style={{ display: "flex", alignItems: "center", gap: 13, padding: "9px 0", borderBottom: "1px solid #F4ECDC" }}>
+                <div key={`${r.time}-${r.label}`} style={{ display: "flex", alignItems: "center", gap: 13, padding: "9px 0", borderBottom: "1px solid #F0E6D2" }}>
                   <span style={{ width: 70, flexShrink: 0, fontSize: "0.8rem", fontWeight: 800, color: "#9A8A78", fontVariantNumeric: "tabular-nums" }}>{prettyTime(r.time)}</span>
                   <span style={{ fontSize: "1.05rem" }} aria-hidden="true">{r.icon}</span>
                   <span style={{ fontSize: "0.92rem", color: "#2E2438", fontWeight: 700 }}>{r.label}</span>

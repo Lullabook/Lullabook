@@ -90,7 +90,7 @@ export default async function AccountPage() {
               fontFamily: "var(--v2-font-display)",
               fontWeight: 700,
               fontSize: "2rem",
-              boxShadow: "0 8px 20px rgba(0,0,0,0.18)",
+              boxShadow: "0 8px 20px rgba(58,40,80,0.18)",
               border: "4px solid rgba(255,255,255,0.55)",
             }}
             aria-hidden="true"
@@ -105,7 +105,7 @@ export default async function AccountPage() {
               {isGuardian ? "Guardian" : "Member"} of your family
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              <span style={{ padding: "5px 12px", borderRadius: 999, background: "rgba(255,255,255,0.95)", color: "#9A6B1E", fontWeight: 800, fontSize: "0.8rem" }}>
+              <span style={{ padding: "5px 12px", borderRadius: 999, background: "rgba(255,255,255,0.95)", color: "#8C611B", fontWeight: 800, fontSize: "0.8rem" }}>
                 {subscribed ? "✨ Illustrated plan" : "Free plan"}
               </span>
             </div>
@@ -257,7 +257,7 @@ export default async function AccountPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {PRIVACY_POINTS.map((pt) => (
             <div key={pt} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
-              <span style={{ width: 24, height: 24, borderRadius: "50%", background: "#E1F1E8", color: "#3E7A5A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.78rem", flexShrink: 0, fontWeight: 800 }} aria-hidden="true">✓</span>
+              <span style={{ width: 24, height: 24, borderRadius: "50%", background: "#E1F1E8", color: "#3C7556", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.78rem", flexShrink: 0, fontWeight: 800 }} aria-hidden="true">✓</span>
               <p style={{ margin: 0, color: "#6E6076", fontSize: "0.92rem" }}>{pt}</p>
             </div>
           ))}

@@ -163,7 +163,7 @@ export function BriefComposer({ personas, classic }: BriefComposerProps) {
       </fieldset>
 
       {classic ? (
-        <div style={{ borderRadius: 16, padding: "14px 16px", background: "#EDE7FE", border: "1px solid #d9cdfa", color: "#4A3C7A", fontSize: "0.92rem" }}>
+        <div style={{ borderRadius: 16, padding: "14px 16px", background: "#EDE7FE", border: "1px solid #D7CBEE", color: "#4A3D6B", fontSize: "0.92rem" }}>
           Recasting <strong>{classic.title}</strong> with your family. Add an
           optional twist below.
         </div>

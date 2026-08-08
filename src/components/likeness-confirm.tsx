@@ -25,7 +25,7 @@ export function LikenessConfirm({ personaId, displayName }: LikenessConfirmProps
           padding: "5px 12px",
           borderRadius: 999,
           background: "#E1F1E8",
-          color: "#3E7A5A",
+          color: "#3C7556",
           fontWeight: 800,
           fontSize: "0.78rem",
         }}

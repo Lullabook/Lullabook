@@ -60,7 +60,7 @@ export function ShareControls({ storybookId, links }: ShareControlsProps) {
         </div>
       )}
       {warning && (
-        <div role="alert" style={{ ...noticeBase, background: "#FBEBCE", borderColor: "#f0d9ad", color: "#9a6b1e" }}>
+        <div role="alert" style={{ ...noticeBase, background: "#FBEBCE", borderColor: "#f0d9ad", color: "#8c611b" }}>
           {warning}
           {mintedUrl && (
             <p style={{ margin: "8px 0 0" }}>

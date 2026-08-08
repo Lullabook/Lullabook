@@ -89,15 +89,15 @@ export function GenerationProgress({
               style={{
                 width: 34,
                 height: 44,
-                borderRadius: 10,
+                borderRadius: 12,
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: "0.74rem",
                 fontWeight: 800,
-                border: `1px solid ${ready ? "#5FB389" : failed ? "#E7A6AE" : "#ECE1CE"}`,
+                border: `1px solid ${ready ? "#5FB389" : failed ? "#F2A6B8" : "#ECE1CE"}`,
                 background: ready ? "#E1F1E8" : failed ? "#FDF1F3" : "#FBF4E7",
-                color: ready ? "#3E7A5A" : failed ? "#B23A48" : "#9A8A78",
+                color: ready ? "#3C7556" : failed ? "#B23A48" : "#9A8A78",
                 animation: pendingDot ? "v2-twinkle 1.8s ease-in-out infinite" : undefined,
               }}
             >

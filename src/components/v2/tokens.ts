@@ -18,7 +18,7 @@ export const V2_COLORS = {
   accentLight: "#F6C177",
   accentDarkText: "#3a2410",
   badgeGold: "#FBEBCE",
-  badgeGoldText: "#9A6B1E",
+  badgeGoldText: "#8C611B",
   heroGradient: "linear-gradient(135deg,#6A55C9 0%,#B5739E 48%,#F0A878 100%)",
   heroText: "#FBEAF3",
   heroLabel: "#FFE9C9",
@@ -46,7 +46,7 @@ export const V2_COLORS = {
   photoPlaceholderText: "#B7A992",
   // Try-chip green
   chipGreenBg: "#E1F1E8",
-  chipGreenText: "#3E7A5A",
+  chipGreenText: "#3C7556",
   danger: "#B23A48",
 } as const;
 

@@ -948,7 +948,7 @@ table.plain th {
   padding: 6px 13px;
   border-radius: var(--v2-radius-pill);
   background: var(--v2-amber-tint);
-  color: #9a6b1e;
+  color: #8c611b;
   font-weight: 800;
   font-size: 0.78rem;
 }
@@ -1555,7 +1555,7 @@ table.plain th {
 .v2-form .alert-warning {
   background: var(--v2-amber-tint);
   border-color: #f0d9ad;
-  color: #9a6b1e;
+  color: #8c611b;
 }
 
 .v2-form .btn {
@@ -1628,7 +1628,7 @@ table.plain th {
   font-size: 0.92rem;
   background: var(--v2-amber-tint);
   border: 1px solid #f0d9ad;
-  color: #9a6b1e;
+  color: #8c611b;
 }
 
 .v2-empty {
@@ -1868,7 +1868,7 @@ table.plain th {
   padding: 6px 13px;
   border-radius: 999px;
   background: #FBEBCE;
-  color: #9A6B1E;
+  color: #8C611B;
   font-weight: 800;
   font-size: 0.78rem;
 }

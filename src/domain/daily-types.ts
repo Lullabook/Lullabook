@@ -38,10 +38,10 @@ export const MOMENT_TYPES: { key: MomentType; icon: string; label: string }[] = 
 
 export function momentMeta(type: MomentType): { icon: string; label: string; bg: string; fg: string } {
   switch (type) {
-    case "first": return { icon: "✨", label: "A first", bg: "#FBEBCE", fg: "#9A6B1E" };
-    case "funny": return { icon: "😄", label: "Funny", bg: "#FCE4EC", fg: "#B5618A" };
-    case "tough": return { icon: "🫂", label: "Tough day", bg: "#E1F1E8", fg: "#3E7A5A" };
-    case "cozy": return { icon: "🌙", label: "Cozy", bg: "#E4EEF4", fg: "#3f7d92" };
+    case "first": return { icon: "✨", label: "A first", bg: "#FBEBCE", fg: "#8C611B" };
+    case "funny": return { icon: "😄", label: "Funny", bg: "#FCE4EC", fg: "#9F4A72" };
+    case "tough": return { icon: "🫂", label: "Tough day", bg: "#E1F1E8", fg: "#3C7556" };
+    case "cozy": return { icon: "🌙", label: "Cozy", bg: "#E4EEF4", fg: "#35707F" };
     case "milestone":
     default: return { icon: "🌟", label: "Milestone", bg: "#EDE7FE", fg: "#6A55C9" };
   }

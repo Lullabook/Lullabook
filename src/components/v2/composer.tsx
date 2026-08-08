@@ -44,8 +44,8 @@ const PAGE_COUNTS = [8, 12, 16];
 
 const TRY_CHIPS: { text: string; bg: string; color: string }[] = [
   { text: "A trip to the moon", bg: "#EDE7FE", color: "#6A55C9" },
-  { text: "The first snow", bg: "#FBEBCE", color: "#9A6B1E" },
-  { text: "Learning to share", bg: "#E1F1E8", color: "#3E7A5A" },
+  { text: "The first snow", bg: "#FBEBCE", color: "#8C611B" },
+  { text: "Learning to share", bg: "#E1F1E8", color: "#3C7556" },
 ];
 
 const cardStyle: React.CSSProperties = {

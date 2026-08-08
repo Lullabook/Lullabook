@@ -42,12 +42,12 @@ const TYPES: { key: MomentType; icon: string; label: string }[] = [
 function meta(t: MomentType) {
   switch (t) {
     case "first":
-      return { icon: "✨", label: "A first", bg: "#FBEBCE", fg: "#9A6B1E" };
+      return { icon: "✨", label: "A first", bg: "#FBEBCE", fg: "#8C611B" };
     case "funny":
       // Canonical rose tag family (design REFERENCE §small tag color families).
-      return { icon: "😄", label: "Funny", bg: "#FCE4EC", fg: "#B5618A" };
+      return { icon: "😄", label: "Funny", bg: "#FCE4EC", fg: "#9F4A72" };
     case "tough":
-      return { icon: "🫂", label: "Tough day", bg: "#E1F1E8", fg: "#3E7A5A" };
+      return { icon: "🫂", label: "Tough day", bg: "#E1F1E8", fg: "#3C7556" };
     case "cozy":
       return { icon: "🌙", label: "Cozy", bg: C.primaryBg, fg: C.primary };
     default:

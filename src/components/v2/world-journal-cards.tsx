@@ -32,7 +32,7 @@ export function WorldJournalCards({
   return (
     <div className="v2-stack" style={{ gap: 14 }}>
       {dailyNudge?.show ? (
-        <div style={{ ...cardStyle, borderColor: "#D4C4F0", background: "linear-gradient(135deg,#FFFDF9,#F6F0FF)" }}>
+        <div style={{ ...cardStyle, borderColor: "#D4C4F0", background: "linear-gradient(135deg,#FFFDF9,#F6F1FF)" }}>
           <p style={{ margin: "0 0 6px", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.1rem", color: "#2E2438" }}>
             What happened today?
           </p>

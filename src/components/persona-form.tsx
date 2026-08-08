@@ -187,7 +187,7 @@ export function PersonaForm({
               <p style={{ marginTop: 8, fontSize: "0.85rem", color: "#9A8A78" }}>Only the family&apos;s Guardian can create a baby persona.</p>
             )}
             {mode === "baby" && isGuardian && !canCreateBaby && (
-              <div style={{ marginTop: 12, borderRadius: 16, padding: "12px 14px", background: "#FBEBCE", border: "1px solid #f0d9ad", color: "#9a6b1e", fontSize: "0.9rem" }}>
+              <div style={{ marginTop: 12, borderRadius: 16, padding: "12px 14px", background: "#FBEBCE", border: "1px solid #f0d9ad", color: "#8c611b", fontSize: "0.9rem" }}>
                 {babyBlockedReason ?? "Baby personas need an active subscription — the card payment doubles as verifiable parental consent."}
               </div>
             )}
@@ -238,7 +238,7 @@ export function PersonaForm({
         <div style={cardStyle}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
             <span style={{ ...label, marginBottom: 0, fontSize: "1.15rem" }}>📸 Their photos</span>
-            <span style={{ padding: "5px 12px", borderRadius: 999, fontWeight: 800, fontSize: "0.78rem", background: enough ? "#E1F1E8" : "#FBEBCE", color: enough ? "#3E7A5A" : "#9A6B1E" }}>
+            <span style={{ padding: "5px 12px", borderRadius: 999, fontWeight: 800, fontSize: "0.78rem", background: enough ? "#E1F1E8" : "#FBEBCE", color: enough ? "#3C7556" : "#8C611B" }}>
               {photos.length === 0 ? "No photos yet" : enough ? `✓ ${photos.length} photos — ready` : `${photos.length} of 3 added`}
             </span>
           </div>
@@ -271,9 +271,9 @@ export function PersonaForm({
           )}
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-            <span style={{ padding: "6px 12px", borderRadius: 999, background: "#E1F1E8", color: "#3E7A5A", fontSize: "0.8rem", fontWeight: 700 }}>✓ One person per photo</span>
+            <span style={{ padding: "6px 12px", borderRadius: 999, background: "#E1F1E8", color: "#3C7556", fontSize: "0.8rem", fontWeight: 700 }}>✓ One person per photo</span>
             <span style={{ padding: "6px 12px", borderRadius: 999, background: "#EDE7FE", color: "#6A55C9", fontSize: "0.8rem", fontWeight: 700 }}>☀️ Bright &amp; in focus</span>
-            <span style={{ padding: "6px 12px", borderRadius: 999, background: "#FBEBCE", color: "#9A6B1E", fontSize: "0.8rem", fontWeight: 700 }}>🙂 A few angles</span>
+            <span style={{ padding: "6px 12px", borderRadius: 999, background: "#FBEBCE", color: "#8C611B", fontSize: "0.8rem", fontWeight: 700 }}>🙂 A few angles</span>
           </div>
         </div>
 
@@ -316,7 +316,7 @@ export function PersonaForm({
           <button
             type="submit"
             disabled={pending || !ready || submitBlocked}
-            style={{ marginTop: 16, width: "100%", padding: 15, borderRadius: 14, border: "none", background: ready && !submitBlocked ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#E7DCCB", color: ready && !submitBlocked ? "#fff" : "#9A8A78", fontFamily: "var(--v2-font-body)", fontWeight: 800, fontSize: "1.02rem", cursor: ready && !pending && !submitBlocked ? "pointer" : "not-allowed", boxShadow: ready && !submitBlocked ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
+            style={{ marginTop: 16, width: "100%", padding: 15, borderRadius: 14, border: "none", background: ready && !submitBlocked ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#ECE1CE", color: ready && !submitBlocked ? "#fff" : "#9A8A78", fontFamily: "var(--v2-font-body)", fontWeight: 800, fontSize: "1.02rem", cursor: ready && !pending && !submitBlocked ? "pointer" : "not-allowed", boxShadow: ready && !submitBlocked ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
           >
             {submitLabel}
           </button>
@@ -325,7 +325,7 @@ export function PersonaForm({
 
       {/* live member preview */}
       <aside style={{ position: "sticky", top: 92, display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ background: "#FFFDF9", border: "1px solid #ECE1CE", borderRadius: 24, overflow: "hidden", boxShadow: "0 12px 32px rgba(58,40,80,0.08)" }}>
+        <div style={{ background: "#FFFDF9", border: "1px solid #ECE1CE", borderRadius: 26, overflow: "hidden", boxShadow: "0 12px 32px rgba(58,40,80,0.08)" }}>
           <div style={{ padding: 22, background: "linear-gradient(135deg,#8B6DF0,#6A55C9)", display: "flex", alignItems: "center", gap: 14 }}>
             <span
               style={{ width: 62, height: 62, flexShrink: 0, borderRadius: "50%", background: "linear-gradient(150deg,#E79A3C,#F6C177)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontFamily: "var(--v2-font-display)", fontWeight: 700, fontSize: "1.6rem", border: "4px solid rgba(255,255,255,0.5)" }}

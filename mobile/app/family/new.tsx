@@ -267,7 +267,7 @@ const st = StyleSheet.create({
     flexDirection: "row",
     gap: 14,
     alignItems: "center",
-    borderRadius: 24,
+    borderRadius: 26,
     padding: 18,
     shadowColor: "#6A55C9",
     shadowOpacity: 0.3,

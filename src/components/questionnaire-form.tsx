@@ -145,7 +145,7 @@ export function QuestionnaireForm({
           <button
             type="submit"
             disabled={pending || !ready}
-            style={{ padding: "14px 26px", borderRadius: 14, border: "none", background: ready ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#E7DCCB", color: ready ? "#fff" : "#9A8A78", fontWeight: 800, fontSize: "1rem", cursor: ready && !pending ? "pointer" : "not-allowed", boxShadow: ready ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
+            style={{ padding: "14px 26px", borderRadius: 14, border: "none", background: ready ? "linear-gradient(135deg,#8B6DF0,#6A55C9)" : "#ECE1CE", color: ready ? "#fff" : "#9A8A78", fontWeight: 800, fontSize: "1rem", cursor: ready && !pending ? "pointer" : "not-allowed", boxShadow: ready ? "0 8px 20px rgba(106,85,201,0.3)" : "none" }}
           >
             {pending ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "✓ Save changes" : "✨ Create character"}
           </button>
@@ -157,7 +157,7 @@ export function QuestionnaireForm({
         <p style={{ margin: 0, textTransform: "uppercase", letterSpacing: "0.14em", fontSize: "0.72rem", fontWeight: 800, color: "#9A8A78" }}>Live preview</p>
         <div style={{ background: "#FFFDF9", border: "1px solid #ECE1CE", borderRadius: 22, padding: 20, boxShadow: "0 8px 22px rgba(58,40,80,0.07)", display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ width: 62, height: 62, borderRadius: 20, background: "linear-gradient(150deg,#C9B8F4,#8B6DF0)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.7rem" }} aria-hidden="true">
+            <div style={{ width: 62, height: 62, borderRadius: 20, background: "linear-gradient(150deg,#8B6DF0,#6A55C9)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.7rem" }} aria-hidden="true">
               {characterEmoji(name)}
             </div>
             <div>

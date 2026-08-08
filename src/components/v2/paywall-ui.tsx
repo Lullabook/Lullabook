@@ -18,7 +18,7 @@ const recommendedStyle: React.CSSProperties = {
   ...cardStyle,
   border: "2px solid #6A55C9",
   boxShadow: "0 12px 32px rgba(106,85,201,0.18)",
-  background: "linear-gradient(180deg,#FFFDF9,#F6F0FF)",
+  background: "linear-gradient(180deg,#FFFDF9,#F6F1FF)",
 };
 
 function TierCard({
@@ -72,7 +72,7 @@ function TierCard({
             padding: "4px 12px",
             borderRadius: 999,
             background: "#E1F1E8",
-            color: "#3E7A5A",
+            color: "#3C7556",
             fontSize: "0.72rem",
             fontWeight: 800,
             marginLeft: isRecommended ? 8 : 0,

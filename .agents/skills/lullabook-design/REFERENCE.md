@@ -58,7 +58,7 @@ Brand & accent:
 | `accentLight` | `#F6C177` | Light amber — gradient partner, active toggle. |
 | `accentDarkText` | `#3a2410` | Dark brown text on amber buttons. |
 | `badgeGold` | `#FBEBCE` | Gold badge background ("✨ Illustrated"). |
-| `badgeGoldText` | `#9A6B1E` | Gold badge text. |
+| `badgeGoldText` | `#8C611B` | Gold badge text (darkened from `#9A6B1E` for WCAG AA 4.65:1 on `badgeGold`). |
 | `danger` | `#B23A48` | Destructive actions, delete zones. |
 
 Cast accents (rotate these for avatars / family members so each person has a consistent color):
@@ -76,7 +76,7 @@ Special-purpose:
 | Token | Hex | Role |
 |-------|-----|------|
 | `hoverTint` | `#F6F1FF` | Hover background on purple-outline elements. |
-| `chipGreenBg` / `chipGreenText` | `#E1F1E8` / `#3E7A5A` | Green "tip" / success chips & check dots. |
+| `chipGreenBg` / `chipGreenText` | `#E1F1E8` / `#3C7556` | Green "tip" / success chips & check dots (text darkened from `#3E7A5A` for WCAG AA 4.64:1). |
 | Night panel | `#2A2452` → `#3E2F63` | Voice-recording panels (the only dark surface). |
 | `voiceMuted` `#C9BDE8`, `voiceQuote` `#D7CBEE`, `voiceCream` `#FAF4E6`, `waveformBar rgba(185,165,245,0.75)` | Text/waveform inside night panels. |
 | Status dots | ready `#5FB389`, training `#E79A3C`, needs-photos `#C9A9A9` | Likeness-training status. |
@@ -216,7 +216,7 @@ Heading inside a card: Baloo 2, weight 700, ~1.15–1.3rem, color `#2E2438`. Div
 
 ### 4.3 Chips & tags
 - **Selectable big chip:** `padding:12px 18px; border-radius:999px; border:1.5px solid; font-weight:800;` selected → border `#8B6DF0`, bg `#EDE7FE`, text `#6A55C9`; unselected → border `#ECE1CE`, bg `#FFFDF9`, text `#6E6076`. Usually emoji + label.
-- **Small tag/pill:** `padding:4px 11px; border-radius:999px; font-weight:700–800; font-size:0.74–0.8rem.` Color families: purple (`#EDE7FE`/`#6A55C9`), gold (`#FBEBCE`/`#9A6B1E`), green (`#E1F1E8`/`#3E7A5A`), rose (`#FCE4EC`/`#B5618A`), neutral (`#FBF4E7`/`#9A8A78`).
+- **Small tag/pill:** `padding:4px 11px; border-radius:999px; font-weight:700–800; font-size:0.74–0.8rem.` Color families: purple (`#EDE7FE`/`#6A55C9`), gold (`#FBEBCE`/`#8C611B`), green (`#E1F1E8`/`#3C7556`), rose (`#FCE4EC`/`#9F4A72`), neutral (`#FBF4E7`/`#9A8A78`). (Gold/green/rose text values were darkened in the #224 polish pass so every tag family meets WCAG AA ≥4.5:1 on its background; the neutral family is muted meta text, recorded in the audit.)
 
 ### 4.4 Avatar
 Circle (or `border-radius:20px` rounded-square for character tiles), filled with an **avatar gradient by index**, white initial in Baloo 2 700. On gradient banners add `border:4px solid rgba(255,255,255,0.5)`. A "the star" badge (`⭐`) can sit bottom-right in a small cream circle.
