@@ -20,7 +20,14 @@
   (gold 3.98→4.65, green 4.34→4.64, rose 3.46→4.72, cozy 3.91→4.72) + design canon
   synced (REFERENCE.md + design html), plum-shadow guard reaching globals.css
   (both-direction pins), radius/spacing/safe-area/LAT-5/Dynamic-Type guards.
-  Gate: 13/13 + full verify PASS. **Still blocked by design:** #226 (iPhone —
+  Gate: 13/13 + full verify PASS. **#226 environment readiness (checked live
+  2026-08-08):** EAS CLI now authenticated (`eas whoami` = vraj1134 /
+  vrajmgupta@gmail.com) and physical iPhone `Vraj` is **available (paired)** —
+  but D12 purchase signal still absent: `eas init` never run, `mobile/eas.json`
+  still has `YOUR_APPLE_ID@example.com` / `YOUR_ASC_APP_ID` /
+  `YOUR_APPLE_TEAM_ID` placeholders, `tests/215-device-build-config.test.ts`
+  unwritten. Blocker comment posted on #226 with exact unblock steps.
+  **Still blocked by design:** #226 (iPhone —
   needs the Apple Developer + EAS purchase signal, D12, never claim on a date),
   #193 (doc-only PRD v22 parent index — for /reviewer or human close). **Guardian
   action still needed:** apply migration 023 to hosted dev Supabase
