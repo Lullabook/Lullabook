@@ -446,7 +446,7 @@ describe("190 — atomic allowance and payable spend authorization", () => {
       expect(() => computeMarginPercent(100, -1)).toThrow();
     });
 
-    it("grades green <=5% variance, amber <=10%, red >10% and red margin below 70%", () => {
+    it("reviews green <=5% variance, amber <=10%, red >10% and red margin below 70%", () => {
       const meter = new ProviderCostMeteringService(new DataStore());
       expect(meter.evaluateThreshold({ budgetUsd: 100, actualCostUsd: 102 })).toBe(
         CostThreshold.GREEN

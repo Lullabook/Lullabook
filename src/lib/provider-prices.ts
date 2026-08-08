@@ -39,7 +39,19 @@ export const PROVIDER_PRICE_TABLE: ProviderPriceRow[] = [
 
   // --- Training (fal.ai) ---
   { provider: "fal.ai", endpoint: "fal-ai/flux-lora-fast-training", model: "flux-1-lora", pricingVersion: "r1-training-v1", unit: "trainings", pricePerUnitUsd: 0.4 },
+  { provider: "fal.ai", endpoint: "fal-ai/flux-lora-fast-training", model: "flux-1-lora", pricingVersion: "r1-training-v1", unit: "training_steps", pricePerUnitUsd: 0.0008 },
+  // Legacy Persona/Custom Style callers report moderated source-image count;
+  // retain an explicit non-zero route row until their boundary migrates to the
+  // canonical one-training unit.
+  { provider: "fal.ai", endpoint: "fal-ai/flux-lora-fast-training", model: "flux-1-lora", pricingVersion: "r1-training-v1", unit: "training_images", pricePerUnitUsd: 0.4 },
   { provider: "fal.ai", endpoint: "fal-ai/flux-2-trainer-v2", model: "flux-2-lora-v2", pricingVersion: "r1-training-v1", unit: "trainings", pricePerUnitUsd: 0.4 },
+  { provider: "fal.ai", endpoint: "fal-ai/flux-2-trainer-v2", model: "flux-2-lora-v2", pricingVersion: "r1-training-v1", unit: "training_steps", pricePerUnitUsd: 0.0008 },
+  { provider: "fal.ai", endpoint: "fal-ai/flux-2-trainer-v2", model: "flux-2-lora-v2", pricingVersion: "r1-training-v1", unit: "training_images", pricePerUnitUsd: 0.4 },
+
+  // The bakeoff permits an explicit non-production routing decision. It is
+  // priced rather than treated as a free escape hatch in legacy ledger code.
+  { provider: "fal.ai", endpoint: "canary/custom-endpoint", model: "canary-model", pricingVersion: "r1-canary-v1", unit: "trainings", pricePerUnitUsd: 0.4 },
+  { provider: "fal.ai", endpoint: "canary/custom-endpoint", model: "canary-model", pricingVersion: "r1-canary-v1", unit: "training_steps", pricePerUnitUsd: 0.0008 },
 
   // --- Repair (fal.ai) ---
   { provider: "fal.ai", endpoint: "fal-ai/nano-banana-2/edit", model: "Nano Banana 2 Edit", pricingVersion: "r1-repair-v1", unit: "images", pricePerUnitUsd: 0.08 },
@@ -100,6 +112,14 @@ export function estimateProviderCostUsd(input: {
     throw new Error(
       `No versioned price for payable route ${provider}/${endpoint}/${model}`
     );
+  }
+
+  // Reject any requested unit that has no priced row on this route, so a
+  // caller cannot smuggle an unpriced unit in alongside a priced one.
+  const pricedUnits = new Set(rows.map((row) => row.unit));
+  const unpriced = Object.keys(units).find((unit) => !pricedUnits.has(unit));
+  if (unpriced) {
+    throw new Error(`No versioned price for unit ${unpriced} on ${provider}/${endpoint}/${model}`);
   }
 
   let estimatedCostUsd = 0;

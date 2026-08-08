@@ -272,7 +272,7 @@ describe("162 — Story generation → viewable placeholder-art draft", () => {
 /**
  * Issue 162 — RealAnthropicAdapter response parsing robustness.
  *
- * The live diagnosis (PRD v19 /part1): `claude-sonnet-4-6` returns HTTP 200 but
+ * The live diagnosis (PRD v19 /planner): `claude-sonnet-4-6` returns HTTP 200 but
  * the book lands `failed` with zero pages — the throw is in `parseGeneratedStory`
  * at `src/adapters/anthropic.ts:143`. These tests pin the parser's behavior on
  * the corner cases that produce a zero-page `failed` book: truncated JSON

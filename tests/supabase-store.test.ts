@@ -289,4 +289,29 @@ describe("SupabaseDataStore", () => {
     await store2.hydrateByAuthUser("auth-1");
     expect(store2.personas.get("persona-1")?.likenessConfirmed).toBe(true);
   });
+
+  it("hydrates persisted_generations embedded as a single object (1:1 PK embed)", async () => {
+    // PostgREST embeds persisted_generations as ONE object (its storybook_id
+    // is the PRIMARY KEY), or null — never an array. Regression: the old
+    // `for (const gr of (r.persisted_generations ?? []))` crashed with
+    // "object is not iterable" on any storybook that had a persisted story.
+    const tables = fixtureTables();
+    tables.storybooks[0] = {
+      ...tables.storybooks[0],
+      persisted_generations: {
+        storybook_id: "book-1",
+        story: { text: "Goodnight moon." },
+        persisted_at: "2026-08-07T12:00:00.000Z",
+      },
+    };
+    const { client } = stubClient(tables);
+    const store = new SupabaseDataStore(client);
+
+    const member = await store.hydrateByAuthUser("auth-1", "read");
+
+    expect(member?.id).toBe("mem-1");
+    expect(store.persistedGenerations.get("book-1")?.story).toEqual({
+      text: "Goodnight moon.",
+    });
+  });
 });

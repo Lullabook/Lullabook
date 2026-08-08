@@ -1066,7 +1066,16 @@ export class SupabaseDataStore extends DataStore {
           this.snap("page_candidates", candidate.id);
         }
       }
-      for (const gr of (r.persisted_generations ?? []) as Row[]) {
+      // persisted_generations.storybook_id is the PRIMARY KEY, so PostgREST
+      // embeds this 1:1 as a single object (or null). Accept an object, an
+      // array (to-many), or null so both real and fixture shapes map.
+      const embedded = r.persisted_generations;
+      const generations = Array.isArray(embedded)
+        ? (embedded as Row[])
+        : embedded
+          ? [embedded as Row]
+          : [];
+      for (const gr of generations as Row[]) {
         const generation: PersistedGeneration = {
           storybookId: gr.storybook_id,
           story: gr.story,
