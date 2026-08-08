@@ -16,10 +16,10 @@
 | #221 story context | **Debugger Ready** | PASS | lane/221 `9c1805b` |
 | #222 illustration | **Debugger Ready** | PASS | lane/222 `4802f10` |
 | #227 Prime GEPA eval | **Debugger Ready** | PASS (baseline 8.42/9, GEPA blocked on v0/v1, DROP rec) | `6006c6a` |
-| #216 live fal auth + JWKS | merged, gate green | verdict pending (critic-batch2) | lane/216 `4fa6550` |
-| #217 photo intake | merged, gate green | verdict pending | lane/217 `da2e7d2` |
-| #220 likeness review+resume (core) | merged, gate green | verdict pending | lane/220 `4df1a18` |
-| #223 demo-evidence harness | merged, gate green | R1 GAP fixed (unproven⇒BLOCKED); re-review pending | `e234e47`, lane/223 `35ef5d4` |
+| #216 live fal auth + JWKS | merged, gate green | R1 GAP (non-hermetic 205 tests) fixed verbatim `b1b2c15`; final confirm pending | lane/216 `4fa6550` |
+| #217 photo intake | **Debugger Ready** | PASS | lane/217 `da2e7d2` |
+| #220 likeness review+resume (core) | **Debugger Ready** | PASS (core scope) | lane/220 `4df1a18` |
+| #223 demo-evidence harness | **Debugger Ready** | PASS round 2 | `e234e47`, lane/223 `35ef5d4` |
 | #224 design polish | merged, gate green | GAP round 1 (audit list incomplete) — r2 worker running | lane/224 `2b41371` (+r2 pending) |
 
 Baseline repairs that rode along: `6736e6b` (PostgREST 1:1 embed shape-tolerance + previous wave's uncommitted leftovers — tests/192 was RED at campaign start), `30775c0` + `4a1f1f0` (mobile/.env.example + root .env.example were gitignored-untracked while tests depend on them), `ead38d1` (user-staged skill-file deletions/AGENTS.md refresh, committed to unblock merges).
