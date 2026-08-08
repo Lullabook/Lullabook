@@ -182,3 +182,56 @@ twelve-Page Storybook generated in which at least two family members are
 recognisable in the same Page; every invariant above holding; and total live fal
 spend reported under `$20`. The iPhone build repeats that session on device once
 the Guardian signals the Apple purchase.
+
+---
+
+## Deployed callback origin
+
+Status (ticket 203, recorded at build time — honesty is the acceptance
+criterion here): **no public origin is deployed yet.**
+
+- **Current configured value:** `NEXT_PUBLIC_APP_URL=http://localhost:3000`
+  (local dev only — see `.env.local`). A local origin is **not** a valid fal
+  callback target: localhost dies when the machine sleeps and strands overnight
+  training callbacks. A tunnel is explicitly not acceptable (PRD note).
+- **Configured fal.ai callback endpoint:** derived from the origin at runtime as
+  `<NEXT_PUBLIC_APP_URL>/api/webhooks/fal`. Never hardcoded; a missing
+  `NEXT_PUBLIC_APP_URL` fails closed (config validation throws,
+  `CallbackOriginConfigError`).
+- **Reachability preflight (FAIL-6):** the training submission path
+  (`FalLoraTrainingService.submit`) runs a reachability probe against the
+  configured callback base URL before any fal.ai request and before any spend
+  reservation. An unreachable origin fails closed, naming the URL.
+
+### Operator steps — deploy to Vercel + set the callback origin
+
+No Vercel credentials exist on this machine, so the deploy must be run by an
+operator. Exact commands:
+
+```bash
+# 1. Install the Vercel CLI (once).
+npm i -g vercel
+
+# 2. Log in and link the project (creates .vercel with the project scope).
+vercel login
+vercel link
+
+# 3. Add the server-side + public env vars for the production environment.
+#    The public origin must be the deployed URL so fal.ai can reach the
+#    webhook; provider secrets are set server-side so they never reach any
+#    client bundle.
+vercel env add NEXT_PUBLIC_APP_URL production   # e.g. https://lullabook.vercel.app
+vercel env add NEXT_PUBLIC_SUPABASE_URL production
+vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+vercel env add SUPABASE_SERVICE_ROLE_KEY production
+vercel env add FAL_API_KEY production
+vercel env add ANTHROPIC_API_KEY production
+vercel env add FAL_WEBHOOK_URL production       # https://lullabook.vercel.app/api/webhooks/fal
+vercel env add LIVE_PROVIDER_RUN_APPROVED production  # the COST-2 live opt-in
+
+# 4. Deploy production.
+vercel --prod
+```
+
+After deploy, confirm `curl -I https://<your-domain>/api/webhooks/fal` returns
+an HTTP response (any status) — that is the reachability the preflight checks.

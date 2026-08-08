@@ -3,6 +3,8 @@ import type { BlobStore, FalAdapter, FalTrainingRequestRecord, FalTrainingSubmis
 import type { DataStore } from "@/db/store";
 import { LiveFalSpendCapService } from "@/services/live-fal-spend-cap";
 import { ProviderCostMeteringService } from "@/services/provider-cost-metering";
+import { CallbackReachabilityPreflight, CallbackUnreachableError } from "@/services/callback-reachability";
+import { resolveCallbackOrigin } from "@/services/callback-origin";
 
 export interface ModeratedTrainingImage {
   filename: string;
@@ -292,6 +294,7 @@ export class FalLoraTrainingService {
     private readonly now: () => Date = () => new Date(),
     private readonly costMeter: ProviderCostMeteringService = new ProviderCostMeteringService(store),
     private readonly liveFalCap: LiveFalSpendCapService = new LiveFalSpendCapService(store),
+    private readonly preflight: CallbackReachabilityPreflight = new CallbackReachabilityPreflight(),
   ) {}
 
   async submit(input: FalTrainingInput): Promise<{ requestId: string; status: "queued" }> {
@@ -299,6 +302,27 @@ export class FalLoraTrainingService {
     if (prior) return { requestId: prior.requestId, status: "queued" };
     const routing = input.routingDecision ?? this.routing;
     if (!routing.endpoint || !routing.model || !Number.isInteger(routing.steps) || routing.steps < 100) throw new Error("Invalid canary routing decision");
+    // Issue 203 / FAIL-6 — reachability preflight on the configured public
+    // callback origin, BEFORE any fal.ai request and BEFORE any spend is
+    // reserved. A training whose callback can never arrive must fail closed
+    // without reserving budget.
+    //
+    // Enforcement point: only a real (non dev-only) provider is a live boundary,
+    // so the live determination is hoisted above the preflight. On that live
+    // path the callback origin is strictly resolved from configuration BEFORE
+    // the probe — resolveCallbackOrigin() throws CallbackOriginConfigError (which
+    // names NEXT_PUBLIC_APP_URL) when the origin is missing or malformed — so a
+    // live deployment with no configured origin cannot reserve spend or call fal
+    // with no way to deliver the callback. The dev-only path keeps the lenient
+    // behaviour below (no probe when the origin is unset).
+    const liveProvider = this.canSatisfyReleaseEvidence();
+    if (liveProvider && !this.preflight.configuredOrigin()) {
+      resolveCallbackOrigin();
+    }
+    const reachable = await this.preflight.check();
+    if (!reachable.ok) {
+      throw new CallbackUnreachableError(reachable.error ?? this.preflight.callbackUrl());
+    }
     const zip = buildTrainingZip(input.images, input.defaultCaption);
     const zipKey = `training-inputs/${input.familyId}/${input.personaId}/${createHash("sha256").update(zip).digest("hex")}.zip`;
     await this.blobs.put(zipKey, zip);
@@ -316,7 +340,6 @@ export class FalLoraTrainingService {
     // must pass the $20 live-fal cap + LIVE opt-in (issue 204). A live run with
     // no cap service is a misconfiguration — fail closed rather than spend
     // unbudgeted.
-    const liveProvider = this.canSatisfyReleaseEvidence();
     let reservation: { estimatedCostUsd: number; pricingVersion: string } | null = null;
     if (liveProvider) {
       // Reserve the exact route estimate and flush it to durable storage before

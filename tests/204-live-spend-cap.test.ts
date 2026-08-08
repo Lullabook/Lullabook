@@ -11,6 +11,7 @@ import {
   type LiveFalSpendCheckpoint,
 } from "@/services/live-fal-spend-cap";
 import { FLUX_2_TRAINER_ENDPOINT } from "@/services/provider-bakeoff";
+import { CallbackReachabilityPreflight } from "@/services/callback-reachability";
 
 /**
  * Issue 204 — the $20 live fal.ai spend cap, fail-closed.
@@ -130,6 +131,10 @@ describe("204 — live fal.ai spend cap fail-closed", () => {
       () => new Date("2026-08-06T00:00:00Z"),
       undefined,
       cap,
+      // The live boundary is fail-closed on a missing callback origin (issue
+      // 203), so give the live spend-cap tests a configured origin to isolate
+      // the spend-cap behaviour under test.
+      new CallbackReachabilityPreflight({ callbackBaseUrl: "https://lullabook.vercel.app" }),
     );
     return { store, blobs, cap, checkpoints, service, calls, fal };
   }
@@ -312,6 +317,7 @@ describe("204 — live fal.ai spend cap fail-closed", () => {
       () => new Date("2026-08-06T00:00:00Z"),
       undefined,
       cap,
+      new CallbackReachabilityPreflight({ callbackBaseUrl: "https://lullabook.vercel.app" }),
     );
 
     const result = await service.submit({
